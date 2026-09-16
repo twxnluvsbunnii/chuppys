@@ -1,0 +1,2 @@
+# chuppys
+.gg/chuppys
