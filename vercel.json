@@ -7,6 +7,10 @@
     {
       "source": "/oauth/callback",
       "destination": "/api/callback"
+    },
+    {
+      "source": "/send-verification",
+      "destination": "/api/send-verification"
     }
   ]
 }
