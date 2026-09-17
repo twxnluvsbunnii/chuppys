@@ -6,21 +6,11 @@ export default async function handler(req, res) {
   }
 
   const response = await fetch(
-    `https://discord.com/api/v10/applications/${process.env.DISCORD_CLIENT_ID}/role-connections/metadata`,
+    "https://discord.com/api/v10/users/@me",
     {
-      method: "PUT",
       headers: {
-        Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify([
-        {
-          key: "verified",
-          name: "Verified",
-          description: "Has completed Chuppys verification",
-          type: 7
-        }
-      ])
+        Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`
+      }
     }
   );
 
