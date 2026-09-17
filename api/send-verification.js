@@ -22,9 +22,9 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         embeds: [
           {
-            title: "🤖 Verification required",
+            title: "🤍 Verification required",
             description:
-              "To gain access to **Chuppys** 💰 you need to prove you are a human by completing verification. Click the button below to get started!",
+              "To gain access to **Chuppys** 🐰 you need to prove you are a human by completing verification. Click the button below to get started!",
             color: 11632895
           }
         ],
@@ -37,7 +37,7 @@ export default async function handler(req, res) {
                 style: 5,
                 label: "Verify now",
                 emoji: {
-                  name: "↗️"
+                  name: "🤍"
                 },
                 url: "https://chuppys.vercel.app/linked-role"
               },
