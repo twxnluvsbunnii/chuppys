@@ -24,7 +24,7 @@ export default async function handler(req, res) {
           {
             title: "🤍 Verification required",
             description:
-              "To gain access to **Chuppys** 🐰 you need to prove you are a human by completing verification. Click the button below to get started!",
+              "To gain access to **.gg/chuppys** 🐰 you need to prove you are a human by completing verification. Click the button below to get started!",
             color: 11632895
           }
         ],
