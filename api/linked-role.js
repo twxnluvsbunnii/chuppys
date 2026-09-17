@@ -94,13 +94,12 @@ export default function handler(req, res) {
       width: 100%;
       text-align: center;
       padding: 15px 20px;
-      background: #5865f2;
+      background: #5865F2;
       color: white;
       text-decoration: none;
       border-radius: 12px;
       font-size: 16px;
       font-weight: 700;
-      transition: transform 0.15s ease, opacity 0.15s ease;
     }
 
     .verify-button:active {
@@ -120,11 +119,12 @@ export default function handler(req, res) {
 <body>
 
   <div class="container">
-
     <div class="card">
 
       <div class="title">
-        <span class="pink">୨୧</span> welcome to Chuppys! <span class="pink">♡</span>
+        <span class="pink">୨୧</span>
+        welcome to .gg/chuppys!
+        <span class="pink">♡</span>
       </div>
 
       <div class="message">
@@ -139,14 +139,14 @@ export default function handler(req, res) {
 
       <a class="verify-button" href="${discordURL}">
         ♡ Verify with Discord ♡
+    
       </a>
 
       <div class="bottom">
-        • enjoy Chuppys // • ୨୧
+        • enjoy .gg/chuppys // • ୨୧
       </div>
 
     </div>
-
   </div>
 
 </body>
