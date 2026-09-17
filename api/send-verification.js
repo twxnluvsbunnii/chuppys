@@ -28,7 +28,7 @@ export default async function handler(req, res) {
             title: "🤍 Verification required",
             description:
               "To gain access to **.gg/chuppys** 🤍 you need to prove you are a human by completing verification. Click the button below to get started!",
-            color: 15158332,
+            color: 16777215,
             image: {
               url: "https://cdn.discordapp.com/attachments/1531043582348230767/1550233909134889020/IMG_2558.jpg?ex=6aad9755&is=6aac45d5&hm=783d4627cf35b79e7a96477fc8f3f4ae29d4a1dedb01b97db6b6b0e4bf4f0d94"
             },
