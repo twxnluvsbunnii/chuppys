@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/linked-role",
+      "destination": "/api/linked-role"
+    },
+    {
+      "source": "/oauth/callback",
+      "destination": "/api/callback"
+    }
+  ]
+}
