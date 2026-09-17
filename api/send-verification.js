@@ -18,28 +18,22 @@ export default async function handler(req, res) {
     `https://discord.com/api/v10/channels/${channelId}/messages`,
     {
       method: "POST",
-
       headers: {
         Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
         "Content-Type": "application/json"
       },
-
       body: JSON.stringify({
         embeds: [
           {
             title: "🤍 Verification required",
-
             description:
               "To gain access to **.gg/chuppys** 🤍 you need to prove you are a human by completing verification. Click the button below to get started!",
-
             color: 15158332,
-
             image: {
               url: "https://cdn.discordapp.com/attachments/1531043582348230767/1550233909134889020/IMG_2558.jpg?ex=6aad9755&is=6aac45d5&hm=783d4627cf35b79e7a96477fc8f3f4ae29d4a1dedb01b97db6b6b0e4bf4f0d94"
             },
-
             footer: {
-              text: "♡ Chuppys verification ♡"
+              text: "🤍 .gg/chuppys verification 🤍"
             }
           }
         ],
@@ -47,7 +41,6 @@ export default async function handler(req, res) {
         components: [
           {
             type: 1,
-
             components: [
               {
                 type: 2,
@@ -58,13 +51,12 @@ export default async function handler(req, res) {
                 },
                 url: "https://chuppys.vercel.app/linked-role"
               },
-
               {
                 type: 2,
                 style: 5,
                 label: "Why?",
                 emoji: {
-                  name: "♡"
+                  name: "🤍"
                 },
                 url: "https://twxnluvsbunnii.github.io/privacy-policy.html"
               }
