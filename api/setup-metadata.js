@@ -1,12 +1,8 @@
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  const secret = req.query.secret;
 
-  const auth = req.headers.authorization;
-
-  if (auth !== `Bearer ${process.env.SETUP_SECRET}`) {
-    return res.status(401).json({ error: "Unauthorized" });
+  if (secret !== process.env.SETUP_SECRET) {
+    return res.status(401).send("Unauthorized");
   }
 
   const response = await fetch(
@@ -28,7 +24,7 @@ export default async function handler(req, res) {
     }
   );
 
-  const data = await response.json();
+  const data = await response.text();
 
-  return res.status(response.status).json(data);
+  return res.status(response.status).send(data);
 }
