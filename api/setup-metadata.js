@@ -3,6 +3,12 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  const auth = req.headers.authorization;
+
+  if (auth !== `Bearer ${process.env.SETUP_SECRET}`) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   const response = await fetch(
     `https://discord.com/api/v10/applications/${process.env.DISCORD_CLIENT_ID}/role-connections/metadata`,
     {
@@ -16,9 +22,9 @@ export default async function handler(req, res) {
           key: "verified",
           name: "Verified",
           description: "Has completed Chuppys verification",
-          type: 7,
-        },
-      ]),
+          type: 7
+        }
+      ])
     }
   );
 
