@@ -20,7 +20,7 @@ export default async function handler(req, res) {
   };
 
   const embed = {
-    title: "• roles // •",
+    title: "• age // •",
     description:
       `<@&${roles.role1}>\n\n` +
       `<@&${roles.role2}>\n\n` +
