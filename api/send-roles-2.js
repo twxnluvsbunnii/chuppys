@@ -47,15 +47,15 @@ export default async function handler(req, res) {
             max_values: 3,
             options: [
               {
-                label: "Role 1",
+                label: "﹕𐔌・- 18 〃・꒱",
                 value: roles.role1
               },
               {
-                label: "Role 2",
+                label: "﹕𐔌・18 - 20 〃・꒱",
                 value: roles.role2
               },
               {
-                label: "Role 3",
+                label: "﹕𐔌・21 + 〃・꒱",
                 value: roles.role3
               }
             ]
