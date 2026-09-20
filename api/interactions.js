@@ -14,6 +14,11 @@ const SELF_ROLES = [
   "1531105107586973696", // Stock Ping
   "1551276593425682543"  // Cash Out
 ];
+const SECOND_ROLES = [
+  "1531084465126772877",
+  "1531084550849954003",
+  "1531084611399188640"
+];
 
 async function getRawBody(req) {
   const chunks = [];
