@@ -1,14 +1,10 @@
-import nacl from "tweetnacl";
+import crypto from "crypto";
 
 export const config = {
   api: {
     bodyParser: false
   }
 };
-
-// =========================
-// SELF ROLE IDs
-// =========================
 
 const SELF_ROLES = [
   "1531039846871728248", // Welcome Ping
@@ -18,10 +14,6 @@ const SELF_ROLES = [
   "1531105107586973696", // Stock Ping
   "1551276593425682543"  // Cash Out
 ];
-
-// =========================
-// GET RAW REQUEST BODY
-// =========================
 
 async function getRawBody(req) {
   const chunks = [];
@@ -33,9 +25,30 @@ async function getRawBody(req) {
   return Buffer.concat(chunks);
 }
 
-// =========================
-// DISCORD INTERACTIONS
-// =========================
+function verifyDiscordSignature(body, signature, timestamp, publicKeyHex) {
+  try {
+    const publicKeyDer = Buffer.concat([
+      Buffer.from("302a300506032b6570032100", "hex"),
+      Buffer.from(publicKeyHex, "hex")
+    ]);
+
+    const publicKey = crypto.createPublicKey({
+      key: publicKeyDer,
+      format: "der",
+      type: "spki"
+    });
+
+    return crypto.verify(
+      null,
+      Buffer.from(timestamp + body),
+      publicKey,
+      Buffer.from(signature, "hex")
+    );
+  } catch (error) {
+    console.error("Discord signature verification error:", error);
+    return false;
+  }
+}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -43,64 +56,56 @@ export default async function handler(req, res) {
   }
 
   const rawBody = await getRawBody(req);
-
   const body = rawBody.toString("utf8");
 
-  // =========================
-  // DISCORD SIGNATURE
-  // =========================
-
   const signature = req.headers["x-signature-ed25519"];
-
   const timestamp = req.headers["x-signature-timestamp"];
-
   const publicKey = process.env.DISCORD_PUBLIC_KEY;
 
   if (!signature || !timestamp || !publicKey) {
+    console.error("Missing Discord signature information");
+
     return res.status(401).send(
       "Missing Discord signature information"
     );
   }
 
-  const isValid = nacl.sign.detached.verify(
-    Buffer.from(timestamp + body),
-    Buffer.from(signature, "hex"),
-    Buffer.from(publicKey, "hex")
+  const valid = verifyDiscordSignature(
+    body,
+    signature,
+    timestamp,
+    publicKey
   );
 
-  if (!isValid) {
-    return res.status(401).send(
-      "Invalid Discord signature"
-    );
+  if (!valid) {
+    console.error("Invalid Discord signature");
+
+    return res.status(401).send("Invalid Discord signature");
   }
 
-  const interaction = JSON.parse(body);
+  let interaction;
 
-  // =========================
-  // DISCORD PING
-  // =========================
+  try {
+    interaction = JSON.parse(body);
+  } catch (error) {
+    return res.status(400).send("Invalid JSON");
+  }
 
+  // Discord verification PING
   if (interaction.type === 1) {
     return res.status(200).json({
       type: 1
     });
   }
 
-  // =========================
-  // SELF ROLE DROPDOWN
-  // =========================
-
+  // Self-role dropdown
   if (
     interaction.type === 3 &&
-    interaction.data &&
-    interaction.data.custom_id === "chuppys_self_roles"
+    interaction.data?.custom_id === "chuppys_self_roles"
   ) {
     const botToken = process.env.DISCORD_BOT_TOKEN;
-
     const guildId = interaction.guild_id;
-
-    const userId =
-      interaction.member?.user?.id;
+    const userId = interaction.member?.user?.id;
 
     if (!botToken || !guildId || !userId) {
       return res.status(500).json({
@@ -108,63 +113,43 @@ export default async function handler(req, res) {
       });
     }
 
-    // Roles currently selected in the dropdown
-    const selectedRoles =
-      interaction.data.values || [];
-
-    // =========================
-    // UPDATE EVERY SELF ROLE
-    // =========================
+    const selectedRoles = interaction.data.values || [];
 
     for (const roleId of SELF_ROLES) {
-      const wantsRole =
-        selectedRoles.includes(roleId);
+      const shouldHaveRole = selectedRoles.includes(roleId);
 
-      const method =
-        wantsRole ? "PUT" : "DELETE";
+      const method = shouldHaveRole ? "PUT" : "DELETE";
 
       const response = await fetch(
         `https://discord.com/api/v10/guilds/${guildId}/members/${userId}/roles/${roleId}`,
         {
           method,
-
           headers: {
             Authorization: `Bot ${botToken}`
           }
         }
       );
 
-      if (!response.ok) {
+      if (!response.ok && response.status !== 404) {
         console.error(
-          `Failed to ${wantsRole ? "add" : "remove"} role ${roleId}`,
+          `Role ${roleId} failed:`,
           response.status,
           await response.text()
         );
       }
     }
 
-    // =========================
-    // PRIVATE CONFIRMATION
-    // =========================
-
     return res.status(200).json({
       type: 4,
-
       data: {
         content:
           "﹕𐔌・your roles have been updated〃・꒱ 🤍",
-
         flags: 64
       }
     });
   }
 
-  // =========================
-  // UNKNOWN INTERACTION
-  // =========================
-
   return res.status(400).json({
     error: "Unknown interaction"
   });
-
-  
+}
