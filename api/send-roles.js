@@ -1,5 +1,5 @@
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
+  if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
@@ -32,7 +32,7 @@ export default async function handler(req, res) {
       `<@&${roles.stock}>\n\n` +
       `<@&${roles.cashout}>\n\n` +
       `please choose your roles below ♡`,
-    color: 0xf3dce8,
+    color: 0xffffff,
     footer: {
       text: ".gg/chuppys"
     }
@@ -48,39 +48,33 @@ export default async function handler(req, res) {
           {
             type: 3,
             custom_id: "chuppys_self_roles",
-            placeholder: "♡ choose your roles // • 3",
+            placeholder: "♡ choose your roles",
             min_values: 0,
             max_values: 6,
             options: [
               {
                 label: "Welcome Ping",
-                value: roles.welcome,
-                description: "Receive welcome pings"
+                value: roles.welcome
               },
               {
                 label: "Announcement Ping",
-                value: roles.announcement,
-                description: "Receive announcement pings"
+                value: roles.announcement
               },
               {
                 label: "Streaming Ping",
-                value: roles.streaming,
-                description: "Receive streaming pings"
+                value: roles.streaming
               },
               {
                 label: "Giveaway Ping",
-                value: roles.giveaway,
-                description: "Receive giveaway pings"
+                value: roles.giveaway
               },
               {
                 label: "Stock Ping",
-                value: roles.stock,
-                description: "Receive stock pings"
+                value: roles.stock
               },
               {
                 label: "Cash Out",
-                value: roles.cashout,
-                description: "Receive cash out pings"
+                value: roles.cashout
               }
             ]
           }
