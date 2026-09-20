@@ -11,6 +11,14 @@
     {
       "source": "/send-verification",
       "destination": "/api/send-verification"
+    },
+    {
+      "source": "/interactions",
+      "destination": "/api/interactions"
+    },
+    {
+      "source": "/send-roles",
+      "destination": "/api/send-roles"
     }
   ]
 }
