@@ -14,6 +14,8 @@ const SELF_ROLES = [
   "1531105107586973696", // Stock Ping
   "1551276593425682543"  // Cash Out
 ];
+
+// NEW 3-ROLE MENU
 const SECOND_ROLES = [
   "1531084465126772877",
   "1531084550849954003",
@@ -103,7 +105,10 @@ export default async function handler(req, res) {
     });
   }
 
-  // Self-role dropdown
+  // ==========================================
+  // ORIGINAL 6-ROLE MENU
+  // ==========================================
+
   if (
     interaction.type === 3 &&
     interaction.data?.custom_id === "chuppys_self_roles"
@@ -153,6 +158,64 @@ export default async function handler(req, res) {
       }
     });
   }
+
+  // ==========================================
+  // NEW 3-ROLE MENU
+  // ==========================================
+
+  if (
+    interaction.type === 3 &&
+    interaction.data?.custom_id === "chuppys_second_roles"
+  ) {
+    const botToken = process.env.DISCORD_BOT_TOKEN;
+    const guildId = interaction.guild_id;
+    const userId = interaction.member?.user?.id;
+
+    if (!botToken || !guildId || !userId) {
+      return res.status(500).json({
+        error: "Missing Discord information"
+      });
+    }
+
+    const selectedRoles = interaction.data.values || [];
+
+    for (const roleId of SECOND_ROLES) {
+      const shouldHaveRole = selectedRoles.includes(roleId);
+
+      const method = shouldHaveRole ? "PUT" : "DELETE";
+
+      const response = await fetch(
+        `https://discord.com/api/v10/guilds/${guildId}/members/${userId}/roles/${roleId}`,
+        {
+          method,
+          headers: {
+            Authorization: `Bot ${botToken}`
+          }
+        }
+      );
+
+      if (!response.ok && response.status !== 404) {
+        console.error(
+          `Role ${roleId} failed:`,
+          response.status,
+          await response.text()
+        );
+      }
+    }
+
+    return res.status(200).json({
+      type: 4,
+      data: {
+        content:
+          "﹕𐔌・your roles have been updated〃・꒱ 🤍",
+        flags: 64
+      }
+    });
+  }
+
+  // ==========================================
+  // UNKNOWN INTERACTION
+  // ==========================================
 
   return res.status(400).json({
     error: "Unknown interaction"
