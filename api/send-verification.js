@@ -28,7 +28,7 @@ export default async function handler(req, res) {
               "To gain access to **.gg/chuppys** you need to prove you are a human by completing verification. Click the button below to get started!",
             color: 16777215,
             image: {
-              url: "https://cdn.discordapp.com/attachments/1531043582348230767/1551622352729808916/BCA71D48-B1AD-46BA-BAAA-CC87D8C81E62.png?ex=6ab2a46c&is=6ab152ec&hm=0516a4b5341841d22daeccb8ec15a6347d0df8af2c2411daa2f6aa26d51aca22&"
+              url: "https://chuppys.vercel.app/verification.png"
             },
             footer: {
               text: ".gg/chuppys verification"
