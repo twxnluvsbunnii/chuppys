@@ -11,7 +11,7 @@ const client = new Client({
   ]
 });
 
-const TOKEN = process.env.MTU0OTc0Mjk2MzM4OTg5MDY1Mg.GtWQ4Z.DmuvDot_wW_T85Oeeptb5_sV7K1FRg1OJWCe9w;
+const TOKEN = process.env.DISCORD_BOT_TOKEN;
 
 const WELCOME_CHANNEL_ID = "1530755165412524042";
 const WELCOME_ROLE_ID = "1531039846871728248";
@@ -27,7 +27,6 @@ client.on("guildMemberAdd", async (member) => {
   if (member.user.bot) return;
 
   const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
-
   if (!channel) return;
 
   const embed = new EmbedBuilder()
