@@ -11,7 +11,7 @@ const client = new Client({
   ]
 });
 
-const TOKEN = process.env.DISCORD_BOT_TOKEN;
+const TOKEN = process.env.MTU0OTc0Mjk2MzM4OTg5MDY1Mg.GtWQ4Z.DmuvDot_wW_T85Oeeptb5_sV7K1FRg1OJWCe9w;
 
 const WELCOME_CHANNEL_ID = "1530755165412524042";
 const WELCOME_ROLE_ID = "1531039846871728248";
