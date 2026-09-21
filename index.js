@@ -1,22 +1,31 @@
+const http = require("http");
+
 const {
   Client,
   GatewayIntentBits,
   EmbedBuilder
 } = require("discord.js");
 
+// Render needs an open port
+const PORT = process.env.PORT || 3000;
+
+http.createServer((req, res) => {
+  res.writeHead(200);
+  res.end("Chuppys bot is running!");
+}).listen(PORT, () => {
+  console.log(`Web server running on port ${PORT}`);
+});
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
   ]
 });
 
 const TOKEN = process.env.DISCORD_BOT_TOKEN;
-
-// Safe token check — does NOT show the token
-console.log("Token loaded:", !!TOKEN);
-console.log("Token length:", TOKEN ? TOKEN.length : 0);
 
 const WELCOME_CHANNEL_ID = "1530755165412524042";
 const WELCOME_ROLE_ID = "1531039846871728248";
@@ -26,9 +35,10 @@ const WELCOME_IMAGE =
 
 client.once("ready", () => {
   console.log(`Logged in as ${client.user.tag}`);
+  console.log("Bot is ready!");
 });
 
-// Automatic welcome when someone joins
+// Automatic welcome
 client.on("guildMemberAdd", async (member) => {
   if (member.user.bot) return;
 
@@ -56,18 +66,27 @@ client.on("guildMemberAdd", async (member) => {
     content: `<@&${WELCOME_ROLE_ID}>`,
     embeds: [embed]
   });
+
+  console.log(`Welcome message sent for ${member.user.tag}`);
 });
 
-// Test command
+// !testwelcome
 client.on("messageCreate", async (message) => {
+  console.log(`Message received: ${message.content}`);
+
   if (message.author.bot) return;
   if (message.content !== "!testwelcome") return;
   if (!message.guild) return;
 
+  console.log("Test welcome command detected!");
+
   const member = message.member;
   const channel = message.guild.channels.cache.get(WELCOME_CHANNEL_ID);
 
-  if (!channel) return;
+  if (!channel) {
+    console.log("Welcome channel not found.");
+    return;
+  }
 
   const embed = new EmbedBuilder()
     .setColor(0xffffff)
@@ -86,6 +105,8 @@ client.on("messageCreate", async (message) => {
     content: `<@&${WELCOME_ROLE_ID}>`,
     embeds: [embed]
   });
+
+  console.log("Test welcome message sent!");
 });
 
 client.login(TOKEN);
