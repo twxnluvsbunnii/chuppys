@@ -14,6 +14,10 @@ const client = new Client({
 
 const TOKEN = process.env.DISCORD_BOT_TOKEN;
 
+// Safe token check — does NOT show the token
+console.log("Token loaded:", !!TOKEN);
+console.log("Token length:", TOKEN ? TOKEN.length : 0);
+
 const WELCOME_CHANNEL_ID = "1530755165412524042";
 const WELCOME_ROLE_ID = "1531039846871728248";
 
@@ -58,6 +62,7 @@ client.on("guildMemberAdd", async (member) => {
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
   if (message.content !== "!testwelcome") return;
+  if (!message.guild) return;
 
   const member = message.member;
   const channel = message.guild.channels.cache.get(WELCOME_CHANNEL_ID);
