@@ -95,7 +95,6 @@ client.on("messageCreate", async (message) => {
       `we hope you enjoy your stay ♡`
     )
     .setImage(WELCOME_IMAGE)
-    .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
     .setFooter({
       text: ".gg/chuppys"
     });
