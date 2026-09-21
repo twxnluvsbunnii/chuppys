@@ -26,26 +26,38 @@ client.once("ready", () => {
 client.on("guildMemberAdd", async (member) => {
   if (member.user.bot) return;
 
-  const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
-  if (!channel) return;
+  try {
+    const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
 
-  const embed = new EmbedBuilder()
-    .setColor(0xffffff)
-    .setDescription(
-      `♡ welcome <@${member.id}> ♡\n\n` +
-      `welcome to .gg/chuppys !\n` +
-      `we hope you enjoy your stay ♡`
-    )
-    .setImage(WELCOME_IMAGE)
-    .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
-    .setFooter({
-      text: ".gg/chuppys"
+    if (!channel) {
+      console.log("Welcome channel not found.");
+      return;
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(0xffffff)
+      .setDescription(
+        `♡ welcome <@${member.id}> ♡\n\n` +
+        `welcome to .gg/chuppys !\n` +
+        `we hope you enjoy your stay ♡`
+      )
+      .setImage(WELCOME_IMAGE)
+      .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
+      .setFooter({
+        text: ".gg/chuppys"
+      });
+
+    await channel.send({
+      content: `<@&${WELCOME_ROLE_ID}>`,
+      embeds: [embed]
     });
 
-  await channel.send({
-    content: `<@&${WELCOME_ROLE_ID}>`,
-    embeds: [embed]
-  });
+    console.log(`Welcome message sent for ${member.user.tag}`);
+  } catch (error) {
+    console.error("Error sending welcome message:", error);
+  }
 });
 
-client.login(TOKEN);
+client.login(TOKEN).catch((error) => {
+  console.error("Failed to log in:", error);
+});
