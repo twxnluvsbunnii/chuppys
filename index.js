@@ -79,28 +79,26 @@ client.on("guildMemberAdd", async (member) => {
     `JOIN EVENT: ${member.user.tag} joined ${member.guild.name}`
   );
 
-  // Ignore bots
   if (member.user.bot) {
     console.log("Joined member is a bot. Welcome skipped.");
     return;
   }
 
   try {
-    // Fetch the welcome channel directly
     const channel = await member.guild.channels.fetch(
       WELCOME_CHANNEL_ID
     );
 
     if (!channel) {
-      console.log(
-        `❌ Welcome channel ${WELCOME_CHANNEL_ID} was not found.`
-      );
+      console.log("❌ Welcome channel was not found.");
       return;
     }
 
-    console.log(`Welcome channel found: #${channel.name}`);
+    if (!channel.isTextBased()) {
+      console.log("❌ Welcome channel is not a text channel.");
+      return;
+    }
 
-    // Create welcome embed
     const embed = new EmbedBuilder()
       .setColor(0xffffff)
       .setDescription(
@@ -113,7 +111,6 @@ client.on("guildMemberAdd", async (member) => {
         text: ".gg/chuppys"
       });
 
-    // Send welcome message
     await channel.send({
       content: `<@&${WELCOME_ROLE_ID}>`,
       embeds: [embed]
@@ -138,28 +135,26 @@ client.on("guildMemberRemove", async (member) => {
     `LEAVE EVENT: ${member.user.tag} left ${member.guild.name}`
   );
 
-  // Ignore bots
   if (member.user.bot) {
     console.log("Leaving member is a bot. Goodbye skipped.");
     return;
   }
 
   try {
-    // Fetch goodbye channel directly
     const channel = await member.guild.channels.fetch(
       GOODBYE_CHANNEL_ID
     );
 
     if (!channel) {
-      console.log(
-        `❌ Goodbye channel ${GOODBYE_CHANNEL_ID} was not found.`
-      );
+      console.log("❌ Goodbye channel was not found.");
       return;
     }
 
-    console.log(`Goodbye channel found: #${channel.name}`);
+    if (!channel.isTextBased()) {
+      console.log("❌ Goodbye channel is not a text channel.");
+      return;
+    }
 
-    // Create goodbye embed
     const embed = new EmbedBuilder()
       .setColor(0xffffff)
       .setDescription(
@@ -171,7 +166,6 @@ client.on("guildMemberRemove", async (member) => {
         text: ".gg/chuppys"
       });
 
-    // Send goodbye message
     await channel.send({
       embeds: [embed]
     });
@@ -187,14 +181,10 @@ client.on("guildMemberRemove", async (member) => {
 });
 
 // ==================================================
-// TEST COMMANDS
+// COMMANDS
 // ==================================================
 
 client.on("messageCreate", async (message) => {
-
-  console.log(
-    `Message received: ${message.content}`
-  );
 
   // Ignore bots
   if (message.author.bot) return;
@@ -202,22 +192,36 @@ client.on("messageCreate", async (message) => {
   // Ignore DMs
   if (!message.guild) return;
 
+  console.log(
+    `MESSAGE: ${message.author.tag} → "${message.content}"`
+  );
+
+  const command = message.content.trim().toLowerCase();
+
   // ==================================================
   // !testwelcome
   // ==================================================
 
-  if (message.content === "!testwelcome") {
+  if (command === "!testwelcome") {
 
-    console.log("TEST WELCOME COMMAND DETECTED");
+    console.log("🧪 TEST WELCOME COMMAND DETECTED");
 
     try {
-
       const channel = await message.guild.channels.fetch(
         WELCOME_CHANNEL_ID
       );
 
       if (!channel) {
-        console.log("❌ Welcome channel not found.");
+        await message.reply(
+          "❌ I couldn't find the welcome channel."
+        );
+        return;
+      }
+
+      if (!channel.isTextBased()) {
+        await message.reply(
+          "❌ The welcome channel is not a text channel."
+        );
         return;
       }
 
@@ -238,11 +242,19 @@ client.on("messageCreate", async (message) => {
         embeds: [embed]
       });
 
+      await message.reply(
+        "✅ Test welcome message sent!"
+      );
+
       console.log("✅ Test welcome message sent!");
 
     } catch (error) {
       console.error("❌ TEST WELCOME ERROR:");
       console.error(error);
+
+      await message.reply(
+        "❌ I couldn't send the welcome message. Check the Render logs."
+      ).catch(() => {});
     }
   }
 
@@ -250,20 +262,42 @@ client.on("messageCreate", async (message) => {
   // !testgoodbye
   // ==================================================
 
-  if (message.content === "!testgoodbye") {
+  if (command === "!testgoodbye") {
 
-    console.log("TEST GOODBYE COMMAND DETECTED");
+    console.log("🧪 TEST GOODBYE COMMAND DETECTED");
 
     try {
-
       const channel = await message.guild.channels.fetch(
         GOODBYE_CHANNEL_ID
       );
 
       if (!channel) {
-        console.log("❌ Goodbye channel not found.");
+        console.log(
+          `❌ Goodbye channel ${GOODBYE_CHANNEL_ID} was not found.`
+        );
+
+        await message.reply(
+          "❌ I couldn't find the goodbye channel."
+        );
+
         return;
       }
+
+      if (!channel.isTextBased()) {
+        console.log(
+          "❌ Goodbye channel is not a text channel."
+        );
+
+        await message.reply(
+          "❌ The goodbye channel is not a text channel."
+        );
+
+        return;
+      }
+
+      console.log(
+        `GOODBYE CHANNEL FOUND: #${channel.name}`
+      );
 
       const embed = new EmbedBuilder()
         .setColor(0xffffff)
@@ -280,11 +314,21 @@ client.on("messageCreate", async (message) => {
         embeds: [embed]
       });
 
-      console.log("✅ Test goodbye message sent!");
+      await message.reply(
+        "✅ Test goodbye message sent!"
+      );
+
+      console.log(
+        "✅ Test goodbye message sent successfully!"
+      );
 
     } catch (error) {
       console.error("❌ TEST GOODBYE ERROR:");
       console.error(error);
+
+      await message.reply(
+        "❌ I couldn't send the goodbye message. Check the Render logs."
+      ).catch(() => {});
     }
   }
 });
