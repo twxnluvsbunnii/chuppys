@@ -62,7 +62,7 @@ const WELCOME_IMAGE =
 // BOT READY
 // ==================================================
 
-client.once("ready", () => {
+client.once("clientReady", () => {
   console.log("=================================");
   console.log(`Logged in as ${client.user.tag}`);
   console.log(`Bot ID: ${client.user.id}`);
@@ -79,6 +79,7 @@ client.on("guildMemberAdd", async (member) => {
     `JOIN EVENT: ${member.user.tag} joined ${member.guild.name}`
   );
 
+  // Ignore bots
   if (member.user.bot) {
     console.log("Joined member is a bot. Welcome skipped.");
     return;
@@ -135,6 +136,7 @@ client.on("guildMemberRemove", async (member) => {
     `LEAVE EVENT: ${member.user.tag} left ${member.guild.name}`
   );
 
+  // Ignore bots
   if (member.user.bot) {
     console.log("Leaving member is a bot. Goodbye skipped.");
     return;
