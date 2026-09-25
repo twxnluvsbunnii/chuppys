@@ -11,7 +11,7 @@ const {
 } = require("discord.js");
 
 // ==================================================
-// RENDER SERVER
+// RENDER WEB SERVER
 // ==================================================
 
 const PORT = process.env.PORT || 3000;
@@ -66,25 +66,188 @@ const PAYMENT_INFO = {
 };
 
 // ==================================================
-// READY
+// BOT READY
 // ==================================================
 
 client.once(Events.ClientReady, (bot) => {
   console.log("====================================");
   console.log("🤍 CHUPPYS BOT IS ONLINE");
-  console.log(`🤖 ${bot.user.tag}`);
-  console.log(`🆔 ${bot.user.id}`);
-  console.log(`🏠 SERVERS: ${bot.guilds.cache.size}`);
+  console.log(`🤖 Bot: ${bot.user.tag}`);
+  console.log(`🆔 Bot ID: ${bot.user.id}`);
+  console.log(`🏠 Servers: ${bot.guilds.cache.size}`);
   console.log("====================================");
 });
 
 // ==================================================
-// MESSAGE RECEIVER TEST
+// SHARD / CONNECTION EVENTS
+// ==================================================
+
+client.on("shardConnecting", (id) => {
+  console.log(`🔌 Shard ${id} connecting to Discord...`);
+});
+
+client.on("shardReady", (id) => {
+  console.log(`✅ Shard ${id} connected and ready.`);
+});
+
+client.on("shardReconnecting", (id) => {
+  console.log(`🔄 Shard ${id} reconnecting...`);
+});
+
+client.on("shardError", (error, id) => {
+  console.error(`❌ Shard ${id} error:`);
+  console.error(error);
+});
+
+client.on("warn", (warning) => {
+  console.warn(`⚠️ Discord warning: ${warning}`);
+});
+
+// IMPORTANT:
+// We intentionally DO NOT use client.on("debug")
+// because Discord.js debug logs can expose sensitive
+// authentication information.
+
+// ==================================================
+// WELCOME
+// ==================================================
+
+client.on(Events.GuildMemberAdd, async (member) => {
+  console.log(
+    `👋 MEMBER JOIN DETECTED: ${member.user.tag} (${member.id})`
+  );
+
+  try {
+    const channel = await member.guild.channels
+      .fetch(WELCOME_CHANNEL_ID)
+      .catch(() => null);
+
+    if (!channel) {
+      console.error(
+        `❌ Welcome channel ${WELCOME_CHANNEL_ID} not found.`
+      );
+      return;
+    }
+
+    // ----------------------------------------------
+    // ADD WELCOME ROLE
+    // ----------------------------------------------
+
+    try {
+      const role = await member.guild.roles
+        .fetch(WELCOME_ROLE_ID)
+        .catch(() => null);
+
+      if (!role) {
+        console.error(
+          `❌ Welcome role ${WELCOME_ROLE_ID} not found.`
+        );
+      } else {
+        await member.roles.add(role);
+
+        console.log(
+          `✅ Welcome role added to ${member.user.tag}`
+        );
+      }
+    } catch (error) {
+      console.error("❌ Could not add welcome role:");
+      console.error(error);
+    }
+
+    // ----------------------------------------------
+    // WELCOME EMBED
+    // ----------------------------------------------
+
+    const embed = new EmbedBuilder()
+      .setColor("#FFFFFF")
+      .setTitle("🤍 welcome to .gg/chuppys")
+      .setDescription(
+        `welcome ${member}!\n\n` +
+        `we hope you enjoy your stay here 🤍`
+      )
+      .setThumbnail(
+        member.user.displayAvatarURL({
+          dynamic: true
+        })
+      )
+      .setImage(WELCOME_IMAGE)
+      .setFooter({
+        text: ".gg/chuppys"
+      })
+      .setTimestamp();
+
+    await channel.send({
+      content: `<@&${WELCOME_ROLE_ID}> ${member}`,
+      embeds: [embed]
+    });
+
+    console.log(
+      `✅ Welcome message sent for ${member.user.tag}`
+    );
+  } catch (error) {
+    console.error("❌ WELCOME ERROR:");
+    console.error(error);
+  }
+});
+
+// ==================================================
+// GOODBYE
+// ==================================================
+
+client.on(Events.GuildMemberRemove, async (member) => {
+  console.log(
+    `👋 MEMBER LEAVE DETECTED: ${member.user.tag} (${member.id})`
+  );
+
+  try {
+    const channel = await member.guild.channels
+      .fetch(GOODBYE_CHANNEL_ID)
+      .catch(() => null);
+
+    if (!channel) {
+      console.error(
+        `❌ Goodbye channel ${GOODBYE_CHANNEL_ID} not found.`
+      );
+      return;
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor("#FFFFFF")
+      .setTitle("🤍 goodbye")
+      .setDescription(
+        `${member.user} has left **.gg/chuppys**.\n\n` +
+        `we'll miss you 🤍`
+      )
+      .setThumbnail(
+        member.user.displayAvatarURL({
+          dynamic: true
+        })
+      )
+      .setFooter({
+        text: ".gg/chuppys"
+      })
+      .setTimestamp();
+
+    await channel.send({
+      embeds: [embed]
+    });
+
+    console.log(
+      `✅ Goodbye message sent for ${member.user.tag}`
+    );
+  } catch (error) {
+    console.error("❌ GOODBYE ERROR:");
+    console.error(error);
+  }
+});
+
+// ==================================================
+// MESSAGE COMMANDS
 // ==================================================
 
 client.on(Events.MessageCreate, async (message) => {
   console.log(
-    `💬 MESSAGE RECEIVED: "${message.content}" | USER: ${message.author.tag}`
+    `💬 MESSAGE RECEIVED: "${message.content}" from ${message.author.tag}`
   );
 
   if (message.author.bot) return;
@@ -95,75 +258,77 @@ client.on(Events.MessageCreate, async (message) => {
 
   // ==================================================
   // ,PAY
+  // Example:
+  // ,pay 25
   // ==================================================
 
-  if (content.toLowerCase().startsWith(",pay")) {
-    console.log("💰 PAY COMMAND DETECTED");
+  const payMatch = content.match(
+    /^,pay(?:\s+\$?(\d+(?:\.\d{1,2})?))?\s*$/i
+  );
 
-    const parts = content.split(/\s+/);
+  if (payMatch) {
+    console.log("💰 ,PAY COMMAND DETECTED");
 
-    if (parts.length < 2) {
+    const rawAmount = payMatch[1];
+
+    if (!rawAmount) {
       await message.reply(
-        "❌ Please enter an amount.\nExample: `,pay 25`"
+        "❌ Please enter an amount.\n\nExample: `,pay 25`"
       );
+
       return;
     }
 
-    let amount = parts[1]
-      .replace("$", "")
-      .trim();
+    const amountNumber = Number(rawAmount);
 
-    if (!/^\d+(?:\.\d{1,2})?$/.test(amount)) {
+    if (
+      !Number.isFinite(amountNumber) ||
+      amountNumber <= 0
+    ) {
       await message.reply(
-        "❌ Invalid amount.\nExample: `,pay 25`"
+        "❌ Invalid amount.\n\nExample: `,pay 25`"
       );
+
       return;
     }
 
-    const numberAmount = Number(amount);
-
-    if (!Number.isFinite(numberAmount) || numberAmount <= 0) {
-      await message.reply(
-        "❌ Amount must be greater than $0."
-      );
-      return;
-    }
-
-    amount = numberAmount.toFixed(2);
+    const amount = amountNumber.toFixed(2);
 
     console.log(`💰 PAYMENT AMOUNT: $${amount}`);
 
-    // ==================================================
-    // BUTTONS
-    // ==================================================
+    // ----------------------------------------------
+    // PAYMENT BUTTONS
+    // ----------------------------------------------
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`payment_cashapp_${amount}`)
-        .setLabel("﹕𐔌・cash app 〃・꒱")
-        .setStyle(ButtonStyle.Secondary),
+    const paymentRow =
+      new ActionRowBuilder().addComponents(
 
-      new ButtonBuilder()
-        .setCustomId(`payment_paypal_${amount}`)
-        .setLabel("﹕𐔌・paypal 〃・꒱")
-        .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`payment_cashapp_${amount}`)
+          .setLabel("﹕𐔌・cash app 〃・꒱")
+          .setStyle(ButtonStyle.Secondary),
 
-      new ButtonBuilder()
-        .setCustomId(`payment_applepay_${amount}`)
-        .setLabel("﹕𐔌・apple pay 〃・꒱")
-        .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`payment_paypal_${amount}`)
+          .setLabel("﹕𐔌・paypal 〃・꒱")
+          .setStyle(ButtonStyle.Secondary),
 
-      new ButtonBuilder()
-        .setCustomId(`payment_zelle_${amount}`)
-        .setLabel("﹕𐔌・zelle 〃・꒱")
-        .setStyle(ButtonStyle.Secondary)
-    );
+        new ButtonBuilder()
+          .setCustomId(`payment_applepay_${amount}`)
+          .setLabel("﹕𐔌・apple pay 〃・꒱")
+          .setStyle(ButtonStyle.Secondary),
 
-    // ==================================================
-    // EMBED
-    // ==================================================
+        new ButtonBuilder()
+          .setCustomId(`payment_zelle_${amount}`)
+          .setLabel("﹕𐔌・zelle 〃・꒱")
+          .setStyle(ButtonStyle.Secondary)
+      );
 
-    const embed = new EmbedBuilder()
+    // ----------------------------------------------
+    // PAYMENT EMBED
+    // ----------------------------------------------
+
+    const paymentEmbed = new EmbedBuilder()
       .setColor("#FFFFFF")
       .setTitle("🤍 payment methods")
       .setDescription(
@@ -177,14 +342,22 @@ client.on(Events.MessageCreate, async (message) => {
 
     try {
       await message.channel.send({
-        embeds: [embed],
-        components: [row]
+        embeds: [paymentEmbed],
+        components: [paymentRow]
       });
 
-      console.log("✅ PAYMENT MENU SENT");
+      console.log(
+        `✅ PAYMENT MENU SENT FOR $${amount}`
+      );
     } catch (error) {
-      console.error("❌ PAYMENT SEND ERROR:");
+      console.error("❌ PAYMENT MENU ERROR:");
       console.error(error);
+
+      try {
+        await message.reply(
+          "❌ I couldn't send the payment menu."
+        );
+      } catch {}
     }
 
     return;
@@ -195,13 +368,20 @@ client.on(Events.MessageCreate, async (message) => {
   // ==================================================
 
   if (content.toLowerCase() === "!testwelcome") {
-    console.log("🧪 TEST WELCOME DETECTED");
+    console.log("🧪 !testwelcome detected.");
 
     try {
-      const channel =
-        await message.guild.channels.fetch(
-          WELCOME_CHANNEL_ID
+      const channel = await message.guild.channels
+        .fetch(WELCOME_CHANNEL_ID)
+        .catch(() => null);
+
+      if (!channel) {
+        await message.reply(
+          "❌ I couldn't find the welcome channel."
         );
+
+        return;
+      }
 
       const embed = new EmbedBuilder()
         .setColor("#FFFFFF")
@@ -231,10 +411,11 @@ client.on(Events.MessageCreate, async (message) => {
         "✅ Test welcome message sent."
       );
     } catch (error) {
+      console.error("❌ TEST WELCOME ERROR:");
       console.error(error);
 
       await message.reply(
-        "❌ Test welcome failed."
+        "❌ Something went wrong sending the test welcome."
       );
     }
 
@@ -246,13 +427,20 @@ client.on(Events.MessageCreate, async (message) => {
   // ==================================================
 
   if (content.toLowerCase() === "!testgoodbye") {
-    console.log("🧪 TEST GOODBYE DETECTED");
+    console.log("🧪 !testgoodbye detected.");
 
     try {
-      const channel =
-        await message.guild.channels.fetch(
-          GOODBYE_CHANNEL_ID
+      const channel = await message.guild.channels
+        .fetch(GOODBYE_CHANNEL_ID)
+        .catch(() => null);
+
+      if (!channel) {
+        await message.reply(
+          "❌ I couldn't find the goodbye channel."
         );
+
+        return;
+      }
 
       const embed = new EmbedBuilder()
         .setColor("#FFFFFF")
@@ -279,10 +467,11 @@ client.on(Events.MessageCreate, async (message) => {
         "✅ Test goodbye message sent."
       );
     } catch (error) {
+      console.error("❌ TEST GOODBYE ERROR:");
       console.error(error);
 
       await message.reply(
-        "❌ Test goodbye failed."
+        "❌ Something went wrong sending the test goodbye."
       );
     }
 
@@ -291,7 +480,7 @@ client.on(Events.MessageCreate, async (message) => {
 });
 
 // ==================================================
-// PAYMENT BUTTONS
+// PAYMENT BUTTON INTERACTIONS
 // ==================================================
 
 client.on(
@@ -301,37 +490,79 @@ client.on(
 
     const id = interaction.customId;
 
-    let method;
-    let information;
+    console.log(
+      `🔘 PAYMENT BUTTON: ${id}`
+    );
+
+    let method = null;
+    let information = null;
+    let amount = null;
+
+    // ----------------------------------------------
+    // CASH APP
+    // ----------------------------------------------
 
     if (id.startsWith("payment_cashapp_")) {
       method = "cash app";
       information = PAYMENT_INFO.cashapp;
+      amount = id.replace(
+        "payment_cashapp_",
+        ""
+      );
     }
 
-    if (id.startsWith("payment_paypal_")) {
+    // ----------------------------------------------
+    // PAYPAL
+    // ----------------------------------------------
+
+    else if (id.startsWith("payment_paypal_")) {
       method = "paypal";
       information = PAYMENT_INFO.paypal;
+      amount = id.replace(
+        "payment_paypal_",
+        ""
+      );
     }
 
-    if (id.startsWith("payment_applepay_")) {
+    // ----------------------------------------------
+    // APPLE PAY
+    // ----------------------------------------------
+
+    else if (id.startsWith("payment_applepay_")) {
       method = "apple pay";
       information = PAYMENT_INFO.applepay;
+      amount = id.replace(
+        "payment_applepay_",
+        ""
+      );
     }
 
-    if (id.startsWith("payment_zelle_")) {
+    // ----------------------------------------------
+    // ZELLE
+    // ----------------------------------------------
+
+    else if (id.startsWith("payment_zelle_")) {
       method = "zelle";
       information = PAYMENT_INFO.zelle;
+      amount = id.replace(
+        "payment_zelle_",
+        ""
+      );
     }
 
-    if (!method) return;
+    if (!method || !information || !amount) {
+      console.error(
+        "❌ Unknown payment button:"
+      );
 
-    const amount = id
-      .replace(`payment_${method.replace(" ", "")}_`, "")
-      .replace("payment_applepay_", "")
-      .replace("payment_cashapp_", "")
-      .replace("payment_paypal_", "")
-      .replace("payment_zelle_", "");
+      console.error(id);
+
+      return;
+    }
+
+    // ----------------------------------------------
+    // PRIVATE PAYMENT RESPONSE
+    // ----------------------------------------------
 
     const embed = new EmbedBuilder()
       .setColor("#FFFFFF")
@@ -343,160 +574,30 @@ client.on(
       )
       .setFooter({
         text: ".gg/chuppys"
-      });
+      })
+      .setTimestamp();
 
     try {
       await interaction.reply({
         embeds: [embed],
         ephemeral: true
       });
+
+      console.log(
+        `✅ ${method} payment information sent privately.`
+      );
     } catch (error) {
       console.error(
-        "❌ BUTTON ERROR:"
+        "❌ PAYMENT BUTTON ERROR:"
       );
+
       console.error(error);
     }
   }
 );
 
 // ==================================================
-// WELCOME
-// ==================================================
-
-client.on(Events.GuildMemberAdd, async (member) => {
-  console.log(
-    `👋 MEMBER JOINED: ${member.user.tag}`
-  );
-
-  try {
-    const channel =
-      await member.guild.channels.fetch(
-        WELCOME_CHANNEL_ID
-      );
-
-    const role =
-      await member.guild.roles.fetch(
-        WELCOME_ROLE_ID
-      );
-
-    if (role) {
-      await member.roles.add(role);
-    }
-
-    const embed = new EmbedBuilder()
-      .setColor("#FFFFFF")
-      .setTitle("🤍 welcome to .gg/chuppys")
-      .setDescription(
-        `welcome ${member}!\n\n` +
-        `we hope you enjoy your stay here 🤍`
-      )
-      .setThumbnail(
-        member.user.displayAvatarURL({
-          dynamic: true
-        })
-      )
-      .setImage(WELCOME_IMAGE)
-      .setFooter({
-        text: ".gg/chuppys"
-      })
-      .setTimestamp();
-
-    await channel.send({
-      content:
-        `<@&${WELCOME_ROLE_ID}> ${member}`,
-      embeds: [embed]
-    });
-
-    console.log("✅ WELCOME SENT");
-  } catch (error) {
-    console.error("❌ WELCOME ERROR:");
-    console.error(error);
-  }
-});
-
-// ==================================================
-// GOODBYE
-// ==================================================
-
-client.on(
-  Events.GuildMemberRemove,
-  async (member) => {
-    console.log(
-      `👋 MEMBER LEFT: ${member.user.tag}`
-    );
-
-    try {
-      const channel =
-        await member.guild.channels.fetch(
-          GOODBYE_CHANNEL_ID
-        );
-
-      const embed = new EmbedBuilder()
-        .setColor("#FFFFFF")
-        .setTitle("🤍 goodbye")
-        .setDescription(
-          `${member.user} has left **.gg/chuppys**.\n\n` +
-          `we'll miss you 🤍`
-        )
-        .setThumbnail(
-          member.user.displayAvatarURL({
-            dynamic: true
-          })
-        )
-        .setFooter({
-          text: ".gg/chuppys"
-        })
-        .setTimestamp();
-
-      await channel.send({
-        embeds: [embed]
-      });
-
-      console.log("✅ GOODBYE SENT");
-    } catch (error) {
-      console.error("❌ GOODBYE ERROR:");
-      console.error(error);
-    }
-  }
-);
-
-// ==================================================
-// CONNECTION LOGS
-// ==================================================
-
-client.on("shardConnecting", (id) => {
-  console.log(
-    `🔌 Shard ${id} connecting...`
-  );
-});
-
-client.on("shardReady", (id) => {
-  console.log(
-    `✅ Shard ${id} ready.`
-  );
-});
-
-client.on("shardError", (error, id) => {
-  console.error(
-    `❌ Shard ${id} error:`
-  );
-  console.error(error);
-});
-
-client.on("shardReconnecting", (id) => {
-  console.log(
-    `🔄 Shard ${id} reconnecting...`
-  );
-});
-
-client.on("warn", (warning) => {
-  console.warn(
-    `⚠️ ${warning}`
-  );
-});
-
-// ==================================================
-// ERRORS
+// PROCESS ERRORS
 // ==================================================
 
 process.on(
@@ -505,6 +606,7 @@ process.on(
     console.error(
       "❌ UNHANDLED REJECTION:"
     );
+
     console.error(error);
   }
 );
@@ -515,44 +617,47 @@ process.on(
     console.error(
       "❌ UNCAUGHT EXCEPTION:"
     );
+
     console.error(error);
   }
 );
 
 // ==================================================
-// TOKEN
+// TOKEN CHECK
 // ==================================================
 
 if (!TOKEN) {
+  console.error("====================================");
+  console.error("❌ DISCORD_BOT_TOKEN IS MISSING");
   console.error(
-    "❌ DISCORD_BOT_TOKEN IS MISSING!"
+    "Add DISCORD_BOT_TOKEN to Render Environment Variables."
   );
+  console.error("====================================");
 
   process.exit(1);
 }
 
-console.log(
-  `🔐 Discord token found (${TOKEN.length} characters)`
-);
-
-console.log(
-  "🔌 Connecting to Discord..."
-);
+console.log("====================================");
+console.log("🔐 DISCORD TOKEN FOUND");
+console.log(`TOKEN LENGTH: ${TOKEN.length}`);
+console.log("====================================");
 
 // ==================================================
-// LOGIN
+// CONNECT TO DISCORD
 // ==================================================
+
+console.log("🔌 Connecting to Discord...");
 
 client
   .login(TOKEN)
   .then(() => {
     console.log(
-      "✅ Discord login successful."
+      "✅ Discord login request completed."
     );
   })
   .catch((error) => {
-    console.error(
-      "❌ DISCORD LOGIN FAILED:"
-    );
+    console.error("====================================");
+    console.error("❌ DISCORD LOGIN FAILED");
     console.error(error);
+    console.error("====================================");
   });
