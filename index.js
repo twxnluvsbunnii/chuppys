@@ -3,7 +3,13 @@ const http = require("http");
 const {
   Client,
   GatewayIntentBits,
-  EmbedBuilder
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  REST,
+  Routes,
+  SlashCommandBuilder
 } = require("discord.js");
 
 // ==================================================
@@ -39,6 +45,12 @@ const client = new Client({
 const TOKEN = process.env.DISCORD_BOT_TOKEN;
 
 // ==================================================
+// BOT CLIENT ID
+// ==================================================
+
+const CLIENT_ID = "1549742963389890652";
+
+// ==================================================
 // CHANNEL IDS
 // ==================================================
 
@@ -57,6 +69,63 @@ const WELCOME_ROLE_ID = "1531039846871728248";
 
 const WELCOME_IMAGE =
   "https://cdn.discordapp.com/attachments/1531043582348230767/1551448584656916530/BCA71D48-B1AD-46BA-BAAA-CC87D8C81E62.png";
+
+// ==================================================
+// PAYMENT INFORMATION
+// ==================================================
+
+const PAYMENT_INFO = {
+  cashapp: "$yysluvv",
+  paypal: "PayPal.me/twxnsrevenge",
+  applepay: "929-554-5969",
+  zelle: "631-401-8951"
+};
+
+// ==================================================
+// SLASH COMMANDS
+// ==================================================
+
+const commands = [
+  new SlashCommandBuilder()
+    .setName("pay")
+    .setDescription("Create a payment menu")
+    .addStringOption(option =>
+      option
+        .setName("amount")
+        .setDescription("Amount to pay, for example 25")
+        .setRequired(true)
+    )
+    .toJSON()
+];
+
+// ==================================================
+// REGISTER SLASH COMMANDS
+// ==================================================
+
+async function registerCommands() {
+  if (!TOKEN) {
+    console.log("❌ Cannot register commands because token is missing.");
+    return;
+  }
+
+  try {
+    const rest = new REST({ version: "10" }).setToken(TOKEN);
+
+    console.log("Registering /pay command...");
+
+    await rest.put(
+      Routes.applicationCommands(CLIENT_ID),
+      {
+        body: commands
+      }
+    );
+
+    console.log("✅ /pay command registered!");
+  } catch (error) {
+    console.error("❌ Slash command registration error:");
+    console.error(error);
+  }
+}
 
 // ==================================================
 // BOT READY
@@ -79,7 +148,6 @@ client.on("guildMemberAdd", async (member) => {
     `JOIN EVENT: ${member.user.tag} joined ${member.guild.name}`
   );
 
-  // Ignore bots
   if (member.user.bot) {
     console.log("Joined member is a bot. Welcome skipped.");
     return;
@@ -136,7 +204,6 @@ client.on("guildMemberRemove", async (member) => {
     `LEAVE EVENT: ${member.user.tag} left ${member.guild.name}`
   );
 
-  // Ignore bots
   if (member.user.bot) {
     console.log("Leaving member is a bot. Goodbye skipped.");
     return;
@@ -183,15 +250,13 @@ client.on("guildMemberRemove", async (member) => {
 });
 
 // ==================================================
-// COMMANDS
+// MESSAGE COMMANDS
 // ==================================================
 
 client.on("messageCreate", async (message) => {
 
-  // Ignore bots
   if (message.author.bot) return;
 
-  // Ignore DMs
   if (!message.guild) return;
 
   console.log(
@@ -336,6 +401,161 @@ client.on("messageCreate", async (message) => {
 });
 
 // ==================================================
+// PAYMENT SYSTEM
+// ==================================================
+
+client.on("interactionCreate", async (interaction) => {
+
+  // ==================================================
+  // /PAY COMMAND
+  // ==================================================
+
+  if (interaction.isChatInputCommand()) {
+
+    if (interaction.commandName !== "pay") return;
+
+    const amount = interaction.options.getString("amount");
+
+    const embed = new EmbedBuilder()
+      .setColor(0xffffff)
+      .setTitle("﹕𐔌・payment 〃・꒱")
+      .setDescription(
+        `♡ **amount:** $${amount}\n\n` +
+        `please select your payment method below ♡`
+      )
+      .setFooter({
+        text: ".gg/chuppys"
+      });
+
+    // ================================
+    // PAYMENT BUTTONS
+    // ================================
+
+    const row = new ActionRowBuilder().addComponents(
+
+      new ButtonBuilder()
+        .setCustomId(`payment_cashapp_${amount}`)
+        .setLabel("﹕𐔌・cash app 〃・꒱")
+        .setStyle(ButtonStyle.Secondary),
+
+      new ButtonBuilder()
+        .setCustomId(`payment_paypal_${amount}`)
+        .setLabel("﹕𐔌・paypal 〃・꒱")
+        .setStyle(ButtonStyle.Secondary),
+
+      new ButtonBuilder()
+        .setCustomId(`payment_applepay_${amount}`)
+        .setLabel("﹕𐔌・apple pay 〃・꒱")
+        .setStyle(ButtonStyle.Secondary),
+
+      new ButtonBuilder()
+        .setCustomId(`payment_zelle_${amount}`)
+        .setLabel("﹕𐔌・zelle 〃・꒱")
+        .setStyle(ButtonStyle.Secondary)
+
+    );
+
+    await interaction.reply({
+      embeds: [embed],
+      components: [row]
+    });
+
+    console.log(
+      `💳 Payment menu created for $${amount} by ${interaction.user.tag}`
+    );
+
+    return;
+  }
+
+  // ==================================================
+  // PAYMENT BUTTON CLICK
+  // ==================================================
+
+  if (interaction.isButton()) {
+
+    if (!interaction.customId.startsWith("payment_")) {
+      return;
+    }
+
+    const parts = interaction.customId.split("_");
+
+    const method = parts[1];
+    const amount = parts.slice(2).join("_");
+
+    let paymentName;
+    let paymentValue;
+
+    // ================================
+    // CASH APP
+    // ================================
+
+    if (method === "cashapp") {
+      paymentName = "cash app";
+      paymentValue = PAYMENT_INFO.cashapp;
+    }
+
+    // ================================
+    // PAYPAL
+    // ================================
+
+    if (method === "paypal") {
+      paymentName = "paypal";
+      paymentValue = PAYMENT_INFO.paypal;
+    }
+
+    // ================================
+    // APPLE PAY
+    // ================================
+
+    if (method === "applepay") {
+      paymentName = "apple pay";
+      paymentValue = PAYMENT_INFO.applepay;
+    }
+
+    // ================================
+    // ZELLE
+    // ================================
+
+    if (method === "zelle") {
+      paymentName = "zelle";
+      paymentValue = PAYMENT_INFO.zelle;
+    }
+
+    if (!paymentValue) {
+      await interaction.reply({
+        content: "❌ Payment information could not be found.",
+        ephemeral: true
+      });
+
+      return;
+    }
+
+    const paymentEmbed = new EmbedBuilder()
+      .setColor(0xffffff)
+      .setTitle(`﹕𐔌・${paymentName} 〃・꒱`)
+      .setDescription(
+        `♡ **amount:** $${amount}\n\n` +
+        `**send to:**\n` +
+        `\`${paymentValue}\`\n\n` +
+        `♡ please make sure the information is correct before sending.`
+      )
+      .setFooter({
+        text: ".gg/chuppys"
+      });
+
+    // Only the person clicking sees this
+    await interaction.reply({
+      embeds: [paymentEmbed],
+      ephemeral: true
+    });
+
+    console.log(
+      `💳 ${interaction.user.tag} selected ${paymentName} for $${amount}`
+    );
+  }
+});
+
+// ==================================================
 // ERROR HANDLING
 // ==================================================
 
@@ -354,12 +574,20 @@ process.on("unhandledRejection", (error) => {
 // ==================================================
 
 if (!TOKEN) {
+
   console.error(
     "❌ DISCORD_BOT_TOKEN is missing from Render environment variables."
   );
+
 } else {
+
+  registerCommands();
+
   client.login(TOKEN).catch((error) => {
+
     console.error("❌ Failed to login:");
     console.error(error);
+
   });
+
 }
