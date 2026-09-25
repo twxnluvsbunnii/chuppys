@@ -42,13 +42,7 @@ const client = new Client({
 });
 
 // ==================================================
-// ENVIRONMENT
-// ==================================================
-
-const TOKEN = process.env.DISCORD_BOT_TOKEN;
-
-// ==================================================
-// CHANNEL / ROLE SETTINGS
+// CHANNELS / ROLES
 // ==================================================
 
 const WELCOME_CHANNEL_ID = "1530755165412524042";
@@ -82,14 +76,14 @@ const PAYMENT_INFO = {
 client.once(Events.ClientReady, (bot) => {
   console.log("====================================");
   console.log("CHUPPYS BOT IS ONLINE");
-  console.log(`Bot: ${bot.user.tag}`);
-  console.log(`Bot ID: ${bot.user.id}`);
-  console.log(`Servers: ${bot.guilds.cache.size}`);
+  console.log(`BOT: ${bot.user.tag}`);
+  console.log(`BOT ID: ${bot.user.id}`);
+  console.log(`SERVERS: ${bot.guilds.cache.size}`);
   console.log("====================================");
 });
 
 // ==================================================
-// WELCOME EVENT
+// WELCOME
 // ==================================================
 
 client.on(Events.GuildMemberAdd, async (member) => {
@@ -98,12 +92,13 @@ client.on(Events.GuildMemberAdd, async (member) => {
   );
 
   try {
-    const channel = member.guild.channels.cache.get(
-      WELCOME_CHANNEL_ID
-    );
+    const channel =
+      member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
 
     if (!channel) {
-      console.error("WELCOME ERROR: Channel not found.");
+      console.error(
+        "WELCOME ERROR: Welcome channel not found."
+      );
       return;
     }
 
@@ -128,12 +123,13 @@ client.on(Events.GuildMemberAdd, async (member) => {
 
     // Give welcome role
     try {
-      const role = member.guild.roles.cache.get(
-        WELCOME_ROLE_ID
-      );
+      const role =
+        member.guild.roles.cache.get(WELCOME_ROLE_ID);
 
       if (!role) {
-        console.error("WELCOME ROLE ERROR: Role not found.");
+        console.error(
+          "WELCOME ROLE ERROR: Role not found."
+        );
         return;
       }
 
@@ -142,6 +138,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
       console.log(
         `WELCOME ROLE GIVEN: ${role.name}`
       );
+
     } catch (roleError) {
       console.error(
         "WELCOME ROLE ERROR:",
@@ -158,7 +155,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
 });
 
 // ==================================================
-// GOODBYE EVENT
+// GOODBYE
 // ==================================================
 
 client.on(Events.GuildMemberRemove, async (member) => {
@@ -167,12 +164,13 @@ client.on(Events.GuildMemberRemove, async (member) => {
   );
 
   try {
-    const channel = member.guild.channels.cache.get(
-      GOODBYE_CHANNEL_ID
-    );
+    const channel =
+      member.guild.channels.cache.get(GOODBYE_CHANNEL_ID);
 
     if (!channel) {
-      console.error("GOODBYE ERROR: Channel not found.");
+      console.error(
+        "GOODBYE ERROR: Goodbye channel not found."
+      );
       return;
     }
 
@@ -210,8 +208,9 @@ client.on(Events.MessageCreate, async (message) => {
     `MESSAGE RECEIVED: ${message.author.tag} -> ${message.content}`
   );
 
-  // Ignore other bots
   if (message.author.bot) return;
+
+  if (!message.guild) return;
 
   const args = message.content
     .trim()
@@ -236,7 +235,6 @@ client.on(Events.MessageCreate, async (message) => {
 
     const cleanAmount = amount.replace("$", "");
 
-    // Validate amount
     if (
       !/^\d+(?:\.\d{1,2})?$/.test(cleanAmount)
     ) {
@@ -315,7 +313,9 @@ client.on(Events.MessageCreate, async (message) => {
   // ==================================================
 
   if (command === "!testwelcome") {
-    console.log("TEST WELCOME COMMAND RECEIVED");
+    console.log(
+      "TEST WELCOME COMMAND RECEIVED"
+    );
 
     const channel =
       message.guild.channels.cache.get(
@@ -359,7 +359,9 @@ client.on(Events.MessageCreate, async (message) => {
   // ==================================================
 
   if (command === "!testgoodbye") {
-    console.log("TEST GOODBYE COMMAND RECEIVED");
+    console.log(
+      "TEST GOODBYE COMMAND RECEIVED"
+    );
 
     const channel =
       message.guild.channels.cache.get(
@@ -427,19 +429,11 @@ client.on(
       let paymentName;
       let paymentValue;
 
-      // ------------------------------
-      // CASH APP
-      // ------------------------------
-
       if (method === "cashapp") {
         paymentName = "cash app";
         paymentValue =
           PAYMENT_INFO.cashapp;
       }
-
-      // ------------------------------
-      // PAYPAL
-      // ------------------------------
 
       if (method === "paypal") {
         paymentName = "paypal";
@@ -447,19 +441,11 @@ client.on(
           PAYMENT_INFO.paypal;
       }
 
-      // ------------------------------
-      // APPLE PAY
-      // ------------------------------
-
       if (method === "applepay") {
         paymentName = "apple pay";
         paymentValue =
           PAYMENT_INFO.applepay;
       }
-
-      // ------------------------------
-      // ZELLE
-      // ------------------------------
 
       if (method === "zelle") {
         paymentName = "zelle";
@@ -477,21 +463,20 @@ client.on(
         return;
       }
 
-      const embed =
-        new EmbedBuilder()
-          .setColor(0xffffff)
-          .setTitle(
-            `﹕𐔌・${paymentName} 〃・꒱`
-          )
-          .setDescription(
-            `🤍 **amount:** $${amount}\n\n` +
-            `**send to:**\n` +
-            `\`${paymentValue}\`\n\n` +
-            `please make sure the information is correct before sending ♡`
-          )
-          .setFooter({
-            text: ".gg/chuppys"
-          });
+      const embed = new EmbedBuilder()
+        .setColor(0xffffff)
+        .setTitle(
+          `﹕𐔌・${paymentName} 〃・꒱`
+        )
+        .setDescription(
+          `🤍 **amount:** $${amount}\n\n` +
+          `**send to:**\n` +
+          `\`${paymentValue}\`\n\n` +
+          `please make sure the information is correct before sending ♡`
+        )
+        .setFooter({
+          text: ".gg/chuppys"
+        });
 
       await interaction.reply({
         embeds: [embed],
@@ -512,25 +497,51 @@ client.on(
 );
 
 // ==================================================
-// DISCORD ERRORS
+// DISCORD DEBUGGING
 // ==================================================
+
+client.on("debug", (info) => {
+  console.log(
+    "[DISCORD DEBUG]",
+    info
+  );
+});
+
+client.on("shardConnecting", (id) => {
+  console.log(
+    `[DISCORD] Connecting shard ${id}...`
+  );
+});
+
+client.on("shardReady", (id) => {
+  console.log(
+    `[DISCORD] Shard ${id} connected!`
+  );
+});
+
+client.on("shardError", (error, shardId) => {
+  console.error(
+    `[DISCORD] Shard ${shardId} ERROR:`,
+    error
+  );
+});
 
 client.on("error", (error) => {
   console.error(
-    "DISCORD CLIENT ERROR:",
+    "[DISCORD CLIENT ERROR]",
     error
   );
 });
 
 client.on("warn", (warning) => {
   console.warn(
-    "DISCORD WARNING:",
+    "[DISCORD WARNING]",
     warning
   );
 });
 
 // ==================================================
-// PROCESS ERRORS
+// PROCESS ERROR HANDLING
 // ==================================================
 
 process.on(
@@ -554,16 +565,19 @@ process.on(
 );
 
 // ==================================================
-// TOKEN CHECK
+// DISCORD TOKEN
 // ==================================================
 
-if (!TOKEN) {
+const CLEAN_TOKEN =
+  process.env.DISCORD_BOT_TOKEN?.trim();
+
+if (!CLEAN_TOKEN) {
   console.error(
     "===================================="
   );
 
   console.error(
-    "DISCORD_BOT_TOKEN IS MISSING!"
+    "❌ DISCORD_BOT_TOKEN IS MISSING!"
   );
 
   console.error(
@@ -582,34 +596,87 @@ if (!TOKEN) {
 // ==================================================
 
 console.log(
-  "DISCORD_BOT_TOKEN FOUND"
+  "===================================="
 );
 
 console.log(
-  `TOKEN LENGTH: ${TOKEN.length}`
+  "DISCORD TOKEN FOUND"
 );
 
 console.log(
-  "Attempting to connect to Discord..."
+  `TOKEN LENGTH: ${CLEAN_TOKEN.length}`
 );
+
+console.log(
+  "CONNECTING TO DISCORD..."
+);
+
+console.log(
+  "===================================="
+);
+
+const loginTimeout = setTimeout(() => {
+  console.error(
+    "===================================="
+  );
+
+  console.error(
+    "❌ DISCORD LOGIN TIMED OUT"
+  );
+
+  console.error(
+    "The bot did not finish connecting to Discord."
+  );
+
+  console.error(
+    "===================================="
+  );
+}, 20000);
 
 client
-  .login(TOKEN)
+  .login(CLEAN_TOKEN)
   .then(() => {
+    clearTimeout(loginTimeout);
+
     console.log(
-      "DISCORD LOGIN SUCCESSFUL"
+      "===================================="
+    );
+
+    console.log(
+      "✅ DISCORD LOGIN SUCCESSFUL"
+    );
+
+    console.log(
+      `BOT: ${client.user.tag}`
+    );
+
+    console.log(
+      `BOT ID: ${client.user.id}`
+    );
+
+    console.log(
+      `SERVERS: ${client.guilds.cache.size}`
+    );
+
+    console.log(
+      "===================================="
     );
   })
   .catch((error) => {
+    clearTimeout(loginTimeout);
+
     console.error(
       "===================================="
     );
 
     console.error(
-      "DISCORD LOGIN FAILED"
+      "❌ DISCORD LOGIN FAILED"
     );
 
-    console.error(error);
+    console.error(
+      "ERROR:",
+      error
+    );
 
     console.error(
       "===================================="
