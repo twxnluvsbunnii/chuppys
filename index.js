@@ -18,17 +18,15 @@ const {
 
 const PORT = process.env.PORT || 3000;
 
-http
-  .createServer((req, res) => {
-    res.writeHead(200, {
-      "Content-Type": "text/plain"
-    });
-
-    res.end("Chuppys bot is running!");
-  })
-  .listen(PORT, "0.0.0.0", () => {
-    console.log(`🌐 Web server running on port ${PORT}`);
+http.createServer((req, res) => {
+  res.writeHead(200, {
+    "Content-Type": "text/plain"
   });
+
+  res.end("Chuppys bot is running!");
+}).listen(PORT, () => {
+  console.log(`Web server running on port ${PORT}`);
+});
 
 // ==================================================
 // DISCORD CLIENT
@@ -44,99 +42,70 @@ const client = new Client({
 });
 
 // ==================================================
-// CONFIG
+// TOKEN
 // ==================================================
 
-const TOKEN = process.env.DISCORD_BOT_TOKEN?.trim();
+const TOKEN = process.env.DISCORD_BOT_TOKEN;
+
+// ==================================================
+// CHANNELS
+// ==================================================
 
 const WELCOME_CHANNEL_ID = "1530755165412524042";
 const GOODBYE_CHANNEL_ID = "1530761366489530480";
+const NITRO_CHANNEL_ID = "1555760937557041273";
+
+// ==================================================
+// ROLES
+// ==================================================
+
 const WELCOME_ROLE_ID = "1531039846871728248";
 
 // ==================================================
-// NITRO SERVICES
+// NITRO TICKET CATEGORY
 // ==================================================
 
-const NITRO_CHANNEL_ID = "1555760937557041273";
+const NITRO_TICKET_CATEGORY_ID =
+  process.env.NITRO_TICKET_CATEGORY_ID;
+
+// ==================================================
+// CUSTOM NITRO EMOJI
+// ==================================================
 
 const NITRO_EMOJI =
   "<:C18DEA07FFB44B08AF04005B0D373ECB:1531028121866998012>";
 
-const NITRO_TICKET_BUTTON_ID = "nitro_create_ticket";
+// ==================================================
+// WELCOME IMAGE
+// ==================================================
 
 const WELCOME_IMAGE =
   "https://cdn.discordapp.com/attachments/1531043582348230767/1551448584656916530/BCA71D48-B1AD-46BA-BAAA-CC87D8C81E62.png";
 
 // ==================================================
-// PAYMENT INFORMATION
+// NORMAL PAYMENT INFORMATION
 // ==================================================
 
-const PAYMENT_INFO = {
-  cashapp: {
-    name: "cash app",
-    username: "$yysluvv",
-    url: "https://cash.app/$yysluvv"
-  },
+const CASHAPP_USERNAME = "$yysluvv";
+const CASHAPP_URL = "https://cash.app/$yysluvv";
 
-  paypal: {
-    name: "paypal",
-    username: "PayPal.me/twxnsrevenge",
-    url: "https://paypal.me/twxnsrevenge"
-  },
+const PAYPAL_USERNAME = "PayPal.me/twxnsrevenge";
+const PAYPAL_URL = "https://paypal.me/twxnsrevenge";
 
-  applepay: {
-    name: "apple pay",
-    username: "929-554-5969"
-  },
-
-  zelle: {
-    name: "zelle",
-    username: "631-401-8951"
-  }
-};
+const APPLE_PAY = "929-554-5969";
+const ZELLE = "631-401-8951";
 
 // ==================================================
-// READY
+// BOT READY
 // ==================================================
 
-client.once(Events.ClientReady, (bot) => {
-  console.log("====================================");
-  console.log("🤍 CHUPPYS BOT IS ONLINE");
-  console.log(`🤖 Bot: ${bot.user.tag}`);
-  console.log(`🆔 Bot ID: ${bot.user.id}`);
-  console.log(`🏠 Servers: ${bot.guilds.cache.size}`);
-  console.log("====================================");
+client.once(Events.ClientReady, (readyClient) => {
+  console.log(`Logged in as ${readyClient.user.tag}`);
+  console.log("Chuppys bot is online.");
 
-  for (const guild of bot.guilds.cache.values()) {
-    console.log(
-      `🏠 Connected to: ${guild.name} (${guild.id})`
-    );
-  }
-});
-
-// ==================================================
-// CONNECTION EVENTS
-// ==================================================
-
-client.on("shardConnecting", (id) => {
-  console.log(`🔌 Shard ${id} connecting...`);
-});
-
-client.on("shardReady", (id) => {
-  console.log(`✅ Shard ${id} ready.`);
-});
-
-client.on("shardReconnecting", (id) => {
-  console.log(`🔄 Shard ${id} reconnecting...`);
-});
-
-client.on("shardError", (error, id) => {
-  console.error(`❌ Shard ${id} error:`);
-  console.error(error);
-});
-
-client.on("warn", (warning) => {
-  console.warn(`⚠️ Discord warning: ${warning}`);
+  readyClient.user.setActivity(".gg/chuppys", {
+    type: 3
+  });
 });
 
 // ==================================================
@@ -144,107 +113,57 @@ client.on("warn", (warning) => {
 // ==================================================
 
 client.on(Events.GuildMemberAdd, async (member) => {
-  console.log("====================================");
-  console.log("👋 MEMBER JOIN DETECTED");
-  console.log(`👤 User: ${member.user.tag}`);
-  console.log(`🆔 ID: ${member.id}`);
-  console.log(`🏠 Guild: ${member.guild.name}`);
-  console.log("====================================");
-
   try {
-    const channel = await member.guild.channels
-      .fetch(WELCOME_CHANNEL_ID)
-      .catch((error) => {
-        console.error("❌ Could not fetch welcome channel:");
-        console.error(error);
-        return null;
-      });
-
-    if (!channel) {
-      console.error(
-        `❌ Welcome channel ${WELCOME_CHANNEL_ID} not found.`
-      );
-      return;
-    }
-
-    const permissions = channel.permissionsFor(
-      member.guild.members.me
+    const channel = member.guild.channels.cache.get(
+      WELCOME_CHANNEL_ID
     );
 
-    if (
-      !permissions?.has(
-        PermissionsBitField.Flags.SendMessages
-      )
-    ) {
-      console.error(
-        "❌ Bot does not have Send Messages permission in welcome channel."
-      );
+    if (!channel) {
+      console.log("Welcome channel not found.");
       return;
     }
 
-    // ADD WELCOME ROLE
-
     try {
-      const role = await member.guild.roles
-        .fetch(WELCOME_ROLE_ID)
-        .catch(() => null);
+      const role = member.guild.roles.cache.get(
+        WELCOME_ROLE_ID
+      );
 
-      if (!role) {
-        console.error(
-          `❌ Welcome role ${WELCOME_ROLE_ID} not found.`
+      if (role) {
+        await member.roles.add(role);
+        console.log(
+          `Added welcome role to ${member.user.tag}`
         );
-      } else {
-        if (
-          role.position >=
-          member.guild.members.me.roles.highest.position
-        ) {
-          console.error(
-            "❌ Bot cannot give this role because the role is above the bot."
-          );
-        } else {
-          await member.roles.add(role);
-
-          console.log(
-            `✅ Welcome role added to ${member.user.tag}`
-          );
-        }
       }
-    } catch (error) {
-      console.error("❌ Could not add welcome role:");
-      console.error(error);
+    } catch (roleError) {
+      console.log(
+        "Could not give welcome role:",
+        roleError.message
+      );
     }
 
     const embed = new EmbedBuilder()
-      .setColor("#FFFFFF")
-      .setTitle("🤍 welcome to .gg/chuppys")
+      .setTitle("Welcome to .gg/chuppys 🤍")
       .setDescription(
-        `welcome ${member}!\n\n` +
-        `we hope you enjoy your stay here 🤍`
+        `Welcome ${member}!\n\n` +
+        `We're happy to have you here. Make sure to read the rules and enjoy your time in the server!`
       )
-      .setThumbnail(
-        member.user.displayAvatarURL({
-          dynamic: true,
-          size: 1024
-        })
-      )
+      .setColor("#FFFFFF")
+      .setThumbnail(member.user.displayAvatarURL())
       .setImage(WELCOME_IMAGE)
       .setFooter({
-        text: ".gg/chuppys"
-      })
-      .setTimestamp();
+        text: member.guild.name
+      });
 
     await channel.send({
-      content: `<@&${WELCOME_ROLE_ID}> ${member}`,
+      content: `${member}`,
       embeds: [embed]
     });
 
     console.log(
-      `✅ Welcome message sent for ${member.user.tag}`
+      `Welcome message sent for ${member.user.tag}`
     );
-
   } catch (error) {
-    console.error("❌ WELCOME ERROR:");
-    console.error(error);
+    console.error("Welcome error:", error);
   }
 });
 
@@ -253,145 +172,146 @@ client.on(Events.GuildMemberAdd, async (member) => {
 // ==================================================
 
 client.on(Events.GuildMemberRemove, async (member) => {
-  console.log("====================================");
-  console.log("👋 MEMBER LEAVE DETECTED");
-  console.log(`👤 User: ${member.user.tag}`);
-  console.log(`🆔 ID: ${member.id}`);
-  console.log(`🏠 Guild: ${member.guild.name}`);
-  console.log("====================================");
-
   try {
-    const channel = await member.guild.channels
-      .fetch(GOODBYE_CHANNEL_ID)
-      .catch((error) => {
-        console.error("❌ Could not fetch goodbye channel:");
-        console.error(error);
-        return null;
-      });
-
-    if (!channel) {
-      console.error(
-        `❌ Goodbye channel ${GOODBYE_CHANNEL_ID} not found.`
-      );
-      return;
-    }
-
-    const permissions = channel.permissionsFor(
-      member.guild.members.me
+    const channel = member.guild.channels.cache.get(
+      GOODBYE_CHANNEL_ID
     );
 
-    if (
-      !permissions?.has(
-        PermissionsBitField.Flags.SendMessages
-      )
-    ) {
-      console.error(
-        "❌ Bot does not have Send Messages permission in goodbye channel."
-      );
+    if (!channel) {
+      console.log("Goodbye channel not found.");
       return;
     }
 
     const embed = new EmbedBuilder()
-      .setColor("#FFFFFF")
-      .setTitle("🤍 goodbye")
+      .setTitle("Goodbye 🤍")
       .setDescription(
-        `${member.user} has left **.gg/chuppys**.\n\n` +
-        `we'll miss you 🤍`
+        `**${member.user.username}** has left **${member.guild.name}**.\n\n` +
+        `We hope to see you again!`
       )
-      .setThumbnail(
-        member.user.displayAvatarURL({
-          dynamic: true,
-          size: 1024
-        })
-      )
+      .setColor("#FFFFFF")
+      .setThumbnail(member.user.displayAvatarURL())
       .setFooter({
-        text: ".gg/chuppys"
-      })
-      .setTimestamp();
+        text: member.guild.name
+      });
 
     await channel.send({
       embeds: [embed]
     });
 
     console.log(
-      `✅ Goodbye message sent for ${member.user.tag}`
+      `Goodbye message sent for ${member.user.tag}`
     );
-
   } catch (error) {
-    console.error("❌ GOODBYE ERROR:");
-    console.error(error);
+    console.error("Goodbye error:", error);
   }
 });
+
+// ==================================================
+// NORMAL PAYMENT EMBED
+// ==================================================
+
+async function sendPaymentEmbed(channel) {
+  const embed = new EmbedBuilder()
+    .setTitle("Payment Methods")
+    .setDescription(
+      "Choose a payment method below.\n\n" +
+      "Please make sure the payment information is correct before sending."
+    )
+    .addFields(
+      {
+        name: "Cash App",
+        value: `\`${CASHAPP_USERNAME}\``,
+        inline: true
+      },
+      {
+        name: "PayPal",
+        value: `\`${PAYPAL_USERNAME}\``,
+        inline: true
+      },
+      {
+        name: "Apple Pay",
+        value: `\`${APPLE_PAY}\``,
+        inline: true
+      },
+      {
+        name: "Zelle",
+        value: `\`${ZELLE}\``,
+        inline: true
+      }
+    )
+    .setColor("#FFFFFF")
+    .setFooter({
+      text: ".gg/chuppys"
+    });
+
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setLabel("Cash App")
+      .setStyle(ButtonStyle.Link)
+      .setURL(CASHAPP_URL),
+
+    new ButtonBuilder()
+      .setLabel("PayPal")
+      .setStyle(ButtonStyle.Link)
+      .setURL(PAYPAL_URL)
+  );
+
+  const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("payment_apple")
+      .setLabel("Apple Pay")
+      .setStyle(ButtonStyle.Secondary),
+
+    new ButtonBuilder()
+      .setCustomId("payment_zelle")
+      .setLabel("Zelle")
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  await channel.send({
+    embeds: [embed],
+    components: [row1, row2]
+  });
+}
 
 // ==================================================
 // NITRO SERVICES EMBED
 // ==================================================
 
-async function sendNitroServices(guild) {
-  try {
-    const channel = await guild.channels
-      .fetch(NITRO_CHANNEL_ID)
-      .catch(() => null);
+async function sendNitroServices(channel) {
+  const embed = new EmbedBuilder()
+    .setTitle("N1tr0")
+    .setDescription(
+      `${NITRO_EMOJI} **1 Month Nitro — $7.25**\n` +
+      `No war\n\n` +
 
-    if (!channel) {
-      console.error(
-        `❌ Nitro Services channel ${NITRO_CHANNEL_ID} not found.`
-      );
+      `${NITRO_EMOJI} **1 Month Nitro + War — $9.25**\n\n` +
 
-      return false;
-    }
-
-    const ticketButton = new ButtonBuilder()
-      .setCustomId(NITRO_TICKET_BUTTON_ID)
-      .setLabel("Create a ticket")
-      .setStyle(ButtonStyle.Secondary);
-
-    const row = new ActionRowBuilder()
-      .addComponents(ticketButton);
-
-    const nitroEmbed = new EmbedBuilder()
-      .setColor("#FFFFFF")
-      .setTitle("N1tr0")
-      .setDescription(
-        `${NITRO_EMOJI} **1 month perm n1tr0 — $7.25** no war\n\n` +
-        `${NITRO_EMOJI} **1 month perm n1tr0 + war — $9.25**\n\n` +
-
-        `• gift link delivery\n` +
-        `• quick & reliable delivery\n` +
-        `• same-day delivery available\n` +
-        `• 100% legitimately purchased\n\n` +
-
-        `**PAYMENT METHOD**\n\n` +
-        `Cash App\n` +
-        `PayPal\n` +
-        `Apple Pay\n` +
-        `Zelle`
-      )
-      .setFooter({
-        text: ".gg/chuppys"
-      })
-      .setTimestamp();
-
-    await channel.send({
-      embeds: [nitroEmbed],
-      components: [row]
+      `**Payment Methods**\n` +
+      `> Apple Pay\n` +
+      `> Venmo`
+    )
+    .setColor("#FFFFFF")
+    .setFooter({
+      text: ".gg/chuppys"
     });
 
-    console.log(
-      `✅ Nitro Services embed sent to ${channel.name}`
-    );
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("nitro_725")
+      .setLabel("1 Month — $7.25")
+      .setStyle(ButtonStyle.Secondary),
 
-    return true;
+    new ButtonBuilder()
+      .setCustomId("nitro_925")
+      .setLabel("1 Month + War — $9.25")
+      .setStyle(ButtonStyle.Secondary)
+  );
 
-  } catch (error) {
-    console.error(
-      "❌ NITRO SERVICES ERROR:"
-    );
-
-    console.error(error);
-
-    return false;
-  }
+  await channel.send({
+    embeds: [embed],
+    components: [row]
+  });
 }
 
 // ==================================================
@@ -400,341 +320,147 @@ async function sendNitroServices(guild) {
 
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) return;
-  if (!message.guild) return;
 
-  console.log(
-    `💬 MESSAGE RECEIVED: "${message.content}" from ${message.author.tag}`
-  );
+  const content = message.content.toLowerCase();
 
-  const content = message.content.trim();
+  // ==================================================
+  // !PAY
+  // ==================================================
+
+  if (
+    content === "!pay" ||
+    content === ",pay"
+  ) {
+    await sendPaymentEmbed(message.channel);
+    return;
+  }
 
   // ==================================================
   // !NITRO
   // ==================================================
 
-  if (content.toLowerCase() === "!nitro") {
-    console.log("💿 !NITRO COMMAND DETECTED");
-
-    // Optional: only members with Manage Guild can post it
+  if (
+    content === "!nitro" ||
+    content === ",nitro"
+  ) {
     if (
       !message.member.permissions.has(
         PermissionsBitField.Flags.ManageGuild
       )
     ) {
-      await message.reply(
-        "❌ You need **Manage Server** permission to use this command."
+      return message.reply(
+        "You need **Manage Server** permission to use this command."
       );
-
-      return;
     }
 
-    const sent = await sendNitroServices(
-      message.guild
+    const nitroChannel =
+      message.guild.channels.cache.get(
+        NITRO_CHANNEL_ID
+      );
+
+    if (!nitroChannel) {
+      return message.reply(
+        "I couldn't find the Nitro Services channel."
+      );
+    }
+
+    await sendNitroServices(nitroChannel);
+
+    await message.reply(
+      "Nitro Services embed sent successfully."
     );
 
-    if (sent) {
-      await message.reply(
-        `✅ Nitro Services embed sent to <#${NITRO_CHANNEL_ID}>.`
-      );
-    } else {
-      await message.reply(
-        "❌ I couldn't send the Nitro Services embed. Check the channel ID and my permissions."
-      );
-    }
-
     return;
   }
 
   // ==================================================
-  // ,PAY
+  // TEST WELCOME
   // ==================================================
 
-  const payMatch = content.match(
-    /^,pay(?:\s+\$?(\d+(?:\.\d{1,2})?))?\s*$/i
-  );
-
-  if (payMatch) {
-    console.log("💰 ,PAY COMMAND DETECTED");
-
-    const rawAmount = payMatch[1];
-
-    if (!rawAmount) {
-      await message.reply(
-        "❌ Please enter an amount.\n\nExample: `,pay 25`"
+  if (content === "!testwelcome") {
+    const channel =
+      message.guild.channels.cache.get(
+        WELCOME_CHANNEL_ID
       );
 
-      return;
+    if (!channel) {
+      return message.reply(
+        "Welcome channel not found."
+      );
     }
 
-    const amountNumber = Number(rawAmount);
-
-    if (
-      !Number.isFinite(amountNumber) ||
-      amountNumber <= 0
-    ) {
-      await message.reply(
-        "❌ Invalid amount.\n\nExample: `,pay 25`"
-      );
-
-      return;
-    }
-
-    const amount = amountNumber.toFixed(2);
-
-    const cashAppButton = new ButtonBuilder()
-      .setLabel("﹕𐔌・cash app 〃・꒱")
-      .setStyle(ButtonStyle.Link)
-      .setURL(PAYMENT_INFO.cashapp.url);
-
-    const paypalButton = new ButtonBuilder()
-      .setLabel("﹕𐔌・paypal 〃・꒱")
-      .setStyle(ButtonStyle.Link)
-      .setURL(PAYMENT_INFO.paypal.url);
-
-    const applePayButton = new ButtonBuilder()
-      .setCustomId(`payment_applepay_${amount}`)
-      .setLabel("﹕𐔌・apple pay 〃・꒱")
-      .setStyle(ButtonStyle.Secondary);
-
-    const zelleButton = new ButtonBuilder()
-      .setCustomId(`payment_zelle_${amount}`)
-      .setLabel("﹕𐔌・zelle 〃・꒱")
-      .setStyle(ButtonStyle.Secondary);
-
-    const paymentRow =
-      new ActionRowBuilder().addComponents(
-        cashAppButton,
-        paypalButton,
-        applePayButton,
-        zelleButton
-      );
-
-    const paymentEmbed = new EmbedBuilder()
-      .setColor("#FFFFFF")
-      .setTitle("🤍 payment methods")
+    const embed = new EmbedBuilder()
+      .setTitle("Welcome to .gg/chuppys 🤍")
       .setDescription(
-        `**amount:** $${amount}\n\n` +
-        `select your preferred payment method below.`
+        `Welcome ${message.author}!\n\n` +
+        `We're happy to have you here.`
       )
-      .setFooter({
-        text: ".gg/chuppys"
-      })
-      .setTimestamp();
-
-    try {
-      await message.channel.send({
-        embeds: [paymentEmbed],
-        components: [paymentRow]
-      });
-
-      console.log(
-        `✅ PAYMENT MENU SENT FOR $${amount}`
-      );
-
-    } catch (error) {
-      console.error(
-        "❌ PAYMENT MENU ERROR:"
-      );
-
-      console.error(error);
-
-      await message.reply(
-        "❌ I couldn't send the payment menu."
-      ).catch(() => {});
-    }
-
-    return;
-  }
-
-  // ==================================================
-  // !TESTWELCOME
-  // ==================================================
-
-  if (content.toLowerCase() === "!testwelcome") {
-    console.log("🧪 !testwelcome detected.");
-
-    try {
-      const channel = await message.guild.channels
-        .fetch(WELCOME_CHANNEL_ID)
-        .catch(() => null);
-
-      if (!channel) {
-        await message.reply(
-          "❌ I couldn't find the welcome channel."
-        );
-
-        return;
-      }
-
-      const embed = new EmbedBuilder()
-        .setColor("#FFFFFF")
-        .setTitle("🤍 welcome to .gg/chuppys")
-        .setDescription(
-          `welcome ${message.author}!\n\n` +
-          `we hope you enjoy your stay here 🤍`
-        )
-        .setThumbnail(
-          message.author.displayAvatarURL({
-            dynamic: true,
-            size: 1024
-          })
-        )
-        .setImage(WELCOME_IMAGE)
-        .setFooter({
-          text: ".gg/chuppys"
-        })
-        .setTimestamp();
-
-      await channel.send({
-        content:
-          `<@&${WELCOME_ROLE_ID}> ${message.author}`,
-        embeds: [embed]
-      });
-
-      await message.reply(
-        "✅ Test welcome message sent."
-      );
-
-    } catch (error) {
-      console.error("❌ TEST WELCOME ERROR:");
-      console.error(error);
-
-      await message.reply(
-        "❌ Something went wrong sending the test welcome."
-      );
-    }
-
-    return;
-  }
-
-  // ==================================================
-  // !TESTGOODBYE
-  // ==================================================
-
-  if (content.toLowerCase() === "!testgoodbye") {
-    console.log("🧪 !testgoodbye detected.");
-
-    try {
-      const channel = await message.guild.channels
-        .fetch(GOODBYE_CHANNEL_ID)
-        .catch(() => null);
-
-      if (!channel) {
-        await message.reply(
-          "❌ I couldn't find the goodbye channel."
-        );
-
-        return;
-      }
-
-      const embed = new EmbedBuilder()
-        .setColor("#FFFFFF")
-        .setTitle("🤍 goodbye")
-        .setDescription(
-          `${message.author} has left **.gg/chuppys**.\n\n` +
-          `we'll miss you 🤍`
-        )
-        .setThumbnail(
-          message.author.displayAvatarURL({
-            dynamic: true,
-            size: 1024
-          })
-        )
-        .setFooter({
-          text: ".gg/chuppys"
-        })
-        .setTimestamp();
-
-      await channel.send({
-        embeds: [embed]
-      });
-
-      await message.reply(
-        "✅ Test goodbye message sent."
-      );
-
-    } catch (error) {
-      console.error("❌ TEST GOODBYE ERROR:");
-      console.error(error);
-
-      await message.reply(
-        "❌ Something went wrong sending the test goodbye."
-      );
-    }
-
-    return;
-  }
-
-  // ==================================================
-  // !TESTPAY
-  // ==================================================
-
-  if (content.toLowerCase() === "!testpay") {
-    console.log("🧪 !testpay detected.");
-
-    const amount = "25.00";
-
-    const cashAppButton = new ButtonBuilder()
-      .setLabel("﹕𐔌・cash app 〃・꒱")
-      .setStyle(ButtonStyle.Link)
-      .setURL(PAYMENT_INFO.cashapp.url);
-
-    const paypalButton = new ButtonBuilder()
-      .setLabel("﹕𐔌・paypal 〃・꒱")
-      .setStyle(ButtonStyle.Link)
-      .setURL(PAYMENT_INFO.paypal.url);
-
-    const applePayButton = new ButtonBuilder()
-      .setCustomId(`payment_applepay_${amount}`)
-      .setLabel("﹕𐔌・apple pay 〃・꒱")
-      .setStyle(ButtonStyle.Secondary);
-
-    const zelleButton = new ButtonBuilder()
-      .setCustomId(`payment_zelle_${amount}`)
-      .setLabel("﹕𐔌・zelle 〃・꒱")
-      .setStyle(ButtonStyle.Secondary);
-
-    const paymentRow =
-      new ActionRowBuilder().addComponents(
-        cashAppButton,
-        paypalButton,
-        applePayButton,
-        zelleButton
-      );
-
-    const paymentEmbed = new EmbedBuilder()
       .setColor("#FFFFFF")
-      .setTitle("🤍 payment methods")
-      .setDescription(
-        `**amount:** $${amount}\n\n` +
-        `select your preferred payment method below.`
+      .setThumbnail(
+        message.author.displayAvatarURL()
       )
-      .setFooter({
-        text: ".gg/chuppys"
-      })
-      .setTimestamp();
+      .setImage(WELCOME_IMAGE);
 
-    try {
-      await message.channel.send({
-        embeds: [paymentEmbed],
-        components: [paymentRow]
-      });
+    await channel.send({
+      content: `${message.author}`,
+      embeds: [embed]
+    });
 
-      await message.reply(
-        "✅ Test payment menu sent."
+    await message.reply(
+      "Test welcome message sent."
+    );
+
+    return;
+  }
+
+  // ==================================================
+  // TEST GOODBYE
+  // ==================================================
+
+  if (content === "!testgoodbye") {
+    const channel =
+      message.guild.channels.cache.get(
+        GOODBYE_CHANNEL_ID
       );
 
-    } catch (error) {
-      console.error(
-        "❌ TEST PAYMENT ERROR:"
-      );
-
-      console.error(error);
-
-      await message.reply(
-        "❌ Could not send the test payment menu."
+    if (!channel) {
+      return message.reply(
+        "Goodbye channel not found."
       );
     }
+
+    const embed = new EmbedBuilder()
+      .setTitle("Goodbye 🤍")
+      .setDescription(
+        `**${message.author.username}** has left **${message.guild.name}**.\n\n` +
+        `We hope to see you again!`
+      )
+      .setColor("#FFFFFF")
+      .setThumbnail(
+        message.author.displayAvatarURL()
+      );
+
+    await channel.send({
+      embeds: [embed]
+    });
+
+    await message.reply(
+      "Test goodbye message sent."
+    );
+
+    return;
+  }
+
+  // ==================================================
+  // TEST PAYMENT
+  // ==================================================
+
+  if (content === "!testpay") {
+    await sendPaymentEmbed(message.channel);
+
+    await message.reply(
+      "Test payment embed sent."
+    );
 
     return;
   }
@@ -747,368 +473,307 @@ client.on(Events.MessageCreate, async (message) => {
 client.on(
   Events.InteractionCreate,
   async (interaction) => {
+    try {
+      if (!interaction.isButton()) return;
 
-    console.log("====================================");
-    console.log("🔘 INTERACTION RECEIVED");
-    console.log(`Type: ${interaction.type}`);
-    console.log(`User: ${interaction.user.tag}`);
-    console.log(
-      `Custom ID: ${interaction.customId || "NONE"}`
-    );
-    console.log("====================================");
+      // ==================================================
+      // APPLE PAY
+      // ==================================================
 
-    if (!interaction.isButton()) return;
+      if (
+        interaction.customId ===
+        "payment_apple"
+      ) {
+        return interaction.reply({
+          content:
+            `**Apple Pay:** \`${APPLE_PAY}\``,
+          ephemeral: true
+        });
+      }
 
-    const id = interaction.customId;
+      // ==================================================
+      // ZELLE
+      // ==================================================
 
-    // ==================================================
-    // CREATE NITRO TICKET
-    // ==================================================
+      if (
+        interaction.customId ===
+        "payment_zelle"
+      ) {
+        return interaction.reply({
+          content:
+            `**Zelle:** \`${ZELLE}\``,
+          ephemeral: true
+        });
+      }
 
-    if (id === NITRO_TICKET_BUTTON_ID) {
+      // ==================================================
+      // NITRO PRODUCTS
+      // ==================================================
 
-      try {
+      if (
+        interaction.customId === "nitro_725" ||
+        interaction.customId === "nitro_925"
+      ) {
+        if (!interaction.guild) {
+          return interaction.reply({
+            content:
+              "This can only be used inside the server.",
+            ephemeral: true
+          });
+        }
+
+        // ==================================================
+        // CHECK CATEGORY
+        // ==================================================
+
+        if (
+          !NITRO_TICKET_CATEGORY_ID ||
+          NITRO_TICKET_CATEGORY_ID ===
+            "YOUR_CATEGORY_ID"
+        ) {
+          return interaction.reply({
+            content:
+              "The Nitro ticket category has not been configured yet. Add NITRO_TICKET_CATEGORY_ID to your Render environment variables.",
+            ephemeral: true
+          });
+        }
+
+        // ==================================================
+        // PRODUCT INFORMATION
+        // ==================================================
+
+        const products = {
+          nitro_725: {
+            name: "1 Month Nitro",
+            price: "$7.25",
+            war: "No",
+            ticketPrefix: "nitro-1month"
+          },
+
+          nitro_925: {
+            name: "1 Month Nitro + War",
+            price: "$9.25",
+            war: "Yes",
+            ticketPrefix: "nitro-1month-war"
+          }
+        };
+
+        const product =
+          products[interaction.customId];
+
         await interaction.deferReply({
           ephemeral: true
         });
 
-        const guild = interaction.guild;
+        // ==================================================
+        // CHECK EXISTING TICKET
+        // ==================================================
 
-        if (!guild) {
-          await interaction.editReply(
-            "❌ This button can only be used inside the server."
+        const existingTicket =
+          interaction.guild.channels.cache.find(
+            (channel) =>
+              channel.type ===
+                ChannelType.GuildText &&
+              channel.topic ===
+                `Nitro ticket for ${interaction.user.id}`
           );
-
-          return;
-        }
-
-        // ----------------------------------------------
-        // CHECK FOR EXISTING TICKET
-        // ----------------------------------------------
-
-        const existingTicket = guild.channels.cache.find(
-          (channel) =>
-            channel.type === ChannelType.GuildText &&
-            channel.name ===
-              `nitro-${interaction.user.username.toLowerCase()}`
-        );
 
         if (existingTicket) {
-          await interaction.editReply(
-            `❌ You already have a Nitro ticket: ${existingTicket}`
-          );
-
-          return;
+          return interaction.editReply({
+            content:
+              `You already have a Nitro ticket open: ${existingTicket}`
+          });
         }
 
-        // ----------------------------------------------
-        // GET NITRO CHANNEL
-        // ----------------------------------------------
+        // ==================================================
+        // CLEAN USERNAME
+        // ==================================================
 
-        const nitroChannel = await guild.channels
-          .fetch(NITRO_CHANNEL_ID)
-          .catch(() => null);
-
-        if (!nitroChannel) {
-          await interaction.editReply(
-            "❌ Nitro Services channel could not be found."
-          );
-
-          return;
-        }
-
-        // ----------------------------------------------
-        // CREATE TICKET
-        // ----------------------------------------------
-
-        const ticketChannel = await guild.channels.create({
-          name: `nitro-${interaction.user.username}`
+        let username =
+          interaction.user.username
             .toLowerCase()
-            .replace(/[^a-z0-9-]/g, "-")
-            .slice(0, 90),
+            .replace(/[^a-z0-9-]/g, "")
+            .slice(0, 20);
 
-          type: ChannelType.GuildText,
+        if (!username) {
+          username = interaction.user.id;
+        }
 
-          parent: nitroChannel.parentId || undefined,
+        // ==================================================
+        // TICKET NAME
+        // ==================================================
 
-          permissionOverwrites: [
-            {
-              id: guild.roles.everyone.id,
-              deny: [
-                PermissionsBitField.Flags.ViewChannel
-              ]
-            },
+        const ticketName =
+          `${product.ticketPrefix}-${username}`.slice(
+            0,
+            100
+          );
 
-            {
-              id: interaction.user.id,
-              allow: [
-                PermissionsBitField.Flags.ViewChannel,
-                PermissionsBitField.Flags.SendMessages,
-                PermissionsBitField.Flags.ReadMessageHistory,
-                PermissionsBitField.Flags.AttachFiles,
-                PermissionsBitField.Flags.EmbedLinks
-              ]
-            },
+        // ==================================================
+        // CREATE PRIVATE TICKET
+        // ==================================================
 
-            {
-              id: guild.members.me.id,
-              allow: [
-                PermissionsBitField.Flags.ViewChannel,
-                PermissionsBitField.Flags.SendMessages,
-                PermissionsBitField.Flags.ReadMessageHistory,
-                PermissionsBitField.Flags.ManageChannels,
-                PermissionsBitField.Flags.ManageMessages
-              ]
-            }
-          ]
-        });
+        const ticket =
+          await interaction.guild.channels.create({
+            name: ticketName,
+            type: ChannelType.GuildText,
+            parent: NITRO_TICKET_CATEGORY_ID,
 
-        // ----------------------------------------------
+            topic:
+              `Nitro ticket for ${interaction.user.id}`,
+
+            permissionOverwrites: [
+              {
+                id:
+                  interaction.guild.roles.everyone.id,
+
+                deny: [
+                  PermissionsBitField.Flags.ViewChannel
+                ]
+              },
+
+              {
+                id: interaction.user.id,
+
+                allow: [
+                  PermissionsBitField.Flags.ViewChannel,
+                  PermissionsBitField.Flags.SendMessages,
+                  PermissionsBitField.Flags.ReadMessageHistory,
+                  PermissionsBitField.Flags.AttachFiles,
+                  PermissionsBitField.Flags.EmbedLinks
+                ]
+              },
+
+              {
+                id: interaction.client.user.id,
+
+                allow: [
+                  PermissionsBitField.Flags.ViewChannel,
+                  PermissionsBitField.Flags.SendMessages,
+                  PermissionsBitField.Flags.ReadMessageHistory,
+                  PermissionsBitField.Flags.ManageChannels,
+                  PermissionsBitField.Flags.ManageMessages
+                ]
+              }
+            ]
+          });
+
+        // ==================================================
+        // TICKET EMBED
+        // ==================================================
+
+        const ticketEmbed =
+          new EmbedBuilder()
+            .setTitle("Nitro Purchase")
+            .setDescription(
+              `${NITRO_EMOJI} **Product:** ${product.name}\n` +
+              `${NITRO_EMOJI} **Price:** ${product.price}\n` +
+              `${NITRO_EMOJI} **War:** ${product.war}\n\n` +
+
+              `**Payment Methods**\n` +
+              `> Apple Pay\n` +
+              `> Venmo\n\n` +
+
+              `Please send proof of payment after paying.`
+            )
+            .setColor("#FFFFFF")
+            .setFooter({
+              text: ".gg/chuppys"
+            });
+
+        // ==================================================
         // CLOSE BUTTON
-        // ----------------------------------------------
-
-        const closeButton = new ButtonBuilder()
-          .setCustomId("nitro_close_ticket")
-          .setLabel("Close Ticket")
-          .setStyle(ButtonStyle.Danger);
+        // ==================================================
 
         const closeRow =
-          new ActionRowBuilder()
-            .addComponents(closeButton);
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId(
+                "close_nitro_ticket"
+              )
+              .setLabel("Close Ticket")
+              .setStyle(ButtonStyle.Danger)
+          );
 
-        // ----------------------------------------------
-        // TICKET EMBED
-        // ----------------------------------------------
-
-        const ticketEmbed = new EmbedBuilder()
-          .setColor("#FFFFFF")
-          .setTitle("🤍 Nitro Ticket")
-          .setDescription(
-            `${interaction.user}, welcome to your Nitro ticket.\n\n` +
-            `${NITRO_EMOJI} **1 month perm n1tr0 — $7.25** no war\n` +
-            `${NITRO_EMOJI} **1 month perm n1tr0 + war — $9.25**\n\n` +
-            `Please tell us which Nitro option you want.\n\n` +
-            `**Payment methods:**\n` +
-            `Cash App • PayPal • Apple Pay • Zelle`
-          )
-          .setFooter({
-            text: ".gg/chuppys"
-          })
-          .setTimestamp();
-
-        await ticketChannel.send({
+        await ticket.send({
           content: `${interaction.user}`,
           embeds: [ticketEmbed],
           components: [closeRow]
         });
 
-        await interaction.editReply(
-          `✅ Your Nitro ticket has been created: ${ticketChannel}`
-        );
+        await interaction.editReply({
+          content:
+            `Your Nitro ticket has been created: ${ticket}`
+        });
 
         console.log(
-          `✅ Nitro ticket created for ${interaction.user.tag}`
+          `Created Nitro ticket ${ticket.name} for ${interaction.user.tag}`
         );
 
-      } catch (error) {
-        console.error(
-          "❌ NITRO TICKET ERROR:"
-        );
-
-        console.error(error);
-
-        if (
-          interaction.deferred ||
-          interaction.replied
-        ) {
-          await interaction.editReply(
-            "❌ I couldn't create your ticket. Make sure the bot has **Manage Channels** permission."
-          ).catch(() => {});
-        } else {
-          await interaction.reply({
-            content:
-              "❌ I couldn't create your ticket.",
-            ephemeral: true
-          }).catch(() => {});
-        }
+        return;
       }
 
-      return;
-    }
+      // ==================================================
+      // CLOSE NITRO TICKET
+      // ==================================================
 
-    // ==================================================
-    // CLOSE NITRO TICKET
-    // ==================================================
-
-    if (id === "nitro_close_ticket") {
-
-      try {
-        await interaction.deferReply({
+      if (
+        interaction.customId ===
+        "close_nitro_ticket"
+      ) {
+        await interaction.reply({
+          content: "Closing this ticket...",
           ephemeral: true
         });
 
-        const channel = interaction.channel;
-
-        if (!channel) {
-          await interaction.editReply(
-            "❌ Ticket channel not found."
-          );
-
-          return;
-        }
-
-        await interaction.editReply(
-          "🗑️ Closing this ticket..."
-        );
-
         setTimeout(async () => {
           try {
-            await channel.delete(
-              "Nitro ticket closed"
-            );
-
-            console.log(
-              `🗑️ Nitro ticket deleted: ${channel.name}`
-            );
-
+            await interaction.channel.delete();
           } catch (error) {
-            console.error(
-              "❌ Could not delete Nitro ticket:"
+            console.log(
+              "Could not delete ticket:",
+              error.message
             );
-
-            console.error(error);
           }
-        }, 2000);
+        }, 1500);
 
-      } catch (error) {
-        console.error(
-          "❌ CLOSE TICKET ERROR:"
-        );
-
-        console.error(error);
+        return;
       }
-
-      return;
-    }
-
-    // ==================================================
-    // PAYMENT BUTTONS
-    // ==================================================
-
-    if (!id.startsWith("payment_")) {
-      console.log(
-        `ℹ️ Non-payment button ignored: ${id}`
-      );
-
-      return;
-    }
-
-    let method = null;
-    let information = null;
-    let amount = null;
-
-    // APPLE PAY
-
-    if (id.startsWith("payment_applepay_")) {
-      method = PAYMENT_INFO.applepay.name;
-      information = PAYMENT_INFO.applepay.username;
-
-      amount = id.replace(
-        "payment_applepay_",
-        ""
-      );
-    }
-
-    // ZELLE
-
-    else if (id.startsWith("payment_zelle_")) {
-      method = PAYMENT_INFO.zelle.name;
-      information = PAYMENT_INFO.zelle.username;
-
-      amount = id.replace(
-        "payment_zelle_",
-        ""
-      );
-    }
-
-    if (!method || !information || !amount) {
-      console.error(
-        `❌ Invalid payment button: ${id}`
-      );
-
-      if (
-        !interaction.replied &&
-        !interaction.deferred
-      ) {
-        await interaction.reply({
-          content:
-            "❌ This payment button is invalid or expired.",
-          ephemeral: true
-        }).catch(() => {});
-      }
-
-      return;
-    }
-
-    try {
-      await interaction.deferReply({
-        ephemeral: true
-      });
-
     } catch (error) {
       console.error(
-        "❌ COULD NOT ACKNOWLEDGE INTERACTION:"
+        "Interaction error:",
+        error
       );
 
-      console.error(error);
-
-      return;
-    }
-
-    const embed = new EmbedBuilder()
-      .setColor("#FFFFFF")
-      .setTitle(`🤍 ${method}`)
-      .setDescription(
-        `**amount:** $${amount}\n\n` +
-        `**${method}:** ${information}\n\n` +
-        `send **$${amount}** using the information above.`
-      )
-      .setFooter({
-        text: ".gg/chuppys"
-      })
-      .setTimestamp();
-
-    try {
-      await interaction.editReply({
-        embeds: [embed]
-      });
-
-      console.log(
-        `✅ ${method} payment information sent privately.`
-      );
-
-    } catch (error) {
-      console.error(
-        "❌ PAYMENT RESPONSE ERROR:"
-      );
-
-      console.error(error);
+      try {
+        if (interaction.deferred) {
+          await interaction.editReply({
+            content:
+              "Something went wrong while processing this."
+          });
+        } else if (!interaction.replied) {
+          await interaction.reply({
+            content:
+              "Something went wrong while processing this.",
+            ephemeral: true
+          });
+        }
+      } catch {}
     }
   }
 );
 
 // ==================================================
-// PROCESS ERRORS
+// ERROR HANDLING
 // ==================================================
 
 process.on(
   "unhandledRejection",
   (error) => {
     console.error(
-      "❌ UNHANDLED REJECTION:"
+      "Unhandled promise rejection:",
+      error
     );
-
-    console.error(error);
   }
 );
 
@@ -1116,49 +781,34 @@ process.on(
   "uncaughtException",
   (error) => {
     console.error(
-      "❌ UNCAUGHT EXCEPTION:"
+      "Uncaught exception:",
+      error
     );
-
-    console.error(error);
   }
 );
 
 // ==================================================
-// TOKEN CHECK
+// LOGIN
 // ==================================================
 
 if (!TOKEN) {
-  console.error("====================================");
-  console.error("❌ DISCORD_BOT_TOKEN IS MISSING");
   console.error(
-    "Add DISCORD_BOT_TOKEN to Render Environment Variables."
+    "DISCORD_BOT_TOKEN is missing from environment variables."
   );
-  console.error("====================================");
 
   process.exit(1);
 }
-
-console.log("====================================");
-console.log("🔐 DISCORD TOKEN FOUND");
-console.log(`TOKEN LENGTH: ${TOKEN.length}`);
-console.log("====================================");
-
-// ==================================================
-// CONNECT TO DISCORD
-// ==================================================
-
-console.log("🔌 Connecting to Discord...");
 
 client
   .login(TOKEN)
   .then(() => {
     console.log(
-      "✅ Discord login request completed."
+      "Discord login successful."
     );
   })
   .catch((error) => {
-    console.error("====================================");
-    console.error("❌ DISCORD LOGIN FAILED");
-    console.error(error);
-    console.error("====================================");
+    console.error(
+      "Discord login failed:",
+      error
+    );
   });
