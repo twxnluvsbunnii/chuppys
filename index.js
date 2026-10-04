@@ -50,11 +50,8 @@ const TOKEN = process.env.DISCORD_BOT_TOKEN;
 // ==================================================
 
 const WELCOME_CHANNEL_ID = "1530755165412524042";
-
 const GOODBYE_CHANNEL_ID = "1530761366489530480";
-
 const NITRO_CHANNEL_ID = "1555760937557041273";
-
 const WELCOME_ROLE_ID = "1531039846871728248";
 
 // ==================================================
@@ -82,7 +79,6 @@ const PAYPAL_USERNAME = "PayPal.me/twxnsrevenge";
 const PAYPAL_URL = "https://paypal.me/twxnsrevenge";
 
 const APPLE_PAY = "929-554-5969";
-
 const ZELLE = "631-401-8951";
 
 // ==================================================
@@ -99,7 +95,7 @@ client.once(Events.ClientReady, (readyClient) => {
 });
 
 // ==================================================
-// WELCOME
+// WELCOME MESSAGE
 // ==================================================
 
 client.on(Events.GuildMemberAdd, async (member) => {
@@ -121,6 +117,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
 
       if (role) {
         await member.roles.add(role);
+
         console.log(
           `Gave welcome role to ${member.user.tag}`
         );
@@ -139,7 +136,9 @@ client.on(Events.GuildMemberAdd, async (member) => {
         `We're happy to have you here. Make sure to read the rules and enjoy your time in the server!`
       )
       .setColor("#FFFFFF")
-      .setThumbnail(member.user.displayAvatarURL())
+      .setThumbnail(
+        member.user.displayAvatarURL()
+      )
       .setImage(WELCOME_IMAGE)
       .setFooter({
         text: member.guild.name
@@ -160,7 +159,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
 });
 
 // ==================================================
-// GOODBYE
+// GOODBYE MESSAGE
 // ==================================================
 
 client.on(Events.GuildMemberRemove, async (member) => {
@@ -181,7 +180,9 @@ client.on(Events.GuildMemberRemove, async (member) => {
         `We hope to see you again!`
       )
       .setColor("#FFFFFF")
-      .setThumbnail(member.user.displayAvatarURL())
+      .setThumbnail(
+        member.user.displayAvatarURL()
+      )
       .setFooter({
         text: member.guild.name
       });
@@ -204,7 +205,6 @@ client.on(Events.GuildMemberRemove, async (member) => {
 // ==================================================
 
 async function sendPaymentEmbed(channel) {
-
   const embed = new EmbedBuilder()
     .setTitle("Payment Methods")
     .setDescription(
@@ -239,7 +239,6 @@ async function sendPaymentEmbed(channel) {
     });
 
   const row1 = new ActionRowBuilder().addComponents(
-
     new ButtonBuilder()
       .setLabel("Cash App")
       .setStyle(ButtonStyle.Link)
@@ -249,11 +248,9 @@ async function sendPaymentEmbed(channel) {
       .setLabel("PayPal")
       .setStyle(ButtonStyle.Link)
       .setURL(PAYPAL_URL)
-
   );
 
   const row2 = new ActionRowBuilder().addComponents(
-
     new ButtonBuilder()
       .setCustomId("payment_apple")
       .setLabel("Apple Pay")
@@ -263,7 +260,6 @@ async function sendPaymentEmbed(channel) {
       .setCustomId("payment_zelle")
       .setLabel("Zelle")
       .setStyle(ButtonStyle.Secondary)
-
   );
 
   await channel.send({
@@ -277,7 +273,6 @@ async function sendPaymentEmbed(channel) {
 // ==================================================
 
 async function sendNitroServices(channel) {
-
   const embed = new EmbedBuilder()
     .setTitle("Nitro")
     .setDescription(
@@ -285,19 +280,20 @@ async function sendNitroServices(channel) {
       `${NITRO_EMOJI} **1 Month + War — $9.25**\n\n` +
       `**Payment Methods**\n` +
       `> Apple Pay\n` +
-      `> Venmo`
+      `> Venmo\n` +
+      `> Cash App`
     )
     .setColor("#FFFFFF")
     .setFooter({
       text: ".gg/chuppys"
     });
 
-  // Get recent messages
+  // Fetch recent messages
   const messages = await channel.messages.fetch({
     limit: 50
   });
 
-  // Find ALL previous Nitro messages from this bot
+  // Find existing Nitro messages from this bot
   const nitroMessages = messages.filter(
     (msg) =>
       msg.author.id === client.user.id &&
@@ -310,18 +306,15 @@ async function sendNitroServices(channel) {
 
   // If a Nitro message already exists
   if (nitroMessages.size > 0) {
+    const existingMessage = nitroMessages.first();
 
-    // Keep the newest Nitro message
-    const existingMessage =
-      nitroMessages.first();
-
-    // Update it
+    // Update the existing message
     await existingMessage.edit({
       embeds: [embed],
       components: []
     });
 
-    // Delete any duplicate Nitro messages
+    // Delete duplicate Nitro messages
     const duplicates = nitroMessages.filter(
       (msg) => msg.id !== existingMessage.id
     );
@@ -329,6 +322,11 @@ async function sendNitroServices(channel) {
     for (const duplicate of duplicates.values()) {
       try {
         await duplicate.delete();
+
+        console.log(
+          `Deleted duplicate Nitro message ${duplicate.id}`
+        );
+
       } catch (error) {
         console.log(
           "Could not delete duplicate Nitro message:",
@@ -338,13 +336,13 @@ async function sendNitroServices(channel) {
     }
 
     console.log(
-      "Existing Nitro message updated and duplicates removed."
+      "Nitro message updated and duplicates removed."
     );
 
     return existingMessage;
   }
 
-  // If no Nitro message exists, create one
+  // No existing Nitro message, so create one
   const newMessage = await channel.send({
     embeds: [embed],
     components: []
@@ -360,39 +358,36 @@ async function sendNitroServices(channel) {
 // ==================================================
 
 client.on(Events.MessageCreate, async (message) => {
-
   if (message.author.bot) return;
 
   const content = message.content.toLowerCase();
 
   // ==================================================
-  // PAYMENT COMMAND
+  // !PAY / ,PAY
   // ==================================================
 
   if (
     content === "!pay" ||
     content === ",pay"
   ) {
-
-    await sendPaymentEmbed(message.channel);
+    await sendPaymentEmbed(
+      message.channel
+    );
 
     return;
   }
 
   // ==================================================
-  // NITRO COMMAND
+  // !NITRO / ,NITRO
   // ==================================================
 
   if (
     content === "!nitro" ||
     content === ",nitro"
   ) {
-
-    // Only people with Manage Server can use it
     if (
       !message.member.permissions.has("ManageGuild")
     ) {
-
       return message.reply(
         "You need **Manage Server** permission to use this command."
       );
@@ -404,13 +399,14 @@ client.on(Events.MessageCreate, async (message) => {
       );
 
     if (!nitroChannel) {
-
       return message.reply(
         "I couldn't find the Nitro Services channel."
       );
     }
 
-    await sendNitroServices(nitroChannel);
+    await sendNitroServices(
+      nitroChannel
+    );
 
     await message.reply(
       "Nitro Services message updated successfully."
@@ -424,7 +420,6 @@ client.on(Events.MessageCreate, async (message) => {
   // ==================================================
 
   if (content === "!testwelcome") {
-
     const channel =
       message.guild.channels.cache.get(
         WELCOME_CHANNEL_ID
@@ -464,7 +459,6 @@ client.on(Events.MessageCreate, async (message) => {
   // ==================================================
 
   if (content === "!testgoodbye") {
-
     const channel =
       message.guild.channels.cache.get(
         GOODBYE_CHANNEL_ID
@@ -502,7 +496,6 @@ client.on(Events.MessageCreate, async (message) => {
   // ==================================================
 
   if (content === "!testpay") {
-
     await sendPaymentEmbed(
       message.channel
     );
@@ -518,9 +511,7 @@ client.on(Events.MessageCreate, async (message) => {
 client.on(
   Events.InteractionCreate,
   async (interaction) => {
-
     try {
-
       if (!interaction.isButton()) return;
 
       // ==================================================
@@ -530,7 +521,6 @@ client.on(
       if (
         interaction.customId === "payment_apple"
       ) {
-
         return interaction.reply({
           content:
             `**Apple Pay:** \`${APPLE_PAY}\``,
@@ -545,7 +535,6 @@ client.on(
       if (
         interaction.customId === "payment_zelle"
       ) {
-
         return interaction.reply({
           content:
             `**Zelle:** \`${ZELLE}\``,
@@ -554,37 +543,25 @@ client.on(
       }
 
     } catch (error) {
-
       console.error(
         "Interaction error:",
         error
       );
 
       try {
-
-        if (
-          interaction.deferred
-        ) {
-
+        if (interaction.deferred) {
           await interaction.editReply({
             content:
               "Something went wrong while processing this."
           });
-
-        } else if (
-          !interaction.replied
-        ) {
-
+        } else if (!interaction.replied) {
           await interaction.reply({
             content:
               "Something went wrong while processing this.",
             ephemeral: true
           });
-
         }
-
       } catch {}
-
     }
   }
 );
@@ -618,7 +595,6 @@ process.on(
 // ==================================================
 
 if (!TOKEN) {
-
   console.error(
     "DISCORD_BOT_TOKEN is missing from environment variables."
   );
@@ -633,17 +609,13 @@ if (!TOKEN) {
 client
   .login(TOKEN)
   .then(() => {
-
     console.log(
       "Discord login successful."
     );
-
   })
   .catch((error) => {
-
     console.error(
       "Discord login failed:",
       error
     );
-
   });
