@@ -1,4 +1,4 @@
-const http = require("http");
+ const http = require("http");
 
 const {
   Client,
@@ -52,14 +52,19 @@ const TOKEN = process.env.DISCORD_BOT_TOKEN;
 const WELCOME_CHANNEL_ID = "1530755165412524042";
 const GOODBYE_CHANNEL_ID = "1530761366489530480";
 const NITRO_CHANNEL_ID = "1555760937557041273";
+const DECOR_CHANNEL_ID = "1555769588229345280";
+
 const WELCOME_ROLE_ID = "1531039846871728248";
 
 // ==================================================
-// NITRO EMOJI
+// CUSTOM EMOJIS
 // ==================================================
 
 const NITRO_EMOJI =
   "<:C18DEA07FFB44B08AF04005B0D373ECB:1531028121866998012>";
+
+const DECOR_EMOJI =
+  "<a:aBouncyDiscord:1557138733717782599>";
 
 // ==================================================
 // WELCOME IMAGE
@@ -201,7 +206,7 @@ client.on(Events.GuildMemberRemove, async (member) => {
 });
 
 // ==================================================
-// NORMAL PAYMENT EMBED
+// PAYMENT EMBED
 // ==================================================
 
 async function sendPaymentEmbed(channel) {
@@ -293,7 +298,7 @@ async function sendNitroServices(channel) {
     limit: 50
   });
 
-  // Find existing Nitro messages from this bot
+  // Find existing Nitro messages
   const nitroMessages = messages.filter(
     (msg) =>
       msg.author.id === client.user.id &&
@@ -304,11 +309,10 @@ async function sendNitroServices(channel) {
       )
   );
 
-  // If a Nitro message already exists
+  // Update existing Nitro message
   if (nitroMessages.size > 0) {
     const existingMessage = nitroMessages.first();
 
-    // Update the existing message
     await existingMessage.edit({
       embeds: [embed],
       components: []
@@ -326,7 +330,6 @@ async function sendNitroServices(channel) {
         console.log(
           `Deleted duplicate Nitro message ${duplicate.id}`
         );
-
       } catch (error) {
         console.log(
           "Could not delete duplicate Nitro message:",
@@ -342,7 +345,7 @@ async function sendNitroServices(channel) {
     return existingMessage;
   }
 
-  // No existing Nitro message, so create one
+  // Create new Nitro message
   const newMessage = await channel.send({
     embeds: [embed],
     components: []
@@ -354,153 +357,302 @@ async function sendNitroServices(channel) {
 }
 
 // ==================================================
+// DECOR + BUNDLES
+// ==================================================
+
+async function sendDecorBundles(channel) {
+  const embed = new EmbedBuilder()
+    .setTitle("Decor & Bundles")
+    .setDescription(
+      `**DECOR ${DECOR_EMOJI}**\n\n` +
+
+      `*original price • our price*\n\n` +
+
+      `$4.99-$5.99 • **$3.00**\n` +
+      `$6.99-$8.99 • **$5.00**\n` +
+      `$9.99-$11.99 • **$8.00**\n` +
+      `$12.99-$14.99 • **$9.00**\n` +
+      `$15.99-$17.99 • **$10.00**\n` +
+      `$18.99-$20.00 • **$13.00**\n` +
+      `$21.99-$23.99 • **$15.00**\n\n` +
+
+      `**BUNDLES ${DECOR_EMOJI}**\n\n` +
+
+      `*original price • our price*\n\n` +
+
+      `$8.99 • **$6.50**\n` +
+      `$10.99 • **$7.50**\n` +
+      `$12.99 • **$8.50**\n` +
+      `$14.99 • **$9.50**\n` +
+      `$17.99 • **$13.50**\n` +
+      `$21.99 • **$15.00**\n` +
+      `$22.99 • **$16.00**\n\n` +
+
+      `All legally purchased and will be sent the same day!`
+    )
+    .setColor("#FFFFFF")
+    .setFooter({
+      text: ".gg/chuppys"
+    });
+
+  // Fetch recent messages
+  const messages = await channel.messages.fetch({
+    limit: 50
+  });
+
+  // Find existing Decor/Bundles messages
+  const decorMessages = messages.filter(
+    (msg) =>
+      msg.author.id === client.user.id &&
+      msg.embeds.length > 0 &&
+      msg.embeds[0].title === "Decor & Bundles"
+  );
+
+  // Update existing message
+  if (decorMessages.size > 0) {
+    const existingMessage = decorMessages.first();
+
+    await existingMessage.edit({
+      embeds: [embed],
+      components: []
+    });
+
+    // Delete duplicate messages
+    const duplicates = decorMessages.filter(
+      (msg) => msg.id !== existingMessage.id
+    );
+
+    for (const duplicate of duplicates.values()) {
+      try {
+        await duplicate.delete();
+
+        console.log(
+          `Deleted duplicate Decor/Bundles message ${duplicate.id}`
+        );
+      } catch (error) {
+        console.log(
+          "Could not delete duplicate Decor/Bundles message:",
+          error.message
+        );
+      }
+    }
+
+    console.log(
+      "Decor & Bundles message updated and duplicates removed."
+    );
+
+    return existingMessage;
+  }
+
+  // Create new message
+  const newMessage = await channel.send({
+    embeds: [embed],
+    components: []
+  });
+
+  console.log(
+    "New Decor & Bundles message created."
+  );
+
+  return newMessage;
+}
+
+// ==================================================
 // MESSAGE COMMANDS
 // ==================================================
 
 client.on(Events.MessageCreate, async (message) => {
-  if (message.author.bot) return;
+  try {
+    if (message.author.bot) return;
 
-  const content = message.content.toLowerCase();
+    const content = message.content.toLowerCase();
 
-  // ==================================================
-  // !PAY / ,PAY
-  // ==================================================
+    // ==================================================
+    // !PAY / ,PAY
+    // ==================================================
 
-  if (
-    content === "!pay" ||
-    content === ",pay"
-  ) {
-    await sendPaymentEmbed(
-      message.channel
-    );
-
-    return;
-  }
-
-  // ==================================================
-  // !NITRO / ,NITRO
-  // ==================================================
-
-  if (
-    content === "!nitro" ||
-    content === ",nitro"
-  ) {
     if (
-      !message.member.permissions.has("ManageGuild")
+      content === "!pay" ||
+      content === ",pay"
     ) {
-      return message.reply(
-        "You need **Manage Server** permission to use this command."
+      await sendPaymentEmbed(
+        message.channel
       );
+
+      return;
     }
 
-    const nitroChannel =
-      message.guild.channels.cache.get(
-        NITRO_CHANNEL_ID
+    // ==================================================
+    // !NITRO / ,NITRO
+    // ==================================================
+
+    if (
+      content === "!nitro" ||
+      content === ",nitro"
+    ) {
+      if (
+        !message.member ||
+        !message.member.permissions.has("ManageGuild")
+      ) {
+        return message.reply(
+          "You need **Manage Server** permission to use this command."
+        );
+      }
+
+      const nitroChannel =
+        message.guild.channels.cache.get(
+          NITRO_CHANNEL_ID
+        );
+
+      if (!nitroChannel) {
+        return message.reply(
+          "I couldn't find the Nitro Services channel."
+        );
+      }
+
+      await sendNitroServices(
+        nitroChannel
       );
 
-    if (!nitroChannel) {
-      return message.reply(
-        "I couldn't find the Nitro Services channel."
+      await message.reply(
+        "Nitro Services message updated successfully."
       );
+
+      return;
     }
 
-    await sendNitroServices(
-      nitroChannel
-    );
+    // ==================================================
+    // !DECOR / ,DECOR
+    // ==================================================
 
-    await message.reply(
-      "Nitro Services message updated successfully."
-    );
+    if (
+      content === "!decor" ||
+      content === ",decor"
+    ) {
+      if (
+        !message.member ||
+        !message.member.permissions.has("ManageGuild")
+      ) {
+        return message.reply(
+          "You need **Manage Server** permission to use this command."
+        );
+      }
 
-    return;
-  }
+      const decorChannel =
+        message.guild.channels.cache.get(
+          DECOR_CHANNEL_ID
+        );
 
-  // ==================================================
-  // TEST WELCOME
-  // ==================================================
+      if (!decorChannel) {
+        return message.reply(
+          "I couldn't find the Decor & Bundles channel."
+        );
+      }
 
-  if (content === "!testwelcome") {
-    const channel =
-      message.guild.channels.cache.get(
-        WELCOME_CHANNEL_ID
+      await sendDecorBundles(
+        decorChannel
       );
 
-    if (!channel) {
-      return message.reply(
-        "Welcome channel not found."
+      await message.reply(
+        "Decor & Bundles message updated successfully."
       );
+
+      return;
     }
 
-    const embed = new EmbedBuilder()
-      .setTitle("Welcome to .gg/chuppys 🤍")
-      .setDescription(
-        `Welcome ${message.author}!\n\n` +
-        `We're happy to have you here. Make sure to read the rules and enjoy your time in the server!`
-      )
-      .setColor("#FFFFFF")
-      .setThumbnail(
-        message.author.displayAvatarURL()
-      )
-      .setImage(WELCOME_IMAGE)
-      .setFooter({
-        text: message.guild.name
+    // ==================================================
+    // TEST WELCOME
+    // ==================================================
+
+    if (content === "!testwelcome") {
+      const channel =
+        message.guild.channels.cache.get(
+          WELCOME_CHANNEL_ID
+        );
+
+      if (!channel) {
+        return message.reply(
+          "Welcome channel not found."
+        );
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle("Welcome to .gg/chuppys 🤍")
+        .setDescription(
+          `Welcome ${message.author}!\n\n` +
+          `We're happy to have you here. Make sure to read the rules and enjoy your time in the server!`
+        )
+        .setColor("#FFFFFF")
+        .setThumbnail(
+          message.author.displayAvatarURL()
+        )
+        .setImage(WELCOME_IMAGE)
+        .setFooter({
+          text: message.guild.name
+        });
+
+      await channel.send({
+        content: `${message.author}`,
+        embeds: [embed]
       });
 
-    await channel.send({
-      content: `${message.author}`,
-      embeds: [embed]
-    });
-
-    return;
-  }
-
-  // ==================================================
-  // TEST GOODBYE
-  // ==================================================
-
-  if (content === "!testgoodbye") {
-    const channel =
-      message.guild.channels.cache.get(
-        GOODBYE_CHANNEL_ID
-      );
-
-    if (!channel) {
-      return message.reply(
-        "Goodbye channel not found."
-      );
+      return;
     }
 
-    const embed = new EmbedBuilder()
-      .setTitle("Goodbye 🤍")
-      .setDescription(
-        `**${message.author.username}** has left **${message.guild.name}**.\n\n` +
-        `We hope to see you again!`
-      )
-      .setColor("#FFFFFF")
-      .setThumbnail(
-        message.author.displayAvatarURL()
-      )
-      .setFooter({
-        text: message.guild.name
+    // ==================================================
+    // TEST GOODBYE
+    // ==================================================
+
+    if (content === "!testgoodbye") {
+      const channel =
+        message.guild.channels.cache.get(
+          GOODBYE_CHANNEL_ID
+        );
+
+      if (!channel) {
+        return message.reply(
+          "Goodbye channel not found."
+        );
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle("Goodbye 🤍")
+        .setDescription(
+          `**${message.author.username}** has left **${message.guild.name}**.\n\n` +
+          `We hope to see you again!`
+        )
+        .setColor("#FFFFFF")
+        .setThumbnail(
+          message.author.displayAvatarURL()
+        )
+        .setFooter({
+          text: message.guild.name
+        });
+
+      await channel.send({
+        embeds: [embed]
       });
 
-    await channel.send({
-      embeds: [embed]
-    });
+      return;
+    }
 
-    return;
-  }
+    // ==================================================
+    // TEST PAYMENT
+    // ==================================================
 
-  // ==================================================
-  // TEST PAYMENT
-  // ==================================================
+    if (content === "!testpay") {
+      await sendPaymentEmbed(
+        message.channel
+      );
 
-  if (content === "!testpay") {
-    await sendPaymentEmbed(
-      message.channel
+      return;
+    }
+
+  } catch (error) {
+    console.error(
+      "Message command error:",
+      error
     );
-
-    return;
   }
 });
 
