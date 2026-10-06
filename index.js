@@ -114,7 +114,6 @@ client.on(Events.GuildMemberAdd, async (member) => {
       return;
     }
 
-    // Give welcome role
     try {
       const role = member.guild.roles.cache.get(
         WELCOME_ROLE_ID
@@ -322,6 +321,10 @@ async function sendNitroServices(channel) {
     for (const duplicate of duplicates.values()) {
       try {
         await duplicate.delete();
+
+        console.log(
+          `Deleted duplicate Nitro message ${duplicate.id}`
+        );
       } catch (error) {
         console.log(
           "Could not delete duplicate Nitro message:",
@@ -352,6 +355,11 @@ async function sendNitroServices(channel) {
 // ==================================================
 
 async function sendDecorBundles(channel) {
+  // ==================================================
+  // CREATE NEW EMBED
+  // NO EMBED TITLE
+  // ==================================================
+
   const embed = new EmbedBuilder()
     .setDescription(
       `# DECOR ${DECOR_EMOJI}\n\n` +
@@ -385,71 +393,60 @@ async function sendDecorBundles(channel) {
       text: ".gg/chuppys"
     });
 
-  // Fetch recent messages
+  // ==================================================
+  // FETCH RECENT BOT MESSAGES
+  // ==================================================
+
   const messages = await channel.messages.fetch({
     limit: 50
   });
 
-  // Find existing Decor messages from this bot
-  const decorMessages = messages.filter(
+  // ==================================================
+  // FIND OLD DECOR/BUNDLES MESSAGES
+  // ==================================================
+
+  const oldDecorMessages = messages.filter(
     (msg) =>
       msg.author.id === client.user.id &&
       msg.embeds.length > 0 &&
       (
-        !msg.embeds[0].title ||
-        msg.embeds[0].title === "Decor & Bundles"
-      ) &&
-      msg.embeds[0].description &&
-      (
-        msg.embeds[0].description.includes("DECOR") ||
-        msg.embeds[0].description.includes("BUNDLES")
+        msg.embeds[0].title === "Decor & Bundles" ||
+        msg.embeds[0].description?.includes("DECOR") ||
+        msg.embeds[0].description?.includes("BUNDLES")
       )
   );
 
-  // Update existing message
-  if (decorMessages.size > 0) {
-    const existingMessage = decorMessages.first();
+  // ==================================================
+  // DELETE ALL OLD DECOR/BUNDLES MESSAGES
+  // ==================================================
 
-    await existingMessage.edit({
-      embeds: [embed],
-      components: []
-    });
+  for (const oldMessage of oldDecorMessages.values()) {
+    try {
+      await oldMessage.delete();
 
-    // Delete duplicate messages
-    const duplicates = decorMessages.filter(
-      (msg) => msg.id !== existingMessage.id
-    );
+      console.log(
+        `Deleted old Decor/Bundles message ${oldMessage.id}`
+      );
 
-    for (const duplicate of duplicates.values()) {
-      try {
-        await duplicate.delete();
-
-        console.log(
-          `Deleted duplicate Decor/Bundles message ${duplicate.id}`
-        );
-      } catch (error) {
-        console.log(
-          "Could not delete duplicate Decor/Bundles message:",
-          error.message
-        );
-      }
+    } catch (error) {
+      console.log(
+        "Could not delete old Decor/Bundles message:",
+        error.message
+      );
     }
-
-    console.log(
-      "Decor & Bundles message updated."
-    );
-
-    return existingMessage;
   }
 
-  // Create new message
+  // ==================================================
+  // SEND BRAND NEW MESSAGE
+  // ==================================================
+
   const newMessage = await channel.send({
     embeds: [embed],
     components: []
   });
 
   console.log(
-    "New Decor & Bundles message created."
+    "New Decor/Bundles message created with no title."
   );
 
   return newMessage;
@@ -768,4 +765,4 @@ client
       "Discord login failed:",
       error
     );
-  }); 
+  });
