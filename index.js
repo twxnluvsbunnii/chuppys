@@ -1,4 +1,4 @@
- const http = require("http");
+const http = require("http");
 
 const {
   Client,
@@ -293,12 +293,10 @@ async function sendNitroServices(channel) {
       text: ".gg/chuppys"
     });
 
-  // Fetch recent messages
   const messages = await channel.messages.fetch({
     limit: 50
   });
 
-  // Find existing Nitro messages
   const nitroMessages = messages.filter(
     (msg) =>
       msg.author.id === client.user.id &&
@@ -309,7 +307,6 @@ async function sendNitroServices(channel) {
       )
   );
 
-  // Update existing Nitro message
   if (nitroMessages.size > 0) {
     const existingMessage = nitroMessages.first();
 
@@ -318,7 +315,6 @@ async function sendNitroServices(channel) {
       components: []
     });
 
-    // Delete duplicate Nitro messages
     const duplicates = nitroMessages.filter(
       (msg) => msg.id !== existingMessage.id
     );
@@ -326,10 +322,6 @@ async function sendNitroServices(channel) {
     for (const duplicate of duplicates.values()) {
       try {
         await duplicate.delete();
-
-        console.log(
-          `Deleted duplicate Nitro message ${duplicate.id}`
-        );
       } catch (error) {
         console.log(
           "Could not delete duplicate Nitro message:",
@@ -345,7 +337,6 @@ async function sendNitroServices(channel) {
     return existingMessage;
   }
 
-  // Create new Nitro message
   const newMessage = await channel.send({
     embeds: [embed],
     components: []
@@ -362,9 +353,8 @@ async function sendNitroServices(channel) {
 
 async function sendDecorBundles(channel) {
   const embed = new EmbedBuilder()
-    .setTitle("Decor & Bundles")
     .setDescription(
-      `**DECOR ${DECOR_EMOJI}**\n\n` +
+      `# DECOR ${DECOR_EMOJI}\n\n` +
 
       `*original price • our price*\n\n` +
 
@@ -376,7 +366,7 @@ async function sendDecorBundles(channel) {
       `$18.99-$20.00 • **$13.00**\n` +
       `$21.99-$23.99 • **$15.00**\n\n` +
 
-      `**BUNDLES ${DECOR_EMOJI}**\n\n` +
+      `# BUNDLES ${DECOR_EMOJI}\n\n` +
 
       `*original price • our price*\n\n` +
 
@@ -400,12 +390,20 @@ async function sendDecorBundles(channel) {
     limit: 50
   });
 
-  // Find existing Decor/Bundles messages
+  // Find existing Decor messages from this bot
   const decorMessages = messages.filter(
     (msg) =>
       msg.author.id === client.user.id &&
       msg.embeds.length > 0 &&
-      msg.embeds[0].title === "Decor & Bundles"
+      (
+        !msg.embeds[0].title ||
+        msg.embeds[0].title === "Decor & Bundles"
+      ) &&
+      msg.embeds[0].description &&
+      (
+        msg.embeds[0].description.includes("DECOR") ||
+        msg.embeds[0].description.includes("BUNDLES")
+      )
   );
 
   // Update existing message
@@ -438,7 +436,7 @@ async function sendDecorBundles(channel) {
     }
 
     console.log(
-      "Decor & Bundles message updated and duplicates removed."
+      "Decor & Bundles message updated."
     );
 
     return existingMessage;
@@ -545,7 +543,7 @@ client.on(Events.MessageCreate, async (message) => {
 
       if (!decorChannel) {
         return message.reply(
-          "I couldn't find the Decor & Bundles channel."
+          "I couldn't find the Decor channel."
         );
       }
 
@@ -770,4 +768,4 @@ client
       "Discord login failed:",
       error
     );
-  });
+  }); 
