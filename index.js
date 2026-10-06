@@ -46,25 +46,28 @@ const client = new Client({
 const TOKEN = process.env.DISCORD_BOT_TOKEN;
 
 // ==================================================
-// CHANNEL IDS
+// CHANNEL / ROLE IDS
 // ==================================================
 
 const WELCOME_CHANNEL_ID = "1530755165412524042";
 const GOODBYE_CHANNEL_ID = "1530761366489530480";
 
 const NITRO_CHANNEL_ID = "1555760937557041273";
-
 const DECOR_CHANNEL_ID = "1555769588229345280";
-
 const BOOSTIES_CHANNEL_ID = "1555769708928831489";
 
 const WELCOME_ROLE_ID = "1531039846871728248";
 
 // ==================================================
-// EMOJI
+// EMOJIS
 // ==================================================
 
-const WHITE_NITRO_EMOJI =
+// Same emoji used next to DECOR, BUNDLES and NITRO
+const SERVICE_EMOJI =
+  "<a:aBouncyDiscord:1557138733717782599>";
+
+// Boost emoji for 1 month / 3 months
+const BOOST_EMOJI =
   "<:white_nitro_boost:1557165507600326756>";
 
 // ==================================================
@@ -101,15 +104,14 @@ client.once(Events.ClientReady, (readyClient) => {
 });
 
 // ==================================================
-// WELCOME
+// WELCOME MESSAGE
 // ==================================================
 
 client.on(Events.GuildMemberAdd, async (member) => {
   try {
-    const channel =
-      member.guild.channels.cache.get(
-        WELCOME_CHANNEL_ID
-      );
+    const channel = member.guild.channels.cache.get(
+      WELCOME_CHANNEL_ID
+    );
 
     if (!channel) {
       console.log("Welcome channel not found.");
@@ -118,10 +120,9 @@ client.on(Events.GuildMemberAdd, async (member) => {
 
     // Give welcome role
     try {
-      const role =
-        member.guild.roles.cache.get(
-          WELCOME_ROLE_ID
-        );
+      const role = member.guild.roles.cache.get(
+        WELCOME_ROLE_ID
+      );
 
       if (role) {
         await member.roles.add(role);
@@ -167,15 +168,14 @@ client.on(Events.GuildMemberAdd, async (member) => {
 });
 
 // ==================================================
-// GOODBYE
+// GOODBYE MESSAGE
 // ==================================================
 
 client.on(Events.GuildMemberRemove, async (member) => {
   try {
-    const channel =
-      member.guild.channels.cache.get(
-        GOODBYE_CHANNEL_ID
-      );
+    const channel = member.guild.channels.cache.get(
+      GOODBYE_CHANNEL_ID
+    );
 
     if (!channel) {
       console.log("Goodbye channel not found.");
@@ -210,11 +210,10 @@ client.on(Events.GuildMemberRemove, async (member) => {
 });
 
 // ==================================================
-// NORMAL PAYMENT EMBED
+// PAYMENT EMBED
 // ==================================================
 
 async function sendPaymentEmbed(channel) {
-
   const embed = new EmbedBuilder()
     .setTitle("Payment Methods")
     .setDescription(
@@ -248,33 +247,29 @@ async function sendPaymentEmbed(channel) {
       text: ".gg/chuppys"
     });
 
-  const row1 =
-    new ActionRowBuilder().addComponents(
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setLabel("Cash App")
+      .setStyle(ButtonStyle.Link)
+      .setURL(CASHAPP_URL),
 
-      new ButtonBuilder()
-        .setLabel("Cash App")
-        .setStyle(ButtonStyle.Link)
-        .setURL(CASHAPP_URL),
+    new ButtonBuilder()
+      .setLabel("PayPal")
+      .setStyle(ButtonStyle.Link)
+      .setURL(PAYPAL_URL)
+  );
 
-      new ButtonBuilder()
-        .setLabel("PayPal")
-        .setStyle(ButtonStyle.Link)
-        .setURL(PAYPAL_URL)
-    );
+  const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("payment_apple")
+      .setLabel("Apple Pay")
+      .setStyle(ButtonStyle.Secondary),
 
-  const row2 =
-    new ActionRowBuilder().addComponents(
-
-      new ButtonBuilder()
-        .setCustomId("payment_apple")
-        .setLabel("Apple Pay")
-        .setStyle(ButtonStyle.Secondary),
-
-      new ButtonBuilder()
-        .setCustomId("payment_zelle")
-        .setLabel("Zelle")
-        .setStyle(ButtonStyle.Secondary)
-    );
+    new ButtonBuilder()
+      .setCustomId("payment_zelle")
+      .setLabel("Zelle")
+      .setStyle(ButtonStyle.Secondary)
+  );
 
   await channel.send({
     embeds: [embed],
@@ -283,104 +278,28 @@ async function sendPaymentEmbed(channel) {
 }
 
 // ==================================================
-// NITRO SERVICES
+// PAYMENT METHODS TEXT
 // ==================================================
+//
+// This is intentionally the SAME payment section
+// used in Nitro, Decor and Boosties.
+//
 
-async function sendNitroServices(channel) {
-
-  const embed = new EmbedBuilder()
-    .setDescription(
-      `# NITRO ${WHITE_NITRO_EMOJI}\n\n` +
-
-      `**1 Month + No War — $7.25**\n\n` +
-
-      `**1 Month + War — $9.25**\n\n` +
-
-      `**Payment Methods**\n` +
-      `> Apple Pay\n` +
-      `> Venmo\n` +
-      `> Cash App`
-    )
-    .setColor("#FFFFFF")
-    .setFooter({
-      text: ".gg/chuppys"
-    });
-
-  const messages =
-    await channel.messages.fetch({
-      limit: 50
-    });
-
-  const nitroMessages =
-    messages.filter(
-      (msg) =>
-        msg.author.id === client.user.id &&
-        msg.embeds.length > 0 &&
-        (
-          msg.embeds[0].description?.includes(
-            "# NITRO"
-          ) ||
-          msg.embeds[0].title === "Nitro" ||
-          msg.embeds[0].title === "N1tr0"
-        )
-    );
-
-  if (nitroMessages.size > 0) {
-
-    const existingMessage =
-      nitroMessages.first();
-
-    await existingMessage.edit({
-      embeds: [embed],
-      components: []
-    });
-
-    const duplicates =
-      nitroMessages.filter(
-        (msg) =>
-          msg.id !== existingMessage.id
-      );
-
-    for (const duplicate of duplicates.values()) {
-      try {
-        await duplicate.delete();
-      } catch (error) {
-        console.log(
-          "Could not delete duplicate Nitro message:",
-          error.message
-        );
-      }
-    }
-
-    console.log(
-      "Nitro message updated."
-    );
-
-    return existingMessage;
-  }
-
-  const newMessage =
-    await channel.send({
-      embeds: [embed],
-      components: []
-    });
-
-  console.log(
-    "New Nitro message created."
-  );
-
-  return newMessage;
-}
+const PAYMENT_METHODS_TEXT =
+  `**Payment Methods**\n` +
+  `> Apple Pay\n` +
+  `> Venmo\n` +
+  `> Cash App`;
 
 // ==================================================
-// DECOR & BUNDLES
+// DECOR MESSAGE
 // ==================================================
 
 async function sendDecorServices(channel) {
 
   const embed = new EmbedBuilder()
     .setDescription(
-      `# DECOR ${WHITE_NITRO_EMOJI}\n\n` +
+      `# DECOR ${SERVICE_EMOJI}\n\n` +
 
       `*original price • our price*\n\n` +
 
@@ -392,7 +311,7 @@ async function sendDecorServices(channel) {
       `$18.99-$20.00 • **$13.00**\n` +
       `$21.99-$23.99 • **$15.00**\n\n` +
 
-      `# BUNDLES ${WHITE_NITRO_EMOJI}\n\n` +
+      `# BUNDLES ${SERVICE_EMOJI}\n\n` +
 
       `*original price • our price*\n\n` +
 
@@ -404,194 +323,253 @@ async function sendDecorServices(channel) {
       `$21.99 • **$15.00**\n` +
       `$22.99 • **$16.00**\n\n` +
 
-      `**Payment Methods**\n` +
-      `> Apple Pay\n` +
-      `> Venmo\n` +
-      `> Cash App\n\n` +
+      `All legally purchased and will be sent the same day!\n\n` +
 
-      `All legally purchased and will be sent the same day!`
+      `${PAYMENT_METHODS_TEXT}\n\n` +
+
+      `**.gg/chuppys**`
     )
-    .setColor("#FFFFFF")
-    .setFooter({
-      text: ".gg/chuppys"
-    });
+    .setColor("#FFFFFF");
 
-  const messages =
-    await channel.messages.fetch({
-      limit: 50
-    });
-
-  const decorMessages =
-    messages.filter(
-      (msg) =>
-        msg.author.id === client.user.id &&
-        msg.embeds.length > 0 &&
-        (
-          msg.embeds[0].description?.includes(
-            "# DECOR"
-          ) ||
-          msg.embeds[0].description?.includes(
-            "DECOR & BUNDLES"
-          ) ||
-          msg.embeds[0].description?.includes(
-            "# BUNDLES"
-          )
-        )
-    );
-
-  if (decorMessages.size > 0) {
-
-    const existingMessage =
-      decorMessages.first();
-
-    await existingMessage.edit({
-      embeds: [embed],
-      components: []
-    });
-
-    const duplicates =
-      decorMessages.filter(
-        (msg) =>
-          msg.id !== existingMessage.id
-      );
-
-    for (const duplicate of duplicates.values()) {
-      try {
-        await duplicate.delete();
-      } catch (error) {
-        console.log(
-          "Could not delete duplicate Decor message:",
-          error.message
-        );
-      }
-    }
-
-    console.log(
-      "Decor/Bundles message updated."
-    );
-
-    return existingMessage;
-  }
-
-  const newMessage =
-    await channel.send({
-      embeds: [embed],
-      components: []
-    });
-
-  console.log(
-    "New Decor/Bundles message created."
+  await updateServiceMessage(
+    channel,
+    embed,
+    "DECOR"
   );
-
-  return newMessage;
 }
 
 // ==================================================
-// BOOSTIES
+// NITRO MESSAGE
 // ==================================================
 
-async function sendBoosties(channel) {
+async function sendNitroServices(channel) {
 
   const embed = new EmbedBuilder()
     .setDescription(
-      `# 1 MONTH ${WHITE_NITRO_EMOJI}\n\n` +
+      `# NITRO ${SERVICE_EMOJI}\n\n` +
 
-      `2 • $1.25\n` +
-      `4 • $2.50\n` +
-      `6 • $3.75\n` +
-      `8 • $4.00\n` +
-      `10 • $5.25\n` +
-      `12 • $6.50\n` +
-      `14 • $7.00\n` +
-      `16 • $8.50\n` +
-      `18 • $9.00\n` +
-      `20 • $9.50\n` +
-      `30 • $11.00\n\n` +
+      `**1 Month + No War — $7.25**\n\n` +
 
-      `# 3 MONTHS ${WHITE_NITRO_EMOJI}\n\n` +
+      `**1 Month + War — $9.25**\n\n` +
 
-      `2 • $2.00\n` +
-      `4 • $4.00\n` +
-      `6 • $6.00\n` +
-      `8 • $8.00\n` +
-      `10 • $10.00\n` +
-      `12 • $12.00\n` +
-      `14 • $14.00\n` +
-      `16 • $16.00\n` +
-      `18 • $18.00\n` +
-      `20 • $20.00\n` +
-      `30 • $27.00`
+      `${PAYMENT_METHODS_TEXT}\n\n` +
+
+      `**.gg/chuppys**`
     )
-    .setColor("#FFFFFF")
-    .setFooter({
-      text: ".gg/chuppys"
+    .setColor("#FFFFFF");
+
+  await updateServiceMessage(
+    channel,
+    embed,
+    "NITRO"
+  );
+}
+
+// ==================================================
+// BOOSTIES MESSAGE
+// ==================================================
+
+async function sendBoostiesServices(channel) {
+
+  const embed = new EmbedBuilder()
+    .setDescription(
+      `# 1 MONTH ${BOOST_EMOJI}\n\n` +
+
+      `${BOOST_EMOJI} **2 • $1.25**\n` +
+      `${BOOST_EMOJI} **4 • $2.50**\n` +
+      `${BOOST_EMOJI} **6 • $3.75**\n` +
+      `${BOOST_EMOJI} **8 • $4.00**\n` +
+      `${BOOST_EMOJI} **10 • $5.25**\n` +
+      `${BOOST_EMOJI} **12 • $6.50**\n` +
+      `${BOOST_EMOJI} **14 • $7.00**\n` +
+      `${BOOST_EMOJI} **16 • $8.50**\n` +
+      `${BOOST_EMOJI} **18 • $9.00**\n` +
+      `${BOOST_EMOJI} **20 • $9.50**\n` +
+      `${BOOST_EMOJI} **30 • $11.00**\n\n` +
+
+      `# 3 MONTHS ${BOOST_EMOJI}\n\n` +
+
+      `${BOOST_EMOJI} **2 • $2.00**\n` +
+      `${BOOST_EMOJI} **4 • $4.00**\n` +
+      `${BOOST_EMOJI} **6 • $6.00**\n` +
+      `${BOOST_EMOJI} **8 • $8.00**\n` +
+      `${BOOST_EMOJI} **10 • $10.00**\n` +
+      `${BOOST_EMOJI} **12 • $12.00**\n` +
+      `${BOOST_EMOJI} **14 • $14.00**\n` +
+      `${BOOST_EMOJI} **16 • $16.00**\n` +
+      `${BOOST_EMOJI} **18 • $18.00**\n` +
+      `${BOOST_EMOJI} **20 • $20.00**\n` +
+      `${BOOST_EMOJI} **30 • $27.00**\n\n` +
+
+      `${PAYMENT_METHODS_TEXT}\n\n` +
+
+      `**.gg/chuppys**`
+    )
+    .setColor("#FFFFFF");
+
+  await updateServiceMessage(
+    channel,
+    embed,
+    "BOOSTIES"
+  );
+}
+
+// ==================================================
+// UPDATE EXISTING SERVICE MESSAGE
+// ==================================================
+
+async function updateServiceMessage(
+  channel,
+  embed,
+  serviceName
+) {
+
+  try {
+
+    const messages = await channel.messages.fetch({
+      limit: 100
     });
 
-  const messages =
-    await channel.messages.fetch({
-      limit: 50
-    });
-
-  const boostiesMessages =
-    messages.filter(
+    // Find messages sent by this bot
+    const botMessages = messages.filter(
       (msg) =>
         msg.author.id === client.user.id &&
-        msg.embeds.length > 0 &&
-        (
-          msg.embeds[0].description?.includes(
-            "# 1 MONTH"
-          ) ||
-          msg.embeds[0].description?.includes(
-            "# 3 MONTHS"
-          )
-        )
+        msg.embeds.length > 0
     );
 
-  if (boostiesMessages.size > 0) {
+    // Find our service message
+    let existingMessage = null;
 
-    const existingMessage =
-      boostiesMessages.first();
+    for (const msg of botMessages.values()) {
 
-    await existingMessage.edit({
-      embeds: [embed],
-      components: []
-    });
+      const description =
+        msg.embeds[0].description || "";
 
-    const duplicates =
-      boostiesMessages.filter(
-        (msg) =>
-          msg.id !== existingMessage.id
-      );
+      if (
+        serviceName === "DECOR" &&
+        description.includes("# DECOR")
+      ) {
+        existingMessage = msg;
+        break;
+      }
 
-    for (const duplicate of duplicates.values()) {
-      try {
-        await duplicate.delete();
-      } catch (error) {
-        console.log(
-          "Could not delete duplicate Boosties message:",
-          error.message
-        );
+      if (
+        serviceName === "NITRO" &&
+        description.includes("# NITRO")
+      ) {
+        existingMessage = msg;
+        break;
+      }
+
+      if (
+        serviceName === "BOOSTIES" &&
+        (
+          description.includes("# 1 MONTH") ||
+          description.includes("# 3 MONTHS")
+        )
+      ) {
+        existingMessage = msg;
+        break;
       }
     }
 
-    console.log(
-      "Boosties message updated."
-    );
+    // ==================================================
+    // UPDATE EXISTING MESSAGE
+    // ==================================================
 
-    return existingMessage;
-  }
+    if (existingMessage) {
 
-  const newMessage =
-    await channel.send({
+      await existingMessage.edit({
+        content: "",
+        embeds: [embed],
+        components: []
+      });
+
+      console.log(
+        `${serviceName} message updated.`
+      );
+
+      // Delete duplicates
+      const duplicates = botMessages.filter(
+        (msg) => msg.id !== existingMessage.id
+      );
+
+      for (const duplicate of duplicates.values()) {
+
+        const description =
+          duplicate.embeds[0]?.description || "";
+
+        let isDuplicate = false;
+
+        if (
+          serviceName === "DECOR" &&
+          description.includes("# DECOR")
+        ) {
+          isDuplicate = true;
+        }
+
+        if (
+          serviceName === "NITRO" &&
+          description.includes("# NITRO")
+        ) {
+          isDuplicate = true;
+        }
+
+        if (
+          serviceName === "BOOSTIES" &&
+          (
+            description.includes("# 1 MONTH") ||
+            description.includes("# 3 MONTHS")
+          )
+        ) {
+          isDuplicate = true;
+        }
+
+        if (isDuplicate) {
+          try {
+            await duplicate.delete();
+
+            console.log(
+              `Deleted duplicate ${serviceName} message.`
+            );
+
+          } catch (error) {
+            console.log(
+              `Could not delete duplicate ${serviceName}:`,
+              error.message
+            );
+          }
+        }
+      }
+
+      return existingMessage;
+    }
+
+    // ==================================================
+    // CREATE NEW MESSAGE
+    // ==================================================
+
+    const newMessage = await channel.send({
+      content: "",
       embeds: [embed],
       components: []
     });
 
-  console.log(
-    "New Boosties message created."
-  );
+    console.log(
+      `New ${serviceName} message created.`
+    );
 
-  return newMessage;
+    return newMessage;
+
+  } catch (error) {
+
+    console.error(
+      `Error updating ${serviceName} message:`,
+      error
+    );
+
+    throw error;
+  }
 }
 
 // ==================================================
@@ -603,10 +581,10 @@ client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) return;
 
   const content =
-    message.content.toLowerCase().trim();
+    message.content.trim().toLowerCase();
 
   // ==================================================
-  // PAY
+  // !PAY / ,PAY
   // ==================================================
 
   if (
@@ -622,7 +600,7 @@ client.on(Events.MessageCreate, async (message) => {
   }
 
   // ==================================================
-  // NITRO
+  // !NITRO / ,NITRO
   // ==================================================
 
   if (
@@ -631,7 +609,6 @@ client.on(Events.MessageCreate, async (message) => {
   ) {
 
     if (
-      !message.member ||
       !message.member.permissions.has(
         "ManageGuild"
       )
@@ -641,30 +618,28 @@ client.on(Events.MessageCreate, async (message) => {
       );
     }
 
-    const nitroChannel =
+    const channel =
       message.guild.channels.cache.get(
         NITRO_CHANNEL_ID
       );
 
-    if (!nitroChannel) {
+    if (!channel) {
       return message.reply(
         "I couldn't find the Nitro Services channel."
       );
     }
 
-    await sendNitroServices(
-      nitroChannel
-    );
+    await sendNitroServices(channel);
 
     await message.reply(
-      "Nitro Services message updated successfully."
+      "Nitro message updated successfully."
     );
 
     return;
   }
 
   // ==================================================
-  // DECOR
+  // !DECOR / ,DECOR
   // ==================================================
 
   if (
@@ -673,7 +648,6 @@ client.on(Events.MessageCreate, async (message) => {
   ) {
 
     if (
-      !message.member ||
       !message.member.permissions.has(
         "ManageGuild"
       )
@@ -683,30 +657,28 @@ client.on(Events.MessageCreate, async (message) => {
       );
     }
 
-    const decorChannel =
+    const channel =
       message.guild.channels.cache.get(
         DECOR_CHANNEL_ID
       );
 
-    if (!decorChannel) {
+    if (!channel) {
       return message.reply(
         "I couldn't find the Decor channel."
       );
     }
 
-    await sendDecorServices(
-      decorChannel
-    );
+    await sendDecorServices(channel);
 
     await message.reply(
-      "Decor & Bundles message updated successfully."
+      "Decor message updated successfully."
     );
 
     return;
   }
 
   // ==================================================
-  // BOOSTIES
+  // !BOOSTIES / ,BOOSTIES
   // ==================================================
 
   if (
@@ -715,7 +687,6 @@ client.on(Events.MessageCreate, async (message) => {
   ) {
 
     if (
-      !message.member ||
       !message.member.permissions.has(
         "ManageGuild"
       )
@@ -725,21 +696,18 @@ client.on(Events.MessageCreate, async (message) => {
       );
     }
 
-    // ALWAYS USE THE BOOSTIES CHANNEL
-    const boostiesChannel =
+    const channel =
       message.guild.channels.cache.get(
         BOOSTIES_CHANNEL_ID
       );
 
-    if (!boostiesChannel) {
+    if (!channel) {
       return message.reply(
         "I couldn't find the Boosties channel."
       );
     }
 
-    await sendBoosties(
-      boostiesChannel
-    );
+    await sendBoostiesServices(channel);
 
     await message.reply(
       "Boosties message updated successfully."
@@ -850,16 +818,15 @@ client.on(
 
     try {
 
-      if (!interaction.isButton()) {
-        return;
-      }
+      if (!interaction.isButton()) return;
 
       // ==================================================
       // APPLE PAY
       // ==================================================
 
       if (
-        interaction.customId === "payment_apple"
+        interaction.customId ===
+        "payment_apple"
       ) {
 
         return interaction.reply({
@@ -874,7 +841,8 @@ client.on(
       // ==================================================
 
       if (
-        interaction.customId === "payment_zelle"
+        interaction.customId ===
+        "payment_zelle"
       ) {
 
         return interaction.reply({
@@ -922,6 +890,7 @@ client.on(
 process.on(
   "unhandledRejection",
   (error) => {
+
     console.error(
       "Unhandled promise rejection:",
       error
@@ -932,6 +901,7 @@ process.on(
 process.on(
   "uncaughtException",
   (error) => {
+
     console.error(
       "Uncaught exception:",
       error
@@ -971,5 +941,4 @@ client
       "Discord login failed:",
       error
     );
-
   });
