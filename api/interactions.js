@@ -9,10 +9,11 @@ export const config = {
 const SELF_ROLES = [
   "1531039846871728248", // Welcome Ping
   "1531084435716571137", // Announcement Ping
-  "1531104789075853472", // Streaming Ping
+  "1531104789075853472", // Services Ping
   "1531104886630907925", // Giveaway Ping
   "1531105107586973696", // Stock Ping
-  "1551276593425682543"  // Cash Out
+  "1551276593425682543", // Cash Out Ping
+  "1558913216602706011"  // Flash Sale Ping
 ];
 
 const SECOND_ROLES = [
