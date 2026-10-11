@@ -19,7 +19,8 @@ export default async function handler(req, res) {
     streaming: "1531104789075853472",
     giveaway: "1531104886630907925",
     stock: "1531105107586973696",
-    cashout: "1551276593425682543"
+    cashout: "1551276593425682543",
+    flashsale: "1558913216602706011"
   };
 
   const embed = {
