@@ -1,5 +1,5 @@
-
 import crypto from "crypto";
+import { waitUntil } from "@vercel/functions";
 
 export const config = {
   api: {
@@ -23,35 +23,65 @@ const ROLE_GROUPS = {
 
   chuppys_second_roles: {
     roles: [
-      "1531084465126772877",
-      "1531084550849954003",
-      "1531084611399188640"
+      "1531084465126772877", // Under 18
+      "1531084550849954003", // 18–20
+      "1531084611399188640"  // 21+
     ],
     success: "﹕𐔌・your age roles have been updated〃・꒱ 🤍"
   },
 
   chuppys_pronoun_roles: {
     roles: [
-      "1531084942241697854",
-      "1531086100867842190",
-      "1531101006451048448"
+      "1531084942241697854", // She / Her
+      "1531086100867842190", // He / Him
+      "1531101006451048448"  // They / Them
     ],
     success: "﹕𐔌・your pronouns have been updated〃・꒱ 🤍"
   }
 };
 
+// ==================================================
+// READ RAW DISCORD REQUEST
+// ==================================================
+
 async function getRawBody(req) {
   const chunks = [];
+  let total = 0;
 
   for await (const chunk of req) {
+    total += chunk.length;
+
+    if (total > 100000) {
+      throw new Error("Request body too large.");
+    }
+
     chunks.push(Buffer.from(chunk));
   }
 
   return Buffer.concat(chunks);
 }
 
-function verifyDiscordSignature(body, signature, timestamp, publicKeyHex) {
+// ==================================================
+// VERIFY DISCORD SIGNATURE
+// ==================================================
+
+function verifyDiscordSignature(
+  body,
+  signature,
+  timestamp,
+  publicKeyHex
+) {
   try {
+    if (
+      typeof signature !== "string" ||
+      typeof timestamp !== "string" ||
+      !/^[0-9a-f]+$/i.test(signature) ||
+      signature.length !== 128 ||
+      !/^[0-9a-f]{64}$/i.test(publicKeyHex)
+    ) {
+      return false;
+    }
+
     const key = crypto.createPublicKey({
       key: Buffer.concat([
         Buffer.from("302a300506032b6570032100", "hex"),
@@ -63,7 +93,10 @@ function verifyDiscordSignature(body, signature, timestamp, publicKeyHex) {
 
     return crypto.verify(
       null,
-      Buffer.from(timestamp + body),
+      Buffer.concat([
+        Buffer.from(timestamp, "utf8"),
+        body
+      ]),
       key,
       Buffer.from(signature, "hex")
     );
@@ -73,32 +106,59 @@ function verifyDiscordSignature(body, signature, timestamp, publicKeyHex) {
   }
 }
 
+// ==================================================
+// DISCORD API REQUEST
+// ==================================================
+
 async function discordFetch(url, options = {}) {
-  const response = await fetch(url, {
-    ...options,
-    signal: AbortSignal.timeout(10000)
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
 
-  const text = await response.text();
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
 
-  let data = null;
-  if (text) {
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = text;
+    const text = await response.text();
+
+    let data = null;
+
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
     }
-  }
 
-  return { response, data };
+    return {
+      ok: response.ok,
+      status: response.status,
+      data
+    };
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error("Discord API request timed out after 8 seconds.");
+    }
+
+    throw new Error(`Discord API network error: ${error.message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
+
+// ==================================================
+// UPDATE ORIGINAL DISCORD RESPONSE
+// ==================================================
 
 async function updateOriginalResponse(interaction, content) {
   const url =
     `https://discord.com/api/v10/webhooks/` +
-    `${interaction.application_id}/${interaction.token}/messages/@original`;
+    `${interaction.application_id}/` +
+    `${interaction.token}/messages/@original`;
 
-  const { response, data } = await discordFetch(url, {
+  const result = await discordFetch(url, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json"
@@ -106,17 +166,21 @@ async function updateOriginalResponse(interaction, content) {
     body: JSON.stringify({ content })
   });
 
-  if (!response.ok) {
-    console.error(
-      "Original response update failed:",
-      response.status,
-      data
+  if (!result.ok) {
+    throw new Error(
+      `Could not update Discord response: HTTP ${result.status} ` +
+      JSON.stringify(result.data)
     );
   }
 }
 
+// ==================================================
+// ASSIGN OR REMOVE SELECTED ROLES
+// ==================================================
+
 async function changeRoles(interaction, group) {
   const botToken = process.env.DISCORD_BOT_TOKEN;
+
   const guildId = interaction.guild_id;
   const userId =
     interaction.member?.user?.id ||
@@ -124,67 +188,90 @@ async function changeRoles(interaction, group) {
 
   if (!botToken || !guildId || !userId) {
     throw new Error(
-      "Missing DISCORD_BOT_TOKEN, server ID, or member ID."
+      "Missing bot token, server ID, or member ID."
     );
   }
 
-  const selectedRoles = new Set(
-    interaction.data.values || []
-  );
+  const values = interaction.data.values;
+  const selectedRoles = new Set(values);
 
-  // Reject role IDs that don't belong to this menu.
+  // Only accept role IDs belonging to this dropdown.
   for (const roleId of selectedRoles) {
     if (!group.roles.includes(roleId)) {
-      throw new Error("The menu contains an unknown role ID.");
+      throw new Error(`Unexpected role ID: ${roleId}`);
     }
   }
 
-  const results = await Promise.allSettled(
-    group.roles.map(async (roleId) => {
-      const shouldHaveRole = selectedRoles.has(roleId);
+  // Process one request at a time to simplify troubleshooting.
+  for (const roleId of group.roles) {
+    const shouldHaveRole = selectedRoles.has(roleId);
 
-      const url =
-        `https://discord.com/api/v10/guilds/${guildId}` +
-        `/members/${userId}/roles/${roleId}`;
+    const url =
+      `https://discord.com/api/v10/guilds/${guildId}` +
+      `/members/${userId}/roles/${roleId}`;
 
-      const { response, data } = await discordFetch(url, {
-        method: shouldHaveRole ? "PUT" : "DELETE",
-        headers: {
-          Authorization: `Bot ${botToken}`
-        }
-      });
+    console.log(
+      `Attempting to ${shouldHaveRole ? "assign" : "remove"} ` +
+      `role ${roleId} for member ${userId}`
+    );
 
-      if (!response.ok) {
-        console.error("Discord role update failed:", {
-          roleId,
-          status: response.status,
-          details: data
-        });
-
-        throw new Error(
-          `Role ${roleId} failed with HTTP ${response.status}: ` +
-          `${JSON.stringify(data)}`
-        );
+    const result = await discordFetch(url, {
+      method: shouldHaveRole ? "PUT" : "DELETE",
+      headers: {
+        Authorization: `Bot ${botToken}`
       }
+    });
 
-      console.log(
-        `${shouldHaveRole ? "Added" : "Removed"} role ${roleId} ` +
-        `for member ${userId}`
+    if (!result.ok) {
+      throw new Error(
+        `Role ${roleId} failed: HTTP ${result.status} ` +
+        JSON.stringify(result.data)
       );
-    })
-  );
+    }
 
-  const failures = results.filter(
-    result => result.status === "rejected"
-  );
-
-  if (failures.length > 0) {
-    throw new Error(
-      failures.map(result => result.reason?.message || "Unknown error")
-        .join(" | ")
+    console.log(
+      `Role ${roleId} ${shouldHaveRole ? "assigned" : "removed"} successfully.`
     );
   }
 }
+
+// ==================================================
+// PROCESS THE INTERACTION IN THE BACKGROUND
+// ==================================================
+
+async function processInteraction(interaction, group) {
+  try {
+    await changeRoles(interaction, group);
+
+    await updateOriginalResponse(
+      interaction,
+      group.success
+    );
+
+    console.log(
+      `Completed ${interaction.data.custom_id} for member ` +
+      `${interaction.member?.user?.id || interaction.user?.id}`
+    );
+  } catch (error) {
+    console.error("Role interaction failed:", error.message);
+
+    try {
+      await updateOriginalResponse(
+        interaction,
+        "﹕𐔌・role update failed. Please contact staff.〃・꒱ 🤍"
+      );
+    } catch (updateError) {
+      console.error(
+        "Could not display role error:",
+        updateError.message
+      );
+    }
+  }
+}
+
+// ==================================================
+// VERCEL HANDLER
+// ==================================================
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -195,9 +282,9 @@ export default async function handler(req, res) {
   let body;
 
   try {
-    body = (await getRawBody(req)).toString("utf8");
+    body = await getRawBody(req);
   } catch (error) {
-    console.error("Request body error:", error.message);
+    console.error("Could not read request:", error.message);
     return res.status(400).send("Invalid request body");
   }
 
@@ -206,18 +293,25 @@ export default async function handler(req, res) {
   const publicKey = process.env.DISCORD_PUBLIC_KEY;
 
   if (!signature || !timestamp || !publicKey) {
-    console.error("Missing Discord signature headers or public key.");
+    console.error("Discord signature settings are missing.");
     return res.status(401).send("Missing signature information");
   }
 
-  if (!verifyDiscordSignature(body, signature, timestamp, publicKey)) {
+  if (
+    !verifyDiscordSignature(
+      body,
+      signature,
+      timestamp,
+      publicKey
+    )
+  ) {
     return res.status(401).send("Invalid signature");
   }
 
   let interaction;
 
   try {
-    interaction = JSON.parse(body);
+    interaction = JSON.parse(body.toString("utf8"));
   } catch {
     return res.status(400).send("Invalid JSON");
   }
@@ -240,36 +334,25 @@ export default async function handler(req, res) {
     });
   }
 
-  // Acknowledge the selection immediately with an ephemeral response.
+  // Reject unexpected values before acknowledging the interaction.
+  if (
+    interaction.data.values.some(
+      roleId => !group.roles.includes(roleId)
+    )
+  ) {
+    return res.status(400).json({
+      error: "Invalid selected role"
+    });
+  }
+
+  // Acknowledge Discord immediately.
   res.status(200).json({
     type: 5,
     data: {
-      flags: 64,
-      content: "﹕𐔌・updating your roles...〃・꒱ 🤍"
+      flags: 64
     }
   });
 
-  // Finish the role updates and replace the temporary response.
-  try {
-    await changeRoles(interaction, group);
-
-    await updateOriginalResponse(
-      interaction,
-      group.success
-    );
-  } catch (error) {
-    console.error("Role interaction failed:", error.message);
-
-    try {
-      await updateOriginalResponse(
-        interaction,
-        "﹕𐔌・role update failed. Please contact staff.〃・꒱ 🤍"
-      );
-    } catch (updateError) {
-      console.error(
-        "Could not display role error:",
-        updateError.message
-      );
-    }
-  }
+  // Ask Vercel to keep the background task alive after the response.
+  waitUntil(processInteraction(interaction, group));
 }
