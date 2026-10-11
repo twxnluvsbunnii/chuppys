@@ -1,6 +1,9 @@
+
 export default async function handler(req, res) {
   if (req.method !== "GET") {
-    return res.status(405).json({ error: "Method not allowed" });
+    return res.status(405).json({
+      error: "Method not allowed"
+    });
   }
 
   const {
@@ -9,9 +12,26 @@ export default async function handler(req, res) {
     SEND_ROLES_KEY
   } = process.env;
 
-  if (req.query.key !== SEND_ROLES_KEY) {
-    return res.status(401).json({ error: "Unauthorized" });
+  // Check the secret key
+  if (
+    !SEND_ROLES_KEY ||
+    req.query.key !== SEND_ROLES_KEY
+  ) {
+    return res.status(401).json({
+      error: "Unauthorized"
+    });
   }
+
+  // Check required environment variables
+  if (!DISCORD_BOT_TOKEN || !ROLES_CHANNEL_ID) {
+    return res.status(500).json({
+      error: "Missing bot token or roles channel ID"
+    });
+  }
+
+  // ==========================================
+  // ROLE IDS
+  // ==========================================
 
   const roles = {
     welcome: "1531039846871728248",
@@ -23,8 +43,13 @@ export default async function handler(req, res) {
     flashsale: "1558913216602706011"
   };
 
+  // ==========================================
+  // EMBED
+  // ==========================================
+
   const embed = {
     title: "• pings // •",
+
     description:
       `<@&${roles.welcome}>\n\n` +
       `<@&${roles.announcement}>\n\n` +
@@ -32,12 +57,19 @@ export default async function handler(req, res) {
       `<@&${roles.giveaway}>\n\n` +
       `<@&${roles.stock}>\n\n` +
       `<@&${roles.cashout}>\n\n` +
+      `<@&${roles.flashsale}>\n\n` +
       `please choose your roles below ♡`,
+
     color: 0xffffff,
+
     footer: {
       text: ".gg/chuppys"
     }
   };
+
+  // ==========================================
+  // ROLE DROPDOWN MENU
+  // ==========================================
 
   const message = {
     embeds: [embed],
@@ -45,13 +77,18 @@ export default async function handler(req, res) {
     components: [
       {
         type: 1,
+
         components: [
           {
             type: 3,
+
             custom_id: "chuppys_self_roles",
+
             placeholder: "♡ choose your roles",
+
             min_values: 0,
-            max_values: 6,
+            max_values: 7,
+
             options: [
               {
                 label: "Welcome Ping",
@@ -62,7 +99,7 @@ export default async function handler(req, res) {
                 value: roles.announcement
               },
               {
-                label: "Streaming Ping",
+                label: "Services Ping",
                 value: roles.streaming
               },
               {
@@ -76,6 +113,10 @@ export default async function handler(req, res) {
               {
                 label: "Cash Out",
                 value: roles.cashout
+              },
+              {
+                label: "Flash Sale Ping",
+                value: roles.flashsale
               }
             ]
           }
@@ -84,26 +125,59 @@ export default async function handler(req, res) {
     ]
   };
 
-  const response = await fetch(
-    `https://discord.com/api/v10/channels/${ROLES_CHANNEL_ID}/messages`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bot ${DISCORD_BOT_TOKEN}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(message)
+  // ==========================================
+  // SEND MESSAGE TO DISCORD
+  // ==========================================
+
+  try {
+    const response = await fetch(
+      `https://discord.com/api/v10/channels/${ROLES_CHANNEL_ID}/messages`,
+      {
+        method: "POST",
+
+        headers: {
+          Authorization: `Bot ${DISCORD_BOT_TOKEN}`,
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify(message)
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error(
+        "Discord API error:",
+        response.status,
+        data
+      );
+
+      return res.status(response.status).json({
+        error: "Discord could not send the roles message",
+        details: data
+      });
     }
-  );
 
-  const data = await response.json();
+    console.log(
+      "Chuppys ping roles message sent:",
+      data.id
+    );
 
-  if (!response.ok) {
-    return res.status(response.status).json(data);
+    return res.status(200).json({
+      success: true,
+      message: "Ping roles message sent successfully",
+      messageId: data.id
+    });
+
+  } catch (error) {
+    console.error(
+      "Failed to send ping roles message:",
+      error
+    );
+
+    return res.status(500).json({
+      error: "Internal server error while sending roles"
+    });
   }
-
-  return res.status(200).json({
-    success: true,
-    messageId: data.id
-  });
 }
