@@ -1,4 +1,3 @@
-
 const http = require("http");
 
 const {
@@ -131,10 +130,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
 
       if (role) {
         await member.roles.add(role);
-
-        console.log(
-          `Gave welcome role to ${member.user.tag}`
-        );
+        console.log(`Gave welcome role to ${member.user.tag}`);
       }
     } catch (roleError) {
       console.log(
@@ -150,9 +146,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
         "We're happy to have you here. Make sure to read the rules and enjoy your time in the server!"
       )
       .setColor("#FFFFFF")
-      .setThumbnail(
-        member.user.displayAvatarURL()
-      )
+      .setThumbnail(member.user.displayAvatarURL())
       .setImage(WELCOME_IMAGE)
       .setFooter({
         text: member.guild.name
@@ -163,10 +157,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
       embeds: [embed]
     });
 
-    console.log(
-      `Welcome message sent for ${member.user.tag}`
-    );
-
+    console.log(`Welcome message sent for ${member.user.tag}`);
   } catch (error) {
     console.error("Welcome error:", error);
   }
@@ -194,9 +185,7 @@ client.on(Events.GuildMemberRemove, async (member) => {
         "We hope to see you again!"
       )
       .setColor("#FFFFFF")
-      .setThumbnail(
-        member.user.displayAvatarURL()
-      )
+      .setThumbnail(member.user.displayAvatarURL())
       .setFooter({
         text: member.guild.name
       });
@@ -205,10 +194,7 @@ client.on(Events.GuildMemberRemove, async (member) => {
       embeds: [embed]
     });
 
-    console.log(
-      `Goodbye message sent for ${member.user.tag}`
-    );
-
+    console.log(`Goodbye message sent for ${member.user.tag}`);
   } catch (error) {
     console.error("Goodbye error:", error);
   }
@@ -216,6 +202,7 @@ client.on(Events.GuildMemberRemove, async (member) => {
 
 // ==================================================
 // PAYMENT EMBED
+// Apple Pay and Zelle are hidden until clicked.
 // ==================================================
 
 async function sendPaymentEmbed(channel) {
@@ -229,22 +216,22 @@ async function sendPaymentEmbed(channel) {
       {
         name: "Cash App",
         value: `\`${CASHAPP_USERNAME}\``,
-        inline: true
+        inline: false
       },
       {
         name: "PayPal",
         value: `\`${PAYPAL_USERNAME}\``,
-        inline: true
+        inline: false
       },
       {
         name: "Apple Pay",
-        value: `\`${APPLE_PAY}\``,
-        inline: true
+        value: "||Click the button below to reveal privately||",
+        inline: false
       },
       {
         name: "Zelle",
-        value: `\`${ZELLE}\``,
-        inline: true
+        value: "||Click the button below to reveal privately||",
+        inline: false
       }
     )
     .setColor("#FFFFFF")
@@ -300,9 +287,7 @@ async function sendDecorServices(channel) {
   const embed = new EmbedBuilder()
     .setDescription(
       `# DECOR ${SERVICE_EMOJI}\n\n` +
-
       "*original price • our price*\n\n" +
-
       "$4.99-$5.99 • **$3.00**\n" +
       "$6.99-$8.99 • **$5.00**\n" +
       "$9.99-$11.99 • **$8.00**\n" +
@@ -310,11 +295,8 @@ async function sendDecorServices(channel) {
       "$15.99-$17.99 • **$10.00**\n" +
       "$18.99-$20.00 • **$13.00**\n" +
       "$21.99-$23.99 • **$15.00**\n\n" +
-
       `# BUNDLES ${SERVICE_EMOJI}\n\n` +
-
       "*original price • our price*\n\n" +
-
       "$8.99 • **$6.50**\n" +
       "$10.99 • **$7.50**\n" +
       "$12.99 • **$8.50**\n" +
@@ -322,11 +304,8 @@ async function sendDecorServices(channel) {
       "$17.99 • **$13.50**\n" +
       "$21.99 • **$15.00**\n" +
       "$22.99 • **$16.00**\n\n" +
-
       "All legally purchased and will be sent the same day!\n\n" +
-
       `${PAYMENT_METHODS_TEXT}\n\n` +
-
       "**.gg/chuppys**"
     )
     .setColor("#FFFFFF");
@@ -371,7 +350,6 @@ async function sendBoostiesServices(channel) {
       `${BOOST_EMOJI} **18 • $9.00**\n` +
       `${BOOST_EMOJI} **20 • $9.50**\n` +
       `${BOOST_EMOJI} **30 • $11.00**\n\n` +
-
       `# 3 MONTHS ${BOOST_EMOJI}\n\n` +
       `${BOOST_EMOJI} **2 • $2.00**\n` +
       `${BOOST_EMOJI} **4 • $4.00**\n` +
@@ -384,7 +362,6 @@ async function sendBoostiesServices(channel) {
       `${BOOST_EMOJI} **18 • $18.00**\n` +
       `${BOOST_EMOJI} **20 • $20.00**\n` +
       `${BOOST_EMOJI} **30 • $27.00**\n\n` +
-
       `${PAYMENT_METHODS_TEXT}\n\n` +
       "**.gg/chuppys**"
     )
@@ -449,48 +426,29 @@ async function updateServiceMessage(channel, embed, serviceName) {
 
       console.log(`${serviceName} message updated.`);
 
-      const duplicates = botMessages.filter(
-        (msg) => msg.id !== existingMessage.id
-      );
+      for (const duplicate of botMessages.values()) {
+        if (duplicate.id === existingMessage.id) continue;
 
-      for (const duplicate of duplicates.values()) {
         const description = duplicate.embeds[0]?.description || "";
-        let isDuplicate = false;
 
-        if (
-          serviceName === "DECOR" &&
-          description.includes("# DECOR")
-        ) {
-          isDuplicate = true;
-        }
-
-        if (
-          serviceName === "NITRO" &&
-          description.includes("# NITRO")
-        ) {
-          isDuplicate = true;
-        }
-
-        if (
-          serviceName === "BOOSTIES" &&
-          (
-            description.includes("# 1 MONTH") ||
-            description.includes("# 3 MONTHS")
-          )
-        ) {
-          isDuplicate = true;
-        }
+        const isDuplicate =
+          (serviceName === "DECOR" &&
+            description.includes("# DECOR")) ||
+          (serviceName === "NITRO" &&
+            description.includes("# NITRO")) ||
+          (serviceName === "BOOSTIES" &&
+            (
+              description.includes("# 1 MONTH") ||
+              description.includes("# 3 MONTHS")
+            ));
 
         if (isDuplicate) {
-          try {
-            await duplicate.delete();
-            console.log(`Deleted duplicate ${serviceName} message.`);
-          } catch (error) {
+          await duplicate.delete().catch((error) => {
             console.log(
               `Could not delete duplicate ${serviceName}:`,
               error.message
             );
-          }
+          });
         }
       }
 
@@ -498,7 +456,6 @@ async function updateServiceMessage(channel, embed, serviceName) {
     }
 
     const newMessage = await channel.send({
-      content: "",
       embeds: [embed],
       components: []
     });
@@ -514,7 +471,6 @@ async function updateServiceMessage(channel, embed, serviceName) {
 
 // ==================================================
 // SELLERS EMBED
-// LARGE, BOLD HEADER + CLICKABLE PROFILE NAMES
 // ==================================================
 
 function makeSellersEmbed() {
@@ -525,7 +481,7 @@ function makeSellersEmbed() {
         "# .gg/chuppys sellers",
         "",
         `${SELLER_EMOJI} **<@1192248188409749684>**`,
-        "Role: services seller",
+        "Role: Services Seller",
         "Limit: No limit",
         "ID: 1192248188409749684",
         "",
@@ -562,14 +518,15 @@ function makeSellersEmbed() {
         `${SELLER_EMOJI} **<@1269188505935024141>**`,
         "Role: seller",
         "Limit: 250",
-        "ID: 1269188505935024141"
+        "ID: 1269188505935024141",
+        "",
+        "-# my sellers are prohibited from dm’ing you, if for whatever reason they do please make a support ticket."
       ].join("\n")
     );
 }
 
 // ==================================================
 // STAFF EMBED
-// MATCHING LARGE, BOLD HEADER + CLICKABLE NAMES
 // ==================================================
 
 function makeStaffEmbed() {
@@ -631,7 +588,7 @@ client.on(Events.MessageCreate, async (message) => {
   const content = message.content.trim().toLowerCase();
 
   try {
-    // !PAY / ,PAY
+    // PAYMENT COMMAND
 
     if (content === "!pay" || content === ",pay") {
       await sendPaymentEmbed(message.channel);
@@ -661,7 +618,7 @@ client.on(Events.MessageCreate, async (message) => {
       }
     }
 
-    // !NITRO / ,NITRO
+    // NITRO COMMAND
 
     if (content === "!nitro" || content === ",nitro") {
       const channel = message.guild.channels.cache.get(
@@ -680,7 +637,7 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
-    // !DECOR / ,DECOR
+    // DECOR COMMAND
 
     if (content === "!decor" || content === ",decor") {
       const channel = message.guild.channels.cache.get(
@@ -699,7 +656,7 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
-    // !BOOSTIES / ,BOOSTIES
+    // BOOSTIES COMMAND
 
     if (content === "!boosties" || content === ",boosties") {
       const channel = message.guild.channels.cache.get(
@@ -718,7 +675,7 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
-    // !SELLERS / ,SELLERS
+    // SELLERS COMMAND
 
     if (content === "!sellers" || content === ",sellers") {
       await sendEmbedToChannel(
@@ -732,7 +689,7 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
-    // !STAFF / ,STAFF
+    // STAFF COMMAND
 
     if (content === "!staff" || content === ",staff") {
       await sendEmbedToChannel(
@@ -833,25 +790,21 @@ client.on(Events.MessageCreate, async (message) => {
 // ==================================================
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  if (!interaction.isButton()) return;
+
   try {
-    if (!interaction.isButton()) return;
-
-    // APPLE PAY
-
     if (interaction.customId === "payment_apple") {
       await interaction.reply({
-        content: `**Apple Pay:** \`${APPLE_PAY}\``,
+        content: `**Apple Pay:** ||${APPLE_PAY}||`,
         ephemeral: true
       });
 
       return;
     }
 
-    // ZELLE
-
     if (interaction.customId === "payment_zelle") {
       await interaction.reply({
-        content: `**Zelle:** \`${ZELLE}\``,
+        content: `**Zelle:** ||${ZELLE}||`,
         ephemeral: true
       });
 
@@ -859,20 +812,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
   } catch (error) {
-    console.error("Interaction error:", error);
+    console.error("Payment button error:", error);
 
-    try {
-      if (interaction.deferred) {
-        await interaction.editReply({
-          content: "Something went wrong while processing this."
-        });
-      } else if (!interaction.replied) {
-        await interaction.reply({
-          content: "Something went wrong while processing this.",
-          ephemeral: true
-        });
-      }
-    } catch {}
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        content: "I couldn't reveal the payment number. Please try again.",
+        ephemeral: true
+      }).catch(() => {});
+    }
   }
 });
 
