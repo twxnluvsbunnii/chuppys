@@ -1,3 +1,4 @@
+
 const http = require("http");
 
 const {
@@ -145,7 +146,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
         `Welcome ${member}!\n\n` +
         "We're happy to have you here. Make sure to read the rules and enjoy your time in the server!"
       )
-      .setColor("#FFFFFF")
+      .setColor(0xFFFFFF)
       .setThumbnail(member.user.displayAvatarURL())
       .setImage(WELCOME_IMAGE)
       .setFooter({
@@ -184,7 +185,7 @@ client.on(Events.GuildMemberRemove, async (member) => {
         `**${member.user.username}** has left **${member.guild.name}**.\n\n` +
         "We hope to see you again!"
       )
-      .setColor("#FFFFFF")
+      .setColor(0xFFFFFF)
       .setThumbnail(member.user.displayAvatarURL())
       .setFooter({
         text: member.guild.name
@@ -202,7 +203,8 @@ client.on(Events.GuildMemberRemove, async (member) => {
 
 // ==================================================
 // PAYMENT EMBED
-// Apple Pay and Zelle are hidden until clicked.
+// ALL PAYMENT INFORMATION IS VISIBLE
+// ONLY ONE PAYMENT MESSAGE IS MAINTAINED
 // ==================================================
 
 async function sendPaymentEmbed(channel) {
@@ -225,21 +227,21 @@ async function sendPaymentEmbed(channel) {
       },
       {
         name: "Apple Pay",
-        value: "||Click the button below to reveal privately||",
+        value: `\`${APPLE_PAY}\``,
         inline: false
       },
       {
         name: "Zelle",
-        value: "||Click the button below to reveal privately||",
+        value: `\`${ZELLE}\``,
         inline: false
       }
     )
-    .setColor("#FFFFFF")
+    .setColor(0xFFFFFF)
     .setFooter({
       text: ".gg/chuppys"
     });
 
-  const row1 = new ActionRowBuilder().addComponents(
+  const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setLabel("Cash App")
       .setStyle(ButtonStyle.Link)
@@ -251,26 +253,57 @@ async function sendPaymentEmbed(channel) {
       .setURL(PAYPAL_URL)
   );
 
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("payment_apple")
-      .setLabel("Apple Pay")
-      .setStyle(ButtonStyle.Secondary),
+  const payload = {
+    embeds: [embed],
+    components: [row]
+  };
 
-    new ButtonBuilder()
-      .setCustomId("payment_zelle")
-      .setLabel("Zelle")
-      .setStyle(ButtonStyle.Secondary)
+  // Find existing payment embeds in this channel.
+  const messages = await channel.messages.fetch({
+    limit: 100
+  });
+
+  const paymentMessages = messages.filter(
+    (msg) =>
+      msg.author.id === client.user.id &&
+      msg.embeds.some(
+        (e) => e.title === "Payment Methods"
+      )
   );
 
-  await channel.send({
-    embeds: [embed],
-    components: [row1, row2]
-  });
+  const existingMessage = paymentMessages.first();
+
+  if (existingMessage) {
+    // Update the existing message, including its components.
+    await existingMessage.edit(payload);
+
+    console.log("Existing payment message updated.");
+
+    // Delete extra copies found in the fetched messages.
+    for (const duplicate of paymentMessages.values()) {
+      if (duplicate.id === existingMessage.id) continue;
+
+      await duplicate.delete().catch((error) => {
+        console.log(
+          "Could not delete duplicate payment message:",
+          error.message
+        );
+      });
+    }
+
+    return existingMessage;
+  }
+
+  // Create a payment message only if none exists.
+  const newMessage = await channel.send(payload);
+
+  console.log("New payment message created.");
+
+  return newMessage;
 }
 
 // ==================================================
-// PAYMENT METHODS TEXT
+// PAYMENT METHODS TEXT FOR SERVICE EMBEDS
 // ==================================================
 
 const PAYMENT_METHODS_TEXT =
@@ -308,7 +341,7 @@ async function sendDecorServices(channel) {
       `${PAYMENT_METHODS_TEXT}\n\n` +
       "**.gg/chuppys**"
     )
-    .setColor("#FFFFFF");
+    .setColor(0xFFFFFF);
 
   await updateServiceMessage(channel, embed, "DECOR");
 }
@@ -326,7 +359,7 @@ async function sendNitroServices(channel) {
       `${PAYMENT_METHODS_TEXT}\n\n` +
       "**.gg/chuppys**"
     )
-    .setColor("#FFFFFF");
+    .setColor(0xFFFFFF);
 
   await updateServiceMessage(channel, embed, "NITRO");
 }
@@ -365,7 +398,7 @@ async function sendBoostiesServices(channel) {
       `${PAYMENT_METHODS_TEXT}\n\n` +
       "**.gg/chuppys**"
     )
-    .setColor("#FFFFFF");
+    .setColor(0xFFFFFF);
 
   await updateServiceMessage(channel, embed, "BOOSTIES");
 }
@@ -376,7 +409,9 @@ async function sendBoostiesServices(channel) {
 
 async function updateServiceMessage(channel, embed, serviceName) {
   try {
-    const messages = await channel.messages.fetch({ limit: 100 });
+    const messages = await channel.messages.fetch({
+      limit: 100
+    });
 
     const botMessages = messages.filter(
       (msg) =>
@@ -429,7 +464,8 @@ async function updateServiceMessage(channel, embed, serviceName) {
       for (const duplicate of botMessages.values()) {
         if (duplicate.id === existingMessage.id) continue;
 
-        const description = duplicate.embeds[0]?.description || "";
+        const description =
+          duplicate.embeds[0]?.description || "";
 
         const isDuplicate =
           (serviceName === "DECOR" &&
@@ -461,10 +497,13 @@ async function updateServiceMessage(channel, embed, serviceName) {
     });
 
     console.log(`New ${serviceName} message created.`);
-    return newMessage;
 
+    return newMessage;
   } catch (error) {
-    console.error(`Error updating ${serviceName} message:`, error);
+    console.error(
+      `Error updating ${serviceName} message:`,
+      error
+    );
     throw error;
   }
 }
@@ -475,7 +514,7 @@ async function updateServiceMessage(channel, embed, serviceName) {
 
 function makeSellersEmbed() {
   return new EmbedBuilder()
-    .setColor("#FFFFFF")
+    .setColor(0xFFFFFF)
     .setDescription(
       [
         "# .gg/chuppys sellers",
@@ -531,7 +570,7 @@ function makeSellersEmbed() {
 
 function makeStaffEmbed() {
   return new EmbedBuilder()
-    .setColor("#FFFFFF")
+    .setColor(0xFFFFFF)
     .setDescription(
       [
         "# .gg/chuppys staff",
@@ -588,9 +627,13 @@ client.on(Events.MessageCreate, async (message) => {
   const content = message.content.trim().toLowerCase();
 
   try {
-    // PAYMENT COMMAND
+    // PAYMENT COMMANDS
 
-    if (content === "!pay" || content === ",pay") {
+    if (
+      content === "!pay" ||
+      content === ",pay" ||
+      content === "!testpay"
+    ) {
       await sendPaymentEmbed(message.channel);
       return;
     }
@@ -721,7 +764,7 @@ client.on(Events.MessageCreate, async (message) => {
           `Welcome ${message.author}!\n\n` +
           "We're happy to have you here. Make sure to read the rules and enjoy your time in the server!"
         )
-        .setColor("#FFFFFF")
+        .setColor(0xFFFFFF)
         .setThumbnail(message.author.displayAvatarURL())
         .setImage(WELCOME_IMAGE)
         .setFooter({
@@ -754,7 +797,7 @@ client.on(Events.MessageCreate, async (message) => {
           `**${message.author.username}** has left **${message.guild.name}**.\n\n` +
           "We hope to see you again!"
         )
-        .setColor("#FFFFFF")
+        .setColor(0xFFFFFF)
         .setThumbnail(message.author.displayAvatarURL())
         .setFooter({
           text: message.guild.name
@@ -767,13 +810,6 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
-    // TEST PAYMENT
-
-    if (content === "!testpay") {
-      await sendPaymentEmbed(message.channel);
-      return;
-    }
-
   } catch (error) {
     console.error("Message command error:", error);
 
@@ -781,44 +817,6 @@ client.on(Events.MessageCreate, async (message) => {
       await message.reply(
         `Something went wrong: ${error.message}`
       ).catch(() => {});
-    }
-  }
-});
-
-// ==================================================
-// BUTTON INTERACTIONS
-// ==================================================
-
-client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.isButton()) return;
-
-  try {
-    if (interaction.customId === "payment_apple") {
-      await interaction.reply({
-        content: `**Apple Pay:** ||${APPLE_PAY}||`,
-        ephemeral: true
-      });
-
-      return;
-    }
-
-    if (interaction.customId === "payment_zelle") {
-      await interaction.reply({
-        content: `**Zelle:** ||${ZELLE}||`,
-        ephemeral: true
-      });
-
-      return;
-    }
-
-  } catch (error) {
-    console.error("Payment button error:", error);
-
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({
-        content: "I couldn't reveal the payment number. Please try again.",
-        ephemeral: true
-      }).catch(() => {});
     }
   }
 });
