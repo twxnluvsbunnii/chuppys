@@ -21,7 +21,7 @@ const PORT = process.env.PORT || 3000;
 http.createServer((req, res) => {
   res.writeHead(200, { "Content-Type": "text/plain" });
   res.end("Chuppys bot is running!");
-}).listen(PORT, () => {
+}).listen(PORT, "0.0.0.0", () => {
   console.log(`Web server running on port ${PORT}`);
 });
 
@@ -55,6 +55,10 @@ const SELLERS_CHANNEL_ID = "1551713598181605496";
 const STAFF_CHANNEL_ID = "1561013244905132122";
 
 const WELCOME_ROLE_ID = "1531039846871728248";
+
+// AUTOMATIC REACTION
+const CHUPPY_TY_CHANNEL_ID = "1530811494168657980";
+const CHUPPY_TY_EMOJI = "<:chuppyty:1561084366116098148>";
 
 // ==================================================
 // EMOJIS
@@ -516,11 +520,22 @@ async function sendEmbedToChannel(guild, channelId, embed, label) {
 }
 
 // ==================================================
-// MESSAGE COMMANDS
+// MESSAGE COMMANDS + AUTOMATIC REACTION
 // ==================================================
 
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot || !message.guild) return;
+
+  // AUTOMATIC CHUPPY TY REACTION
+  // Reacts to every new non-bot message in the selected channel.
+  if (message.channel.id === CHUPPY_TY_CHANNEL_ID) {
+    try {
+      await message.react(CHUPPY_TY_EMOJI);
+      console.log(`Added Chuppy TY reaction to message ${message.id}`);
+    } catch (error) {
+      console.error("Could not add Chuppy TY reaction:", error.message);
+    }
+  }
 
   const content = message.content.trim().toLowerCase();
 
