@@ -19,10 +19,7 @@ const {
 const PORT = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
-  res.writeHead(200, {
-    "Content-Type": "text/plain"
-  });
-
+  res.writeHead(200, { "Content-Type": "text/plain" });
   res.end("Chuppys bot is running!");
 }).listen(PORT, () => {
   console.log(`Web server running on port ${PORT}`);
@@ -40,10 +37,6 @@ const client = new Client({
     GatewayIntentBits.MessageContent
   ]
 });
-
-// ==================================================
-// TOKEN
-// ==================================================
 
 const TOKEN = process.env.DISCORD_BOT_TOKEN;
 
@@ -67,14 +60,9 @@ const WELCOME_ROLE_ID = "1531039846871728248";
 // EMOJIS
 // ==================================================
 
-const SERVICE_EMOJI =
-  "<a:aBouncyDiscord:1557138733717782599>";
-
-const BOOST_EMOJI =
-  "<:white_nitro_boost:1557165507600326756>";
-
-const SELLER_EMOJI =
-  "<:chuppyseller:1560283615445778503>";
+const SERVICE_EMOJI = "<a:aBouncyDiscord:1557138733717782599>";
+const BOOST_EMOJI = "<:white_nitro_boost:1557165507600326756>";
+const SELLER_EMOJI = "<:chuppyseller:1560283615445778503>";
 
 // ==================================================
 // WELCOME IMAGE
@@ -115,29 +103,16 @@ client.once(Events.ClientReady, (readyClient) => {
 
 client.on(Events.GuildMemberAdd, async (member) => {
   try {
-    const channel = member.guild.channels.cache.get(
+    const channel = await member.guild.channels.fetch(
       WELCOME_CHANNEL_ID
     );
 
-    if (!channel) {
-      console.log("Welcome channel not found.");
-      return;
-    }
+    if (!channel || !channel.isTextBased()) return;
 
     try {
-      const role = member.guild.roles.cache.get(
-        WELCOME_ROLE_ID
-      );
-
-      if (role) {
-        await member.roles.add(role);
-        console.log(`Gave welcome role to ${member.user.tag}`);
-      }
-    } catch (roleError) {
-      console.log(
-        "Could not give welcome role:",
-        roleError.message
-      );
+      await member.roles.add(WELCOME_ROLE_ID);
+    } catch (error) {
+      console.error("Could not assign welcome role:", error.message);
     }
 
     const embed = new EmbedBuilder()
@@ -149,9 +124,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
       .setColor(0xFFFFFF)
       .setThumbnail(member.user.displayAvatarURL())
       .setImage(WELCOME_IMAGE)
-      .setFooter({
-        text: member.guild.name
-      });
+      .setFooter({ text: member.guild.name });
 
     await channel.send({
       content: `${member}`,
@@ -170,14 +143,11 @@ client.on(Events.GuildMemberAdd, async (member) => {
 
 client.on(Events.GuildMemberRemove, async (member) => {
   try {
-    const channel = member.guild.channels.cache.get(
+    const channel = await member.guild.channels.fetch(
       GOODBYE_CHANNEL_ID
     );
 
-    if (!channel) {
-      console.log("Goodbye channel not found.");
-      return;
-    }
+    if (!channel || !channel.isTextBased()) return;
 
     const embed = new EmbedBuilder()
       .setTitle("Goodbye 🤍")
@@ -187,13 +157,9 @@ client.on(Events.GuildMemberRemove, async (member) => {
       )
       .setColor(0xFFFFFF)
       .setThumbnail(member.user.displayAvatarURL())
-      .setFooter({
-        text: member.guild.name
-      });
+      .setFooter({ text: member.guild.name });
 
-    await channel.send({
-      embeds: [embed]
-    });
+    await channel.send({ embeds: [embed] });
 
     console.log(`Goodbye message sent for ${member.user.tag}`);
   } catch (error) {
@@ -202,9 +168,7 @@ client.on(Events.GuildMemberRemove, async (member) => {
 });
 
 // ==================================================
-// PAYMENT EMBED
-// ALL PAYMENT INFORMATION IS VISIBLE
-// ONLY ONE PAYMENT MESSAGE IS MAINTAINED
+// PAYMENT EMBED — ALL NUMBERS VISIBLE
 // ==================================================
 
 async function sendPaymentEmbed(channel) {
@@ -237,9 +201,7 @@ async function sendPaymentEmbed(channel) {
       }
     )
     .setColor(0xFFFFFF)
-    .setFooter({
-      text: ".gg/chuppys"
-    });
+    .setFooter({ text: ".gg/chuppys" });
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -258,52 +220,36 @@ async function sendPaymentEmbed(channel) {
     components: [row]
   };
 
-  // Find existing payment embeds in this channel.
-  const messages = await channel.messages.fetch({
-    limit: 100
-  });
+  const messages = await channel.messages.fetch({ limit: 100 });
 
   const paymentMessages = messages.filter(
     (msg) =>
       msg.author.id === client.user.id &&
-      msg.embeds.some(
-        (e) => e.title === "Payment Methods"
-      )
+      msg.embeds.some((e) => e.title === "Payment Methods")
   );
 
   const existingMessage = paymentMessages.first();
 
   if (existingMessage) {
-    // Update the existing message, including its components.
     await existingMessage.edit(payload);
 
-    console.log("Existing payment message updated.");
-
-    // Delete extra copies found in the fetched messages.
     for (const duplicate of paymentMessages.values()) {
-      if (duplicate.id === existingMessage.id) continue;
-
-      await duplicate.delete().catch((error) => {
-        console.log(
-          "Could not delete duplicate payment message:",
-          error.message
-        );
-      });
+      if (duplicate.id !== existingMessage.id) {
+        await duplicate.delete().catch(() => {});
+      }
     }
 
+    console.log("Existing payment message updated.");
     return existingMessage;
   }
 
-  // Create a payment message only if none exists.
   const newMessage = await channel.send(payload);
-
   console.log("New payment message created.");
-
   return newMessage;
 }
 
 // ==================================================
-// PAYMENT METHODS TEXT FOR SERVICE EMBEDS
+// SERVICE PAYMENT TEXT
 // ==================================================
 
 const PAYMENT_METHODS_TEXT =
@@ -311,6 +257,67 @@ const PAYMENT_METHODS_TEXT =
   "> Apple Pay\n" +
   "> Venmo\n" +
   "> Cash App";
+
+// ==================================================
+// UPDATE SERVICE MESSAGE
+// ==================================================
+
+async function updateServiceMessage(channel, embed, serviceName) {
+  try {
+    const messages = await channel.messages.fetch({ limit: 100 });
+
+    const matching = messages.filter((msg) => {
+      if (msg.author.id !== client.user.id || !msg.embeds.length) {
+        return false;
+      }
+
+      const description = msg.embeds[0].description || "";
+
+      if (serviceName === "DECOR") {
+        return description.includes("# DECOR");
+      }
+
+      if (serviceName === "NITRO") {
+        return description.includes("# NITRO");
+      }
+
+      if (serviceName === "BOOSTIES") {
+        return (
+          description.includes("# 1 MONTH") ||
+          description.includes("# 3 MONTHS")
+        );
+      }
+
+      return false;
+    });
+
+    const existing = matching.first();
+
+    if (existing) {
+      await existing.edit({
+        content: "",
+        embeds: [embed],
+        components: []
+      });
+
+      for (const duplicate of matching.values()) {
+        if (duplicate.id !== existing.id) {
+          await duplicate.delete().catch(() => {});
+        }
+      }
+
+      console.log(`${serviceName} message updated.`);
+      return existing;
+    }
+
+    const sent = await channel.send({ embeds: [embed] });
+    console.log(`${serviceName} message created.`);
+    return sent;
+  } catch (error) {
+    console.error(`${serviceName} message error:`, error);
+    throw error;
+  }
+}
 
 // ==================================================
 // DECOR MESSAGE
@@ -404,111 +411,6 @@ async function sendBoostiesServices(channel) {
 }
 
 // ==================================================
-// UPDATE EXISTING SERVICE MESSAGE
-// ==================================================
-
-async function updateServiceMessage(channel, embed, serviceName) {
-  try {
-    const messages = await channel.messages.fetch({
-      limit: 100
-    });
-
-    const botMessages = messages.filter(
-      (msg) =>
-        msg.author.id === client.user.id &&
-        msg.embeds.length > 0
-    );
-
-    let existingMessage = null;
-
-    for (const msg of botMessages.values()) {
-      const description = msg.embeds[0].description || "";
-
-      if (
-        serviceName === "DECOR" &&
-        description.includes("# DECOR")
-      ) {
-        existingMessage = msg;
-        break;
-      }
-
-      if (
-        serviceName === "NITRO" &&
-        description.includes("# NITRO")
-      ) {
-        existingMessage = msg;
-        break;
-      }
-
-      if (
-        serviceName === "BOOSTIES" &&
-        (
-          description.includes("# 1 MONTH") ||
-          description.includes("# 3 MONTHS")
-        )
-      ) {
-        existingMessage = msg;
-        break;
-      }
-    }
-
-    if (existingMessage) {
-      await existingMessage.edit({
-        content: "",
-        embeds: [embed],
-        components: []
-      });
-
-      console.log(`${serviceName} message updated.`);
-
-      for (const duplicate of botMessages.values()) {
-        if (duplicate.id === existingMessage.id) continue;
-
-        const description =
-          duplicate.embeds[0]?.description || "";
-
-        const isDuplicate =
-          (serviceName === "DECOR" &&
-            description.includes("# DECOR")) ||
-          (serviceName === "NITRO" &&
-            description.includes("# NITRO")) ||
-          (serviceName === "BOOSTIES" &&
-            (
-              description.includes("# 1 MONTH") ||
-              description.includes("# 3 MONTHS")
-            ));
-
-        if (isDuplicate) {
-          await duplicate.delete().catch((error) => {
-            console.log(
-              `Could not delete duplicate ${serviceName}:`,
-              error.message
-            );
-          });
-        }
-      }
-
-      return existingMessage;
-    }
-
-    const newMessage = await channel.send({
-      embeds: [embed],
-      components: []
-    });
-
-    console.log(`New ${serviceName} message created.`);
-
-    return newMessage;
-  } catch (error) {
-    console.error(
-      `Error updating ${serviceName} message:`,
-      error
-    );
-    throw error;
-  }
-}
-
-// ==================================================
 // SELLERS EMBED
 // ==================================================
 
@@ -597,23 +499,19 @@ function makeStaffEmbed() {
 }
 
 // ==================================================
-// SEND EMBED TO DESTINATION CHANNEL
+// SEND EMBED TO A DESTINATION CHANNEL
 // ==================================================
 
 async function sendEmbedToChannel(guild, channelId, embed, label) {
-  const channel = guild.channels.cache.get(channelId);
+  const channel = await guild.channels.fetch(channelId);
 
   if (!channel || !channel.isTextBased()) {
-    throw new Error(
-      `${label} destination channel was not found or is not a text channel.`
-    );
+    throw new Error(`${label} channel not found or is not a text channel.`);
   }
 
   await channel.send({
     embeds: [embed],
-    allowedMentions: {
-      parse: []
-    }
+    allowedMentions: { parse: [] }
   });
 }
 
@@ -627,19 +525,13 @@ client.on(Events.MessageCreate, async (message) => {
   const content = message.content.trim().toLowerCase();
 
   try {
-    // PAYMENT COMMANDS
-
-    if (
-      content === "!pay" ||
-      content === ",pay" ||
-      content === "!testpay"
-    ) {
+    // PAYMENT
+    if (["!pay", ",pay", "!testpay"].includes(content)) {
       await sendPaymentEmbed(message.channel);
       return;
     }
 
     // ADMIN COMMAND PERMISSION CHECK
-
     const adminCommands = [
       "!nitro", ",nitro",
       "!decor", ",decor",
@@ -649,11 +541,7 @@ client.on(Events.MessageCreate, async (message) => {
     ];
 
     if (adminCommands.includes(content)) {
-      if (
-        !message.member.permissions.has(
-          PermissionsBitField.Flags.ManageGuild
-        )
-      ) {
+      if (!message.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
         await message.reply(
           "You need **Manage Server** permission to use this command."
         );
@@ -661,66 +549,32 @@ client.on(Events.MessageCreate, async (message) => {
       }
     }
 
-    // NITRO COMMAND
-
-    if (content === "!nitro" || content === ",nitro") {
-      const channel = message.guild.channels.cache.get(
-        NITRO_CHANNEL_ID
-      );
-
-      if (!channel) {
-        await message.reply(
-          "I couldn't find the Nitro Services channel."
-        );
-        return;
-      }
-
+    // NITRO
+    if (["!nitro", ",nitro"].includes(content)) {
+      const channel = await client.channels.fetch(NITRO_CHANNEL_ID);
       await sendNitroServices(channel);
       await message.reply("Nitro message updated successfully.");
       return;
     }
 
-    // DECOR COMMAND
-
-    if (content === "!decor" || content === ",decor") {
-      const channel = message.guild.channels.cache.get(
-        DECOR_CHANNEL_ID
-      );
-
-      if (!channel) {
-        await message.reply(
-          "I couldn't find the Decor channel."
-        );
-        return;
-      }
-
+    // DECOR
+    if (["!decor", ",decor"].includes(content)) {
+      const channel = await client.channels.fetch(DECOR_CHANNEL_ID);
       await sendDecorServices(channel);
       await message.reply("Decor message updated successfully.");
       return;
     }
 
-    // BOOSTIES COMMAND
-
-    if (content === "!boosties" || content === ",boosties") {
-      const channel = message.guild.channels.cache.get(
-        BOOSTIES_CHANNEL_ID
-      );
-
-      if (!channel) {
-        await message.reply(
-          "I couldn't find the Boosties channel."
-        );
-        return;
-      }
-
+    // BOOSTIES
+    if (["!boosties", ",boosties"].includes(content)) {
+      const channel = await client.channels.fetch(BOOSTIES_CHANNEL_ID);
       await sendBoostiesServices(channel);
       await message.reply("Boosties message updated successfully.");
       return;
     }
 
-    // SELLERS COMMAND
-
-    if (content === "!sellers" || content === ",sellers") {
+    // SELLERS — SEND TO SELLERS CHANNEL
+    if (["!sellers", ",sellers"].includes(content)) {
       await sendEmbedToChannel(
         message.guild,
         SELLERS_CHANNEL_ID,
@@ -728,13 +582,12 @@ client.on(Events.MessageCreate, async (message) => {
         "Sellers"
       );
 
-      await message.reply("Seller embed sent successfully.");
+      await message.reply("The sellers message was sent!");
       return;
     }
 
-    // STAFF COMMAND
-
-    if (content === "!staff" || content === ",staff") {
+    // STAFF — SEND TO STAFF CHANNEL
+    if (["!staff", ",staff"].includes(content)) {
       await sendEmbedToChannel(
         message.guild,
         STAFF_CHANNEL_ID,
@@ -742,18 +595,15 @@ client.on(Events.MessageCreate, async (message) => {
         "Staff"
       );
 
-      await message.reply("Staff embed sent successfully.");
+      await message.reply("The staff message was sent!");
       return;
     }
 
     // TEST WELCOME
-
     if (content === "!testwelcome") {
-      const channel = message.guild.channels.cache.get(
-        WELCOME_CHANNEL_ID
-      );
+      const channel = await client.channels.fetch(WELCOME_CHANNEL_ID);
 
-      if (!channel) {
+      if (!channel || !channel.isTextBased()) {
         await message.reply("Welcome channel not found.");
         return;
       }
@@ -767,26 +617,20 @@ client.on(Events.MessageCreate, async (message) => {
         .setColor(0xFFFFFF)
         .setThumbnail(message.author.displayAvatarURL())
         .setImage(WELCOME_IMAGE)
-        .setFooter({
-          text: message.guild.name
-        });
+        .setFooter({ text: message.guild.name });
 
       await channel.send({
         content: `${message.author}`,
         embeds: [embed]
       });
-
       return;
     }
 
     // TEST GOODBYE
-
     if (content === "!testgoodbye") {
-      const channel = message.guild.channels.cache.get(
-        GOODBYE_CHANNEL_ID
-      );
+      const channel = await client.channels.fetch(GOODBYE_CHANNEL_ID);
 
-      if (!channel) {
+      if (!channel || !channel.isTextBased()) {
         await message.reply("Goodbye channel not found.");
         return;
       }
@@ -799,31 +643,27 @@ client.on(Events.MessageCreate, async (message) => {
         )
         .setColor(0xFFFFFF)
         .setThumbnail(message.author.displayAvatarURL())
-        .setFooter({
-          text: message.guild.name
-        });
+        .setFooter({ text: message.guild.name });
 
-      await channel.send({
-        embeds: [embed]
-      });
-
+      await channel.send({ embeds: [embed] });
       return;
     }
-
   } catch (error) {
     console.error("Message command error:", error);
 
-    if (message.channel && message.channel.isTextBased()) {
-      await message.reply(
-        `Something went wrong: ${error.message}`
-      ).catch(() => {});
-    }
+    await message.reply(
+      `Something went wrong: ${error.message}`
+    ).catch(() => {});
   }
 });
 
 // ==================================================
 // ERROR HANDLING
 // ==================================================
+
+client.on("error", (error) => {
+  console.error("Discord client error:", error);
+});
 
 process.on("unhandledRejection", (error) => {
   console.error("Unhandled promise rejection:", error);
@@ -834,25 +674,14 @@ process.on("uncaughtException", (error) => {
 });
 
 // ==================================================
-// CHECK TOKEN
+// TOKEN CHECK AND LOGIN
 // ==================================================
 
 if (!TOKEN) {
-  console.error(
-    "DISCORD_BOT_TOKEN is missing from environment variables."
-  );
-
+  console.error("DISCORD_BOT_TOKEN is missing from Render environment variables.");
   process.exit(1);
 }
 
-// ==================================================
-// LOGIN
-// ==================================================
-
 client.login(TOKEN)
-  .then(() => {
-    console.log("Discord login successful.");
-  })
-  .catch((error) => {
-    console.error("Discord login failed:", error);
-  });
+  .then(() => console.log("Discord login successful."))
+  .catch((error) => console.error("Discord login failed:", error));
