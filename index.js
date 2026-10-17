@@ -58,7 +58,7 @@ const WELCOME_ROLE_ID = "1531039846871728248";
 
 // AUTOMATIC REACTION
 const CHUPPY_TY_CHANNEL_ID = "1530811494168657980";
-const CHUPPY_TY_EMOJI = "<:chuppyty:1561084366116098148>";
+const CHUPPY_TY_EMOJI = "<:uppyty:1561094713153429746>";
 
 // ==================================================
 // EMOJIS
