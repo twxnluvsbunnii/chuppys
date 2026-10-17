@@ -331,11 +331,7 @@ async function sendDecorServices(channel) {
     )
     .setColor("#FFFFFF");
 
-  await updateServiceMessage(
-    channel,
-    embed,
-    "DECOR"
-  );
+  await updateServiceMessage(channel, embed, "DECOR");
 }
 
 // ==================================================
@@ -346,22 +342,14 @@ async function sendNitroServices(channel) {
   const embed = new EmbedBuilder()
     .setDescription(
       `# NITRO ${SERVICE_EMOJI}\n\n` +
-
       "**1 Month + No War — $7.25**\n\n" +
-
       "**1 Month + War — $9.25**\n\n" +
-
       `${PAYMENT_METHODS_TEXT}\n\n` +
-
       "**.gg/chuppys**"
     )
     .setColor("#FFFFFF");
 
-  await updateServiceMessage(
-    channel,
-    embed,
-    "NITRO"
-  );
+  await updateServiceMessage(channel, embed, "NITRO");
 }
 
 // ==================================================
@@ -372,7 +360,6 @@ async function sendBoostiesServices(channel) {
   const embed = new EmbedBuilder()
     .setDescription(
       `# 1 MONTH ${BOOST_EMOJI}\n\n` +
-
       `${BOOST_EMOJI} **2 • $1.25**\n` +
       `${BOOST_EMOJI} **4 • $2.50**\n` +
       `${BOOST_EMOJI} **6 • $3.75**\n` +
@@ -386,7 +373,6 @@ async function sendBoostiesServices(channel) {
       `${BOOST_EMOJI} **30 • $11.00**\n\n` +
 
       `# 3 MONTHS ${BOOST_EMOJI}\n\n` +
-
       `${BOOST_EMOJI} **2 • $2.00**\n` +
       `${BOOST_EMOJI} **4 • $4.00**\n` +
       `${BOOST_EMOJI} **6 • $6.00**\n` +
@@ -400,31 +386,20 @@ async function sendBoostiesServices(channel) {
       `${BOOST_EMOJI} **30 • $27.00**\n\n` +
 
       `${PAYMENT_METHODS_TEXT}\n\n` +
-
       "**.gg/chuppys**"
     )
     .setColor("#FFFFFF");
 
-  await updateServiceMessage(
-    channel,
-    embed,
-    "BOOSTIES"
-  );
+  await updateServiceMessage(channel, embed, "BOOSTIES");
 }
 
 // ==================================================
 // UPDATE EXISTING SERVICE MESSAGE
 // ==================================================
 
-async function updateServiceMessage(
-  channel,
-  embed,
-  serviceName
-) {
+async function updateServiceMessage(channel, embed, serviceName) {
   try {
-    const messages = await channel.messages.fetch({
-      limit: 100
-    });
+    const messages = await channel.messages.fetch({ limit: 100 });
 
     const botMessages = messages.filter(
       (msg) =>
@@ -435,8 +410,7 @@ async function updateServiceMessage(
     let existingMessage = null;
 
     for (const msg of botMessages.values()) {
-      const description =
-        msg.embeds[0].description || "";
+      const description = msg.embeds[0].description || "";
 
       if (
         serviceName === "DECOR" &&
@@ -473,18 +447,14 @@ async function updateServiceMessage(
         components: []
       });
 
-      console.log(
-        `${serviceName} message updated.`
-      );
+      console.log(`${serviceName} message updated.`);
 
       const duplicates = botMessages.filter(
         (msg) => msg.id !== existingMessage.id
       );
 
       for (const duplicate of duplicates.values()) {
-        const description =
-          duplicate.embeds[0]?.description || "";
-
+        const description = duplicate.embeds[0]?.description || "";
         let isDuplicate = false;
 
         if (
@@ -514,10 +484,7 @@ async function updateServiceMessage(
         if (isDuplicate) {
           try {
             await duplicate.delete();
-
-            console.log(
-              `Deleted duplicate ${serviceName} message.`
-            );
+            console.log(`Deleted duplicate ${serviceName} message.`);
           } catch (error) {
             console.log(
               `Could not delete duplicate ${serviceName}:`,
@@ -536,119 +503,108 @@ async function updateServiceMessage(
       components: []
     });
 
-    console.log(
-      `New ${serviceName} message created.`
-    );
-
+    console.log(`New ${serviceName} message created.`);
     return newMessage;
-  } catch (error) {
-    console.error(
-      `Error updating ${serviceName} message:`,
-      error
-    );
 
+  } catch (error) {
+    console.error(`Error updating ${serviceName} message:`, error);
     throw error;
   }
 }
 
 // ==================================================
 // SELLERS EMBED
+// LARGE, BOLD HEADER + CLICKABLE PROFILE NAMES
 // ==================================================
 
 function makeSellersEmbed() {
-  const embed = new EmbedBuilder()
-    .setTitle("Chuppys Sellers")
+  return new EmbedBuilder()
     .setColor("#FFFFFF")
     .setDescription(
       [
-        `${SELLER_EMOJI} **Angel**`,
-        "Role: Services Seller",
+        "# .gg/chuppys sellers",
+        "",
+        `${SELLER_EMOJI} **<@1192248188409749684>**`,
+        "Role: services seller",
         "Limit: No limit",
         "ID: 1192248188409749684",
         "",
-        `${SELLER_EMOJI} **Felony**`,
+        `${SELLER_EMOJI} **<@1079241163455873074>**`,
         "Role: seller",
         "Limit: no limit",
         "ID: 1079241163455873074",
         "",
-        `${SELLER_EMOJI} **cusi**`,
+        `${SELLER_EMOJI} **<@1032693136163622993>**`,
         "Role: seller",
         "Limit: 25",
         "ID: 1032693136163622993",
         "",
-        `${SELLER_EMOJI} **Dav**`,
+        `${SELLER_EMOJI} **<@1320199904219496530>**`,
         "Role: seller",
         "Limit: 30",
         "ID: 1320199904219496530",
         "",
-        `${SELLER_EMOJI} **momo**`,
+        `${SELLER_EMOJI} **<@952566845939023892>**`,
         "Role: seller",
         "Limit: 45",
         "ID: 952566845939023892",
         "",
-        `${SELLER_EMOJI} **kitako**`,
+        `${SELLER_EMOJI} **<@1473335012769267807>**`,
         "Role: seller",
         "Limit: 100",
         "ID: 1473335012769267807",
         "",
-        `${SELLER_EMOJI} **Coraline**`,
+        `${SELLER_EMOJI} **<@1472856287527309313>**`,
         "Role: seller",
         "Limit: 100",
         "ID: 1472856287527309313",
         "",
-        `${SELLER_EMOJI} **Maya**`,
+        `${SELLER_EMOJI} **<@1269188505935024141>**`,
         "Role: seller",
         "Limit: 250",
         "ID: 1269188505935024141"
       ].join("\n")
     );
-
-  return embed;
 }
 
 // ==================================================
 // STAFF EMBED
+// MATCHING LARGE, BOLD HEADER + CLICKABLE NAMES
 // ==================================================
 
 function makeStaffEmbed() {
-  const embed = new EmbedBuilder()
-    .setTitle("Chuppys Staff")
+  return new EmbedBuilder()
     .setColor("#FFFFFF")
     .setDescription(
       [
-        `${SELLER_EMOJI} **bunnii**`,
+        "# .gg/chuppys staff",
+        "",
+        `${SELLER_EMOJI} **<@1530733554869473320>**`,
         "Role: owner | seller",
         "Limit: no limit",
         "ID: 1530733554869473320",
         "",
-        `${SELLER_EMOJI} **twxn**`,
+        `${SELLER_EMOJI} **<@1490962480963260466>**`,
         "Role: owner | seller",
         "Limit: no limit",
         "ID: 1490962480963260466",
         "",
-        `${SELLER_EMOJI} **dann**`,
+        `${SELLER_EMOJI} **<@1381473377696350238>**`,
         "Role: Mod | staff",
         "ID: 1381473377696350238",
         "",
-        `${SELLER_EMOJI} **nat**`,
+        `${SELLER_EMOJI} **<@727673410737668107>**`,
         "Role: Mod | staff",
         "ID: 727673410737668107"
       ].join("\n")
     );
-
-  return embed;
 }
 
 // ==================================================
 // SEND EMBED TO DESTINATION CHANNEL
 // ==================================================
 
-async function sendEmbedToChannel(
-  guild,
-  channelId,
-  embed,
-  label
-) {
+async function sendEmbedToChannel(guild, channelId, embed, label) {
   const channel = guild.channels.cache.get(channelId);
 
   if (!channel || !channel.isTextBased()) {
@@ -658,7 +614,10 @@ async function sendEmbedToChannel(
   }
 
   await channel.send({
-    embeds: [embed]
+    embeds: [embed],
+    allowedMentions: {
+      parse: []
+    }
   });
 }
 
@@ -672,21 +631,14 @@ client.on(Events.MessageCreate, async (message) => {
   const content = message.content.trim().toLowerCase();
 
   try {
-    // ==================================================
     // !PAY / ,PAY
-    // ==================================================
 
-    if (
-      content === "!pay" ||
-      content === ",pay"
-    ) {
+    if (content === "!pay" || content === ",pay") {
       await sendPaymentEmbed(message.channel);
       return;
     }
 
-    // ==================================================
     // ADMIN COMMAND PERMISSION CHECK
-    // ==================================================
 
     const adminCommands = [
       "!nitro", ",nitro",
@@ -709,18 +661,12 @@ client.on(Events.MessageCreate, async (message) => {
       }
     }
 
-    // ==================================================
     // !NITRO / ,NITRO
-    // ==================================================
 
-    if (
-      content === "!nitro" ||
-      content === ",nitro"
-    ) {
-      const channel =
-        message.guild.channels.cache.get(
-          NITRO_CHANNEL_ID
-        );
+    if (content === "!nitro" || content === ",nitro") {
+      const channel = message.guild.channels.cache.get(
+        NITRO_CHANNEL_ID
+      );
 
       if (!channel) {
         await message.reply(
@@ -730,26 +676,16 @@ client.on(Events.MessageCreate, async (message) => {
       }
 
       await sendNitroServices(channel);
-
-      await message.reply(
-        "Nitro message updated successfully."
-      );
-
+      await message.reply("Nitro message updated successfully.");
       return;
     }
 
-    // ==================================================
     // !DECOR / ,DECOR
-    // ==================================================
 
-    if (
-      content === "!decor" ||
-      content === ",decor"
-    ) {
-      const channel =
-        message.guild.channels.cache.get(
-          DECOR_CHANNEL_ID
-        );
+    if (content === "!decor" || content === ",decor") {
+      const channel = message.guild.channels.cache.get(
+        DECOR_CHANNEL_ID
+      );
 
       if (!channel) {
         await message.reply(
@@ -759,26 +695,16 @@ client.on(Events.MessageCreate, async (message) => {
       }
 
       await sendDecorServices(channel);
-
-      await message.reply(
-        "Decor message updated successfully."
-      );
-
+      await message.reply("Decor message updated successfully.");
       return;
     }
 
-    // ==================================================
     // !BOOSTIES / ,BOOSTIES
-    // ==================================================
 
-    if (
-      content === "!boosties" ||
-      content === ",boosties"
-    ) {
-      const channel =
-        message.guild.channels.cache.get(
-          BOOSTIES_CHANNEL_ID
-        );
+    if (content === "!boosties" || content === ",boosties") {
+      const channel = message.guild.channels.cache.get(
+        BOOSTIES_CHANNEL_ID
+      );
 
       if (!channel) {
         await message.reply(
@@ -788,22 +714,13 @@ client.on(Events.MessageCreate, async (message) => {
       }
 
       await sendBoostiesServices(channel);
-
-      await message.reply(
-        "Boosties message updated successfully."
-      );
-
+      await message.reply("Boosties message updated successfully.");
       return;
     }
 
-    // ==================================================
     // !SELLERS / ,SELLERS
-    // ==================================================
 
-    if (
-      content === "!sellers" ||
-      content === ",sellers"
-    ) {
+    if (content === "!sellers" || content === ",sellers") {
       await sendEmbedToChannel(
         message.guild,
         SELLERS_CHANNEL_ID,
@@ -811,21 +728,13 @@ client.on(Events.MessageCreate, async (message) => {
         "Sellers"
       );
 
-      await message.reply(
-        "Seller embed sent successfully."
-      );
-
+      await message.reply("Seller embed sent successfully.");
       return;
     }
 
-    // ==================================================
     // !STAFF / ,STAFF
-    // ==================================================
 
-    if (
-      content === "!staff" ||
-      content === ",staff"
-    ) {
+    if (content === "!staff" || content === ",staff") {
       await sendEmbedToChannel(
         message.guild,
         STAFF_CHANNEL_ID,
@@ -833,27 +742,19 @@ client.on(Events.MessageCreate, async (message) => {
         "Staff"
       );
 
-      await message.reply(
-        "Staff embed sent successfully."
-      );
-
+      await message.reply("Staff embed sent successfully.");
       return;
     }
 
-    // ==================================================
     // TEST WELCOME
-    // ==================================================
 
     if (content === "!testwelcome") {
-      const channel =
-        message.guild.channels.cache.get(
-          WELCOME_CHANNEL_ID
-        );
+      const channel = message.guild.channels.cache.get(
+        WELCOME_CHANNEL_ID
+      );
 
       if (!channel) {
-        await message.reply(
-          "Welcome channel not found."
-        );
+        await message.reply("Welcome channel not found.");
         return;
       }
 
@@ -864,9 +765,7 @@ client.on(Events.MessageCreate, async (message) => {
           "We're happy to have you here. Make sure to read the rules and enjoy your time in the server!"
         )
         .setColor("#FFFFFF")
-        .setThumbnail(
-          message.author.displayAvatarURL()
-        )
+        .setThumbnail(message.author.displayAvatarURL())
         .setImage(WELCOME_IMAGE)
         .setFooter({
           text: message.guild.name
@@ -880,20 +779,15 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
-    // ==================================================
     // TEST GOODBYE
-    // ==================================================
 
     if (content === "!testgoodbye") {
-      const channel =
-        message.guild.channels.cache.get(
-          GOODBYE_CHANNEL_ID
-        );
+      const channel = message.guild.channels.cache.get(
+        GOODBYE_CHANNEL_ID
+      );
 
       if (!channel) {
-        await message.reply(
-          "Goodbye channel not found."
-        );
+        await message.reply("Goodbye channel not found.");
         return;
       }
 
@@ -904,9 +798,7 @@ client.on(Events.MessageCreate, async (message) => {
           "We hope to see you again!"
         )
         .setColor("#FFFFFF")
-        .setThumbnail(
-          message.author.displayAvatarURL()
-        )
+        .setThumbnail(message.author.displayAvatarURL())
         .setFooter({
           text: message.guild.name
         });
@@ -918,9 +810,7 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
-    // ==================================================
     // TEST PAYMENT
-    // ==================================================
 
     if (content === "!testpay") {
       await sendPaymentEmbed(message.channel);
@@ -942,56 +832,49 @@ client.on(Events.MessageCreate, async (message) => {
 // BUTTON INTERACTIONS
 // ==================================================
 
-client.on(
-  Events.InteractionCreate,
-  async (interaction) => {
-    try {
-      if (!interaction.isButton()) return;
+client.on(Events.InteractionCreate, async (interaction) => {
+  try {
+    if (!interaction.isButton()) return;
 
-      // ==================================================
-      // APPLE PAY
-      // ==================================================
+    // APPLE PAY
 
-      if (interaction.customId === "payment_apple") {
-        await interaction.reply({
-          content: `**Apple Pay:** \`${APPLE_PAY}\``,
-          ephemeral: true
-        });
+    if (interaction.customId === "payment_apple") {
+      await interaction.reply({
+        content: `**Apple Pay:** \`${APPLE_PAY}\``,
+        ephemeral: true
+      });
 
-        return;
-      }
-
-      // ==================================================
-      // ZELLE
-      // ==================================================
-
-      if (interaction.customId === "payment_zelle") {
-        await interaction.reply({
-          content: `**Zelle:** \`${ZELLE}\``,
-          ephemeral: true
-        });
-
-        return;
-      }
-
-    } catch (error) {
-      console.error("Interaction error:", error);
-
-      try {
-        if (interaction.deferred) {
-          await interaction.editReply({
-            content: "Something went wrong while processing this."
-          });
-        } else if (!interaction.replied) {
-          await interaction.reply({
-            content: "Something went wrong while processing this.",
-            ephemeral: true
-          });
-        }
-      } catch {}
+      return;
     }
+
+    // ZELLE
+
+    if (interaction.customId === "payment_zelle") {
+      await interaction.reply({
+        content: `**Zelle:** \`${ZELLE}\``,
+        ephemeral: true
+      });
+
+      return;
+    }
+
+  } catch (error) {
+    console.error("Interaction error:", error);
+
+    try {
+      if (interaction.deferred) {
+        await interaction.editReply({
+          content: "Something went wrong while processing this."
+        });
+      } else if (!interaction.replied) {
+        await interaction.reply({
+          content: "Something went wrong while processing this.",
+          ephemeral: true
+        });
+      }
+    } catch {}
   }
-);
+});
 
 // ==================================================
 // ERROR HANDLING
