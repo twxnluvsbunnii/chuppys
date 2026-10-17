@@ -61,6 +61,17 @@ const CHUPPY_TY_CHANNEL_ID = "1530811494168657980";
 const CHUPPY_TY_EMOJI = "<:uppyty:1561094713153429746>";
 
 // ==================================================
+// AFK SETTINGS
+// ==================================================
+
+const AFK_GOING_EMOJI = "<:chuppybye:1561103844832846014>";
+const AFK_RETURN_EMOJI = "<:chuppyhi:1561103471325745242>";
+
+// Key format: guild ID + user ID
+// AFK statuses are kept separately for each server.
+const afkUsers = new Map();
+
+// ==================================================
 // EMOJIS
 // ==================================================
 
@@ -520,14 +531,97 @@ async function sendEmbedToChannel(guild, channelId, embed, label) {
 }
 
 // ==================================================
-// MESSAGE COMMANDS + AUTOMATIC REACTION
+// AFK HANDLER
+// ==================================================
+
+async function handleAFK(message) {
+  const guildId = message.guild.id;
+  const userId = message.author.id;
+  const afkKey = `${guildId}:${userId}`;
+  const rawContent = message.content.trim();
+
+  // ,afk with an optional reason
+  const afkMatch = rawContent.match(/^,afk(?:\s+([\s\S]*))?$/i);
+
+  if (afkMatch) {
+    const reason = (afkMatch[1] || "No reason provided.")
+      .trim()
+      .slice(0, 500) || "No reason provided.";
+
+    afkUsers.set(afkKey, {
+      reason,
+      since: Date.now(),
+      username: message.author.username
+    });
+
+    await message.reply({
+      content:
+        `${AFK_GOING_EMOJI} ${message.author}, you're now AFK!\n` +
+        `**Reason:** ${reason}`,
+      allowedMentions: {
+        repliedUser: false
+      }
+    });
+
+    console.log(`${message.author.tag} is now AFK: ${reason}`);
+    return true;
+  }
+
+  // If this author was AFK, their next normal message clears it.
+  // AFK commands are handled above, so setting/changing a reason
+  // does not immediately remove the status.
+  if (afkUsers.has(afkKey)) {
+    const oldAFK = afkUsers.get(afkKey);
+    afkUsers.delete(afkKey);
+
+    await message.channel.send({
+      content:
+        `${AFK_RETURN_EMOJI} Welcome back, ${message.author}! ` +
+        "Your AFK status has been removed.",
+      allowedMentions: {
+        parse: []
+      }
+    });
+
+    console.log(
+      `${message.author.tag} returned from AFK. Previous reason: ${oldAFK.reason}`
+    );
+  }
+
+  // Tell users when they mention someone who is AFK.
+  const notifiedUsers = new Set();
+
+  for (const [mentionedUserId, user] of message.mentions.users) {
+    if (mentionedUserId === userId || user.bot) continue;
+
+    const mentionedAFKKey = `${guildId}:${mentionedUserId}`;
+    const afkData = afkUsers.get(mentionedAFKKey);
+
+    if (!afkData || notifiedUsers.has(mentionedUserId)) continue;
+
+    notifiedUsers.add(mentionedUserId);
+
+    await message.channel.send({
+      content:
+        `${AFK_GOING_EMOJI} **${user.username} is currently AFK.**\n` +
+        `**Reason:** ${afkData.reason}`,
+      allowedMentions: {
+        parse: []
+      }
+    });
+  }
+
+  return false;
+}
+
+// ==================================================
+// MESSAGE COMMANDS + AUTOMATIC REACTION + AFK
 // ==================================================
 
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot || !message.guild) return;
 
   // AUTOMATIC CHUPPY TY REACTION
-  // Reacts to every new non-bot message in the selected channel.
   if (message.channel.id === CHUPPY_TY_CHANNEL_ID) {
     try {
       await message.react(CHUPPY_TY_EMOJI);
@@ -537,9 +631,15 @@ client.on(Events.MessageCreate, async (message) => {
     }
   }
 
-  const content = message.content.trim().toLowerCase();
-
   try {
+    // AFK SYSTEM
+    // AFK commands and normal messages are handled before other commands.
+    const wasAFKCommand = await handleAFK(message);
+
+    if (wasAFKCommand) return;
+
+    const content = message.content.trim().toLowerCase();
+
     // PAYMENT
     if (["!pay", ",pay", "!testpay"].includes(content)) {
       await sendPaymentEmbed(message.channel);
@@ -588,7 +688,7 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
-    // SELLERS — SEND TO SELLERS CHANNEL
+    // SELLERS
     if (["!sellers", ",sellers"].includes(content)) {
       await sendEmbedToChannel(
         message.guild,
@@ -601,7 +701,7 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
-    // STAFF — SEND TO STAFF CHANNEL
+    // STAFF
     if (["!staff", ",staff"].includes(content)) {
       await sendEmbedToChannel(
         message.guild,
