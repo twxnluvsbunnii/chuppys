@@ -45,6 +45,8 @@ const STAFF_CHANNEL_ID = "1561013244905132122";
 // ROBUX CASH OUT
 const ROBUX_CASHOUT_CHANNEL_ID = "1552385740405473513";
 const ROBUX_EMOJI = "<:Robux:1561391606098038877>";
+const ROBUX_EMOJI_URL =
+  "https://cdn.discordapp.com/emojis/1561391606098038877.png";
 
 const WELCOME_ROLE_ID = "1531039846871728248";
 
@@ -111,47 +113,50 @@ require("./vouch")(client);
 
 async function sendRobuxCashoutEmbed(channel) {
   if (!channel || !channel.isTextBased() || !channel.messages) {
-    throw new Error("Robux Cash out channel not found or invalid.");
+    throw new Error("Robux Cash Out channel not found or invalid.");
   }
 
- const embed = new EmbedBuilder()
-  .setTitle("Cashing Out Robux")
-  .setThumbnail("YOUR_ROBUX_EMOJI_IMAGE_URL")
-  .setDescription(
-    "**RATES**\n\n" +
-    "**Below 10k**\n" +
-    "4.5/k\n\n" +
-    "**Above 10k**\n" +
-    "4.7/k\n\n" +
-    "-# make a cash out ticket now !! make sure u ping me in tickets <:uppyty:1561094713153429746>"
-  )
-  .setColor("#FFFFFF")
-  .setFooter({
-    text: ".gg/chuppys"
-  });
+  const embed = new EmbedBuilder()
+    .setTitle(`Cashing Out Robux ${ROBUX_EMOJI}`)
+    .setThumbnail(ROBUX_EMOJI_URL)
+    .setDescription(
+      "**RATES**\n\n" +
+      "**Below 10k**\n" +
+      "4.5/k\n\n" +
+      "**Above 10k**\n" +
+      "4.7/k\n\n" +
+      "-# make a cash out ticket now !! make sure u ping me in tickets <:uppyty:1561094713153429746>"
+    )
+    .setColor("#FFFFFF")
+    .setFooter({
+      text: ".gg/chuppys"
+    });
 
   const payload = {
     embeds: [embed],
+    // The instruction tells customers to ping you in their tickets.
+    // It does not ping anyone in this public embed.
     allowedMentions: { parse: [] }
   };
 
-  // Search the latest 100 messages for this bot's embed.
   const messages = await channel.messages.fetch({ limit: 100 });
 
   const matches = messages.filter(message =>
     message.author.id === client.user.id &&
-    message.embeds.some(existingEmbed =>
-      (existingEmbed.title || "").startsWith("Robux Cash out")
-    )
+    message.embeds.some(existingEmbed => {
+      const title = existingEmbed.title || "";
+      return (
+        title.startsWith("Cashing Out Robux") ||
+        title.startsWith("Robux Cash out")
+      );
+    })
   );
 
   const existing = matches.first();
 
   if (existing) {
-    // Update the existing embed.
     await existing.edit(payload);
 
-    // Remove any duplicate embeds from this bot.
     for (const duplicate of matches.values()) {
       if (duplicate.id !== existing.id) {
         await duplicate.delete().catch(error => {
@@ -167,7 +172,6 @@ async function sendRobuxCashoutEmbed(channel) {
     return existing;
   }
 
-  // Send a new embed if none exists.
   const sent = await channel.send(payload);
 
   console.log("[ROBUX CASHOUT] New embed created.");
@@ -186,7 +190,6 @@ client.once(Events.ClientReady, async readyClient => {
     type: 3
   });
 
-  // Automatically create or update the Robux embed on startup.
   try {
     const channel = await readyClient.channels.fetch(
       ROBUX_CASHOUT_CHANNEL_ID
@@ -707,7 +710,7 @@ client.on(Events.MessageCreate, async message => {
       await sendRobuxCashoutEmbed(channel);
 
       await message.reply(
-        "Robux Cash out message updated successfully!"
+        "Robux Cash Out message updated successfully!"
       );
       return;
     }
