@@ -177,7 +177,7 @@ client.on(Events.GuildMemberRemove, async member => {
 
 // ==================================================
 // PAYMENT EMBED — ,pay
-// Updates one existing embed and removes duplicates
+// Updates an existing message and removes duplicates
 // ==================================================
 
 async function sendPaymentEmbed(channel) {
@@ -225,22 +225,18 @@ async function sendPaymentEmbed(channel) {
     components: [row]
   };
 
-  // Fetch recent messages from this channel.
   const messages = await channel.messages.fetch({ limit: 100 });
 
-  // Find payment embeds sent by this bot.
   const matches = messages.filter(msg =>
     msg.author.id === client.user.id &&
     msg.embeds.some(e => e.title === "Payment Methods")
   );
 
-  // Keep and update one existing payment message.
   const existing = matches.first();
 
   if (existing) {
     await existing.edit(payload);
 
-    // Delete any additional matching payment embeds.
     for (const duplicate of matches.values()) {
       if (duplicate.id !== existing.id) {
         await duplicate.delete().catch(error => {
@@ -256,7 +252,6 @@ async function sendPaymentEmbed(channel) {
     return existing;
   }
 
-  // Only create a message when none exists.
   const sent = await channel.send(payload);
 
   console.log("[PAYMENT] New message created.");
@@ -739,17 +734,35 @@ client.on(Events.MessageCreate, async message => {
 });
 
 // ==================================================
-// AUTOMATIC REACTION IN CHUPPY TY CHANNEL
+// AUTOMATIC REACTION — BOT VOUCH MESSAGES ONLY
 // ==================================================
 
 client.on(Events.MessageCreate, async message => {
-  if (!message.guild || message.author.bot) return;
+  if (!message.guild) return;
+
+  // Only react to messages sent by this bot.
+  if (message.author.id !== client.user.id) return;
+
+  // Only react in the Chuppy TY channel.
   if (message.channel.id !== CHUPPY_TY_CHANNEL_ID) return;
+
+  // Only react to embeds whose title contains "vouch".
+  const isVouch = message.embeds.some(embed =>
+    (embed.title || "").toLowerCase().includes("vouch")
+  );
+
+  if (!isVouch) return;
 
   try {
     await message.react(CHUPPY_TY_EMOJI);
+    console.log(
+      `[REACTION] Added uppyty to bot vouch ${message.id}`
+    );
   } catch (error) {
-    console.error("[REACTION] Could not add reaction:", error);
+    console.error(
+      "[REACTION] Could not react to bot vouch:",
+      error
+    );
   }
 });
 
