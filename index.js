@@ -88,8 +88,6 @@ const client = new Client({
 // LOAD SEPARATE VOUCH MODULE
 // ==================================================
 
-// vouch.js should export a function that receives the
-// existing client and registers /vouch on that client.
 require("./vouch")(client);
 
 // ==================================================
@@ -122,7 +120,7 @@ client.on(Events.GuildMemberAdd, async member => {
     });
 
     const embed = new EmbedBuilder()
-      .setTitle("Welcome to .gg/chuppys 🤍")
+      .setTitle(`Welcome to .gg/chuppys ${AFK_RETURN_EMOJI}`)
       .setDescription(
         `Welcome ${member}!\n\n` +
         "We're happy to have you here. Make sure to read the rules and enjoy your time in the server!"
@@ -156,7 +154,7 @@ client.on(Events.GuildMemberRemove, async member => {
     if (!channel || !channel.isTextBased()) return;
 
     const embed = new EmbedBuilder()
-      .setTitle("Goodbye 🤍")
+      .setTitle(`Goodbye ${AFK_GOING_EMOJI}`)
       .setDescription(
         `**${member.user.username}** has left **${member.guild.name}**.\n\n` +
         "We hope to see you again!"
@@ -674,7 +672,7 @@ client.on(Events.MessageCreate, async message => {
       }
 
       const embed = new EmbedBuilder()
-        .setTitle("Welcome to .gg/chuppys 🤍")
+        .setTitle(`Welcome to .gg/chuppys ${AFK_RETURN_EMOJI}`)
         .setDescription(
           `Welcome ${message.author}!\n\n` +
           "We're happy to have you here. Make sure to read the rules and enjoy your time in the server!"
@@ -701,7 +699,7 @@ client.on(Events.MessageCreate, async message => {
       }
 
       const embed = new EmbedBuilder()
-        .setTitle("Goodbye 🤍")
+        .setTitle(`Goodbye ${AFK_GOING_EMOJI}`)
         .setDescription(
           `**${message.author.username}** has left **${message.guild.name}**.\n\n` +
           "We hope to see you again!"
