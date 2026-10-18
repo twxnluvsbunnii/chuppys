@@ -531,7 +531,7 @@ function makeVouchEmbed({
 }) {
   const embed = new EmbedBuilder()
     .setColor("#F2C8F2")
-    .setTitle("New Vouch")
+    .setTitle("# **NEW VOUCH**\n\n")
     .setThumbnail(VOUCH_EMOJI_URL)
     .setDescription(
       [
