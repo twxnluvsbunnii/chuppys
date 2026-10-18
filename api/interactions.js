@@ -1,3 +1,4 @@
+
 import crypto from "crypto";
 import { waitUntil } from "@vercel/functions";
 
@@ -7,38 +8,48 @@ export const config = {
   }
 };
 
+const VOUCH_CHANNEL_ID = "1530811494168657980";
+const VOUCH_EMOJI_URL =
+  "https://cdn.discordapp.com/emojis/1561197586554036318.png";
+
 const ROLE_GROUPS = {
   chuppys_self_roles: {
     roles: [
-      "1531039846871728248", // Welcome Ping
-      "1531084435716571137", // Announcement Ping
-      "1531104789075853472", // Services Ping
-      "1531104886630907925", // Giveaway Ping
-      "1531105107586973696", // Stock Ping
-      "1551276593425682543", // Cash Out Ping
-      "1558913216602706011"  // Flash Sale Ping
+      "1531039846871728248",
+      "1531084435716571137",
+      "1531104789075853472",
+      "1531104886630907925",
+      "1531105107586973696",
+      "1551276593425682543",
+      "1558913216602706011"
     ],
     success: "﹕𐔌・your roles have been updated〃・꒱ 🤍"
   },
 
   chuppys_second_roles: {
     roles: [
-      "1531084465126772877", // Under 18
-      "1531084550849954003", // 18–20
-      "1531084611399188640"  // 21+
+      "1531084465126772877",
+      "1531084550849954003",
+      "1531084611399188640"
     ],
     success: "﹕𐔌・your age roles have been updated〃・꒱ 🤍"
   },
 
   chuppys_pronoun_roles: {
     roles: [
-      "1531084942241697854", // She / Her
-      "1531086100867842190", // He / Him
-      "1531101006451048448"  // They / Them
+      "1531084942241697854",
+      "1531086100867842190",
+      "1531101006451048448"
     ],
     success: "﹕𐔌・your pronouns have been updated〃・꒱ 🤍"
   }
 };
+
+// ==================================================
+// DEBUG
+// ==================================================
+
+console.log("[INTERACTIONS DEBUG] api/interactions.js loaded.");
 
 // ==================================================
 // READ RAW DISCORD REQUEST
@@ -77,6 +88,7 @@ function verifyDiscordSignature(
       typeof timestamp !== "string" ||
       !/^[0-9a-f]+$/i.test(signature) ||
       signature.length !== 128 ||
+      typeof publicKeyHex !== "string" ||
       !/^[0-9a-f]{64}$/i.test(publicKeyHex)
     ) {
       return false;
@@ -101,7 +113,11 @@ function verifyDiscordSignature(
       Buffer.from(signature, "hex")
     );
   } catch (error) {
-    console.error("Signature verification error:", error.message);
+    console.error(
+      "[INTERACTIONS DEBUG] Signature error:",
+      error.message
+    );
+
     return false;
   }
 }
@@ -142,14 +158,16 @@ async function discordFetch(url, options = {}) {
       throw new Error("Discord API request timed out after 8 seconds.");
     }
 
-    throw new Error(`Discord API network error: ${error.message}`);
+    throw new Error(
+      `Discord API network error: ${error.message}`
+    );
   } finally {
     clearTimeout(timeout);
   }
 }
 
 // ==================================================
-// UPDATE ORIGINAL DISCORD RESPONSE
+// UPDATE ORIGINAL INTERACTION RESPONSE
 // ==================================================
 
 async function updateOriginalResponse(interaction, content) {
@@ -168,20 +186,20 @@ async function updateOriginalResponse(interaction, content) {
 
   if (!result.ok) {
     throw new Error(
-      `Could not update Discord response: HTTP ${result.status} ` +
+      `Could not update interaction response: HTTP ${result.status} ` +
       JSON.stringify(result.data)
     );
   }
 }
 
 // ==================================================
-// ASSIGN OR REMOVE SELECTED ROLES
+// ROLE MENU HANDLER
 // ==================================================
 
 async function changeRoles(interaction, group) {
   const botToken = process.env.DISCORD_BOT_TOKEN;
-
   const guildId = interaction.guild_id;
+
   const userId =
     interaction.member?.user?.id ||
     interaction.user?.id;
@@ -195,14 +213,12 @@ async function changeRoles(interaction, group) {
   const values = interaction.data.values;
   const selectedRoles = new Set(values);
 
-  // Only accept role IDs belonging to this dropdown.
   for (const roleId of selectedRoles) {
     if (!group.roles.includes(roleId)) {
       throw new Error(`Unexpected role ID: ${roleId}`);
     }
   }
 
-  // Process one request at a time to simplify troubleshooting.
   for (const roleId of group.roles) {
     const shouldHaveRole = selectedRoles.has(roleId);
 
@@ -211,8 +227,8 @@ async function changeRoles(interaction, group) {
       `/members/${userId}/roles/${roleId}`;
 
     console.log(
-      `Attempting to ${shouldHaveRole ? "assign" : "remove"} ` +
-      `role ${roleId} for member ${userId}`
+      `[ROLE DEBUG] ${shouldHaveRole ? "Adding" : "Removing"} ` +
+      `${roleId} for ${userId}`
     );
 
     const result = await discordFetch(url, {
@@ -229,17 +245,11 @@ async function changeRoles(interaction, group) {
       );
     }
 
-    console.log(
-      `Role ${roleId} ${shouldHaveRole ? "assigned" : "removed"} successfully.`
-    );
+    console.log(`[ROLE DEBUG] Role ${roleId} updated.`);
   }
 }
 
-// ==================================================
-// PROCESS THE INTERACTION IN THE BACKGROUND
-// ==================================================
-
-async function processInteraction(interaction, group) {
+async function processRoleInteraction(interaction, group) {
   try {
     await changeRoles(interaction, group);
 
@@ -249,11 +259,10 @@ async function processInteraction(interaction, group) {
     );
 
     console.log(
-      `Completed ${interaction.data.custom_id} for member ` +
-      `${interaction.member?.user?.id || interaction.user?.id}`
+      `[ROLE DEBUG] Completed ${interaction.data.custom_id}`
     );
   } catch (error) {
-    console.error("Role interaction failed:", error.message);
+    console.error("[ROLE DEBUG] Failed:", error);
 
     try {
       await updateOriginalResponse(
@@ -262,7 +271,7 @@ async function processInteraction(interaction, group) {
       );
     } catch (updateError) {
       console.error(
-        "Could not display role error:",
+        "[ROLE DEBUG] Could not show error:",
         updateError.message
       );
     }
@@ -270,10 +279,172 @@ async function processInteraction(interaction, group) {
 }
 
 // ==================================================
-// VERCEL HANDLER
+// VOUCH SLASH COMMAND HANDLER
+// ==================================================
+
+async function processVouchInteraction(interaction) {
+  try {
+    console.log("[VOUCH DEBUG] Processing /vouch.");
+
+    const botToken = process.env.DISCORD_BOT_TOKEN;
+
+    if (!botToken) {
+      throw new Error(
+        "DISCORD_BOT_TOKEN is missing from Vercel Environment Variables."
+      );
+    }
+
+    if (!interaction.guild_id) {
+      throw new Error("Use /vouch inside your Discord server.");
+    }
+
+    const options = Object.fromEntries(
+      (interaction.data.options || []).map(option => [
+        option.name,
+        option.value
+      ])
+    );
+
+    const resolved = interaction.data.resolved || {};
+
+    const sellerId = options.seller;
+    const buyerId =
+      interaction.member?.user?.id ||
+      interaction.user?.id;
+
+    const rating = options.rating;
+    const order = options.order?.trim();
+    const proof = resolved.attachments?.[options.proof];
+    const seller = resolved.users?.[sellerId];
+
+    console.log("[VOUCH DEBUG] Command options received:", {
+      sellerId,
+      buyerId,
+      rating,
+      hasOrder: Boolean(order),
+      hasProof: Boolean(proof)
+    });
+
+    if (!sellerId || !buyerId) {
+      throw new Error("Could not identify the buyer or seller.");
+    }
+
+    if (seller?.bot) {
+      throw new Error("You cannot vouch for a bot.");
+    }
+
+    if (sellerId === buyerId) {
+      throw new Error("You cannot vouch for yourself.");
+    }
+
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      throw new Error("Rating must be between 1 and 5.");
+    }
+
+    if (!order) {
+      throw new Error("Please enter what you purchased.");
+    }
+
+    if (!proof) {
+      throw new Error("Please attach proof of your purchase.");
+    }
+
+    const isImage =
+      (proof.content_type &&
+        proof.content_type.startsWith("image/")) ||
+      /\.(png|jpe?g|gif|webp)$/i.test(proof.filename || "");
+
+    if (!isImage) {
+      throw new Error(
+        "Proof must be a PNG, JPG, GIF, or WEBP image."
+      );
+    }
+
+    const embed = {
+      color: 0xffffff,
+      title: "NEW VOUCH",
+      thumbnail: {
+        url: VOUCH_EMOJI_URL
+      },
+      description:
+        `**seller:** <@${sellerId}>\n` +
+        `**buyer:** <@${buyerId}>\n` +
+        `**items purchased:** ${order}\n` +
+        `**rating:** ${rating}/5\n` +
+        `**proof:** 📎 ${proof.filename || "Purchase proof"}\n\n` +
+        "*thank you for vouching! shop again ♡*",
+      image: {
+        url: proof.url
+      },
+      timestamp: new Date().toISOString()
+    };
+
+    console.log(
+      `[VOUCH DEBUG] Sending vouch to channel ${VOUCH_CHANNEL_ID}.`
+    );
+
+    const result = await discordFetch(
+      `https://discord.com/api/v10/channels/${VOUCH_CHANNEL_ID}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bot ${botToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          embeds: [embed],
+          allowed_mentions: {
+            parse: [],
+            users: [sellerId, buyerId]
+          }
+        })
+      }
+    );
+
+    if (!result.ok) {
+      throw new Error(
+        `Could not post the vouch: HTTP ${result.status} ` +
+        JSON.stringify(result.data)
+      );
+    }
+
+    console.log(
+      `[VOUCH DEBUG] Vouch posted successfully. Message ID: ` +
+      `${result.data?.id || "unknown"}`
+    );
+
+    await updateOriginalResponse(
+      interaction,
+      "Your vouch was submitted successfully! ♡"
+    );
+
+    console.log("[VOUCH DEBUG] Completed /vouch successfully.");
+  } catch (error) {
+    console.error("[VOUCH DEBUG] /vouch failed:", error);
+
+    try {
+      await updateOriginalResponse(
+        interaction,
+        `❌ ${error.message || "Your vouch could not be submitted."}`
+      );
+    } catch (updateError) {
+      console.error(
+        "[VOUCH DEBUG] Could not update Discord response:",
+        updateError.message
+      );
+    }
+  }
+}
+
+// ==================================================
+// VERCEL INTERACTIONS ENDPOINT
 // ==================================================
 
 export default async function handler(req, res) {
+  console.log(
+    `[INTERACTIONS DEBUG] Received ${req.method} request.`
+  );
+
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).send("Method not allowed");
@@ -284,7 +455,11 @@ export default async function handler(req, res) {
   try {
     body = await getRawBody(req);
   } catch (error) {
-    console.error("Could not read request:", error.message);
+    console.error(
+      "[INTERACTIONS DEBUG] Could not read request:",
+      error.message
+    );
+
     return res.status(400).send("Invalid request body");
   }
 
@@ -293,7 +468,10 @@ export default async function handler(req, res) {
   const publicKey = process.env.DISCORD_PUBLIC_KEY;
 
   if (!signature || !timestamp || !publicKey) {
-    console.error("Discord signature settings are missing.");
+    console.error(
+      "[INTERACTIONS DEBUG] Missing signature settings."
+    );
+
     return res.status(401).send("Missing signature information");
   }
 
@@ -305,6 +483,7 @@ export default async function handler(req, res) {
       publicKey
     )
   ) {
+    console.error("[INTERACTIONS DEBUG] Invalid Discord signature.");
     return res.status(401).send("Invalid signature");
   }
 
@@ -316,43 +495,101 @@ export default async function handler(req, res) {
     return res.status(400).send("Invalid JSON");
   }
 
+  console.log("[INTERACTIONS DEBUG] Interaction received:", {
+    type: interaction.type,
+    command: interaction.data?.name || null,
+    customId: interaction.data?.custom_id || null
+  });
+
   // Discord endpoint verification.
   if (interaction.type === 1) {
+    console.log("[INTERACTIONS DEBUG] Discord PING verified.");
     return res.status(200).json({ type: 1 });
   }
 
-  const customId = interaction.data?.custom_id;
-  const group = ROLE_GROUPS[customId];
+  // Slash commands are type 2.
+  if (interaction.type === 2) {
+    const commandName = interaction.data?.name;
 
-  if (
-    interaction.type !== 3 ||
-    !group ||
-    !Array.isArray(interaction.data?.values)
-  ) {
-    return res.status(400).json({
-      error: "Unknown interaction"
+    if (commandName !== "vouch") {
+      console.log(
+        `[INTERACTIONS DEBUG] Unhandled slash command: ${commandName}`
+      );
+
+      return res.status(200).json({
+        type: 4,
+        data: {
+          content:
+            "This slash command is not configured on the Vercel endpoint.",
+          flags: 64
+        }
+      });
+    }
+
+    console.log("[VOUCH DEBUG] Acknowledging /vouch.");
+
+    // Acknowledge immediately so Discord does not time out.
+    res.status(200).json({
+      type: 5,
+      data: {
+        flags: 64
+      }
     });
+
+    waitUntil(processVouchInteraction(interaction));
+    return;
   }
 
-  // Reject unexpected values before acknowledging the interaction.
-  if (
-    interaction.data.values.some(
-      roleId => !group.roles.includes(roleId)
-    )
-  ) {
-    return res.status(400).json({
-      error: "Invalid selected role"
+  // Select menus and other message components are type 3.
+  if (interaction.type === 3) {
+    const customId = interaction.data?.custom_id;
+    const group = ROLE_GROUPS[customId];
+
+    if (!group || !Array.isArray(interaction.data?.values)) {
+      return res.status(200).json({
+        type: 4,
+        data: {
+          content: "This role menu is not configured.",
+          flags: 64
+        }
+      });
+    }
+
+    if (
+      interaction.data.values.some(
+        roleId => !group.roles.includes(roleId)
+      )
+    ) {
+      return res.status(200).json({
+        type: 4,
+        data: {
+          content: "Invalid role selection.",
+          flags: 64
+        }
+      });
+    }
+
+    // Acknowledge immediately; process role changes in the background.
+    res.status(200).json({
+      type: 5,
+      data: {
+        flags: 64
+      }
     });
+
+    waitUntil(processRoleInteraction(interaction, group));
+    return;
   }
 
-  // Acknowledge Discord immediately.
-  res.status(200).json({
-    type: 5,
+  console.log(
+    `[INTERACTIONS DEBUG] Unsupported interaction type: ${interaction.type}`
+  );
+
+  return res.status(200).json({
+    type: 4,
     data: {
+      content: "This interaction type is not supported.",
       flags: 64
     }
   });
-
-  // Ask Vercel to keep the background task alive after the response.
-  waitUntil(processInteraction(interaction, group));
 }
