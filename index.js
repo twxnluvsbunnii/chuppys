@@ -5,7 +5,6 @@ const {
   Client,
   GatewayIntentBits,
   EmbedBuilder,
-  AttachmentBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -79,7 +78,6 @@ const PAYMENT_METHODS_TEXT =
   "**Payment Methods**\n> Apple Pay\n> Venmo\n> Cash App";
 
 const afkUsers = new Map();
-const processedVouchCommands = new Set();
 
 // ==================================================
 // DISCORD CLIENT
@@ -130,7 +128,8 @@ const vouchSlashCommand = new SlashCommandBuilder()
   );
 
 // ==================================================
-// REGISTER /VOUCH WHILE PRESERVING OTHER COMMANDS
+// REGISTER /VOUCH
+// PRESERVE OTHER GUILD SLASH COMMANDS
 // ==================================================
 
 async function registerSlashCommands(readyClient) {
@@ -187,7 +186,6 @@ async function registerSlashCommands(readyClient) {
 
 // ==================================================
 // VOUCH EMBED
-// WHITE ACCENT BORDER - NO STAR EMOJIS
 // ==================================================
 
 function makeVouchEmbed({
@@ -195,6 +193,7 @@ function makeVouchEmbed({
   buyerId,
   item,
   rating,
+  proofUrl,
   proofName
 }) {
   return new EmbedBuilder()
@@ -209,7 +208,7 @@ function makeVouchEmbed({
       `**proof:** 📎 ${proofName}\n\n` +
       "*thank you for vouching! shop again ♡*"
     )
-    .setImage(`attachment://${proofName}`);
+    .setImage(proofUrl);
 }
 
 // ==================================================
@@ -222,8 +221,7 @@ async function submitVouch({
   buyer,
   rating,
   item,
-  proof,
-  uniqueId
+  proof
 }) {
   if (!guild) {
     throw new Error("Use /vouch inside your server.");
@@ -253,7 +251,7 @@ async function submitVouch({
     );
   }
 
-  if (!proof?.url) {
+  if (!proof || !proof.url) {
     throw new Error("Please attach a proof image.");
   }
 
@@ -276,7 +274,7 @@ async function submitVouch({
     );
   }
 
-  // Find the configured vouch channel.
+  // Find the vouch channel.
   const channel = await guild.channels
     .fetch(VOUCH_CHANNEL_ID)
     .catch(() => null);
@@ -291,11 +289,13 @@ async function submitVouch({
     );
   }
 
-  // Verify required permissions.
+  // Check bot permissions.
   const botMember = guild.members.me;
 
   if (!botMember) {
-    throw new Error("The bot's server membership was not found.");
+    throw new Error(
+      "The bot's server membership was not found."
+    );
   }
 
   const permissions = channel.permissionsFor(botMember);
@@ -305,51 +305,25 @@ async function submitVouch({
     !permissions.has([
       PermissionsBitField.Flags.ViewChannel,
       PermissionsBitField.Flags.SendMessages,
-      PermissionsBitField.Flags.EmbedLinks,
-      PermissionsBitField.Flags.AttachFiles
+      PermissionsBitField.Flags.EmbedLinks
     ])
   ) {
     throw new Error(
-      "The bot needs View Channel, Send Messages, Embed Links, " +
-      "and Attach Files permissions in the vouch channel."
+      "The bot needs View Channel, Send Messages, and Embed Links " +
+      "permissions in the vouch channel."
     );
   }
 
-  // Download the customer's image and upload it directly.
-  const response = await fetch(proof.url);
-
-  if (!response.ok) {
-    throw new Error(
-      `Could not download proof image: HTTP ${response.status}.`
-    );
-  }
-
-  const imageBuffer = Buffer.from(
-    await response.arrayBuffer()
-  );
-
-  if (imageBuffer.length === 0) {
-    throw new Error("The proof image is empty.");
-  }
-
-  const originalName = proof.name || "proof.png";
-
-  const extension = originalName.match(
-    /\.(png|jpe?g|gif|webp|avif)$/i
-  )?.[0]?.toLowerCase() || ".png";
-
-  const proofName = `vouch-${uniqueId}${extension}`;
-
-  const proofAttachment = new AttachmentBuilder(
-    imageBuffer,
-    { name: proofName }
-  );
+  // Use the uploaded Discord image URL directly.
+  // No separate download or upload is required.
+  const proofName = proof.name || "proof.png";
 
   const embed = makeVouchEmbed({
     sellerId: seller.id,
     buyerId: buyer.id,
     item,
     rating,
+    proofUrl: proof.url,
     proofName
   });
 
@@ -357,10 +331,9 @@ async function submitVouch({
     `[VOUCH] Sending vouch to channel ${channel.id}.`
   );
 
-  // Post the embed and the image together.
+  // Send the embed into the configured vouch channel.
   const posted = await channel.send({
     embeds: [embed],
-    files: [proofAttachment],
     allowedMentions: {
       users: [seller.id, buyer.id]
     }
@@ -370,7 +343,7 @@ async function submitVouch({
     `[VOUCH] Successfully posted message ${posted.id}.`
   );
 
-  // Reaction failure does not undo the posted vouch.
+  // Reaction errors should not undo the vouch.
   await posted.react(CHUPPY_TY_EMOJI).catch(error => {
     console.error("[VOUCH] Reaction failed:", error);
   });
@@ -409,11 +382,14 @@ client.on(Events.InteractionCreate, async interaction => {
     `[VOUCH] /vouch received from ${interaction.user.tag}.`
   );
 
-  // Acknowledge immediately to avoid Discord's timeout.
+  // Acknowledge the interaction immediately.
   try {
     await interaction.deferReply({ ephemeral: true });
   } catch (error) {
-    console.error("[VOUCH] Could not acknowledge interaction:", error);
+    console.error(
+      "[VOUCH] Could not acknowledge interaction:",
+      error
+    );
     return;
   }
 
@@ -429,7 +405,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (!seller || rating === null || !item || !proof) {
       throw new Error(
-        "Please provide seller, rating, order, and proof image."
+        "Please provide the seller, rating, items purchased, and proof."
       );
     }
 
@@ -439,8 +415,7 @@ client.on(Events.InteractionCreate, async interaction => {
       buyer: interaction.user,
       rating,
       item,
-      proof,
-      uniqueId: interaction.id
+      proof
     });
 
     await interaction.editReply({
@@ -448,17 +423,22 @@ client.on(Events.InteractionCreate, async interaction => {
         `Your vouch was posted successfully in <#${VOUCH_CHANNEL_ID}>!`
     });
 
-    console.log(`[VOUCH] Completed: ${posted.id}`);
+    console.log(
+      `[VOUCH] Completed successfully: ${posted.id}`
+    );
   } catch (error) {
     console.error("[VOUCH] Slash command failed:", error);
 
+    const errorMessage =
+      error?.message || "An unknown error occurred.";
+
     await interaction.editReply({
-      content:
-        `Your vouch could not be posted: ${
-          error.message || "Unknown error"
-        }`
-    }).catch(editError => {
-      console.error("[VOUCH] Reply update failed:", editError);
+      content: `Your vouch could not be posted: ${errorMessage}`
+    }).catch(replyError => {
+      console.error(
+        "[VOUCH] Could not update interaction reply:",
+        replyError
+      );
     });
   }
 });
@@ -476,7 +456,10 @@ client.on(Events.GuildMemberAdd, async member => {
     if (!channel || !channel.isTextBased()) return;
 
     await member.roles.add(WELCOME_ROLE_ID).catch(error => {
-      console.error("[WELCOME] Could not assign role:", error);
+      console.error(
+        "[WELCOME] Could not assign role:",
+        error
+      );
     });
 
     const embed = new EmbedBuilder()
@@ -782,7 +765,7 @@ function makeSellersEmbed() {
     ["952566845939023892", "seller", "$45"],
     ["1473335012769267807", "seller", "$100"],
     ["1472856287527309313", "seller", "$100"],
-    ["1269188505935024141", "seller", "$250"]
+    ["126918850593502141", "seller", "$250"]
   ];
 
   const lines = ["# .gg/chuppys sellers", ""];
@@ -932,6 +915,8 @@ async function handleAFK(message) {
 
 // ==================================================
 // MESSAGE COMMANDS
+// Prefix vouch has been removed.
+// /vouch is the vouch command.
 // ==================================================
 
 client.on(Events.MessageCreate, async message => {
@@ -939,70 +924,6 @@ client.on(Events.MessageCreate, async message => {
 
   const rawContent = message.content.trim();
   const content = rawContent.toLowerCase();
-
-  // --------------------------------------------------
-  // OPTIONAL PREFIX VOUCH
-  // Usage: ,vouch @seller 5 Nitro + attach proof image
-  // --------------------------------------------------
-
-  if (/^,vouch(?:\s|$)/i.test(rawContent)) {
-    if (processedVouchCommands.has(message.id)) return;
-
-    processedVouchCommands.add(message.id);
-
-    const match = rawContent.match(
-      /^,vouch\s+<@!?(\d+)>\s+([1-5])\s+([\s\S]+)$/i
-    );
-
-    if (!match) {
-      await message.reply({
-        content:
-          "Use `,vouch @seller 5 Nitro` and attach your proof screenshot.",
-        allowedMentions: { repliedUser: false }
-      });
-      return;
-    }
-
-    const sellerId = match[1];
-    const rating = Number(match[2]);
-    const item = match[3].trim();
-
-    const proof = message.attachments.find(attachment =>
-      attachment.contentType?.startsWith("image/") ||
-      /\.(png|jpe?g|gif|webp|avif)$/i.test(attachment.name || "")
-    );
-
-    if (!proof) {
-      await message.reply({
-        content: "Please attach a proof screenshot.",
-        allowedMentions: { repliedUser: false }
-      });
-      return;
-    }
-
-    try {
-      await submitVouch({
-        guild: message.guild,
-        seller: { id: sellerId, bot: false },
-        buyer: message.author,
-        rating,
-        item,
-        proof,
-        uniqueId: message.id
-      });
-
-      await message.delete().catch(() => {});
-    } catch (error) {
-      console.error("[VOUCH] Prefix command failed:", error);
-
-      await message.reply({
-        content: `The vouch could not be posted: ${error.message}`,
-        allowedMentions: { repliedUser: false }
-      }).catch(() => {});
-    }
-
-    return;
-  }
 
   try {
     const wasAFKCommand = await handleAFK(message);
