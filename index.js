@@ -94,7 +94,7 @@ const client = new Client({
 });
 
 // ==================================================
-// SLASH COMMAND DEFINITION
+// /VOUCH SLASH COMMAND
 // ==================================================
 
 const vouchSlashCommand = new SlashCommandBuilder()
@@ -129,20 +129,17 @@ const vouchSlashCommand = new SlashCommandBuilder()
   );
 
 // ==================================================
-// REGISTER /VOUCH
+// REGISTER SLASH COMMAND
 // ==================================================
 
 async function registerSlashCommands(readyClient) {
-  if (!GUILD_ID) {
-    console.error(
-      "[COMMANDS] DISCORD_GUILD_ID is missing from Render environment variables."
-    );
+  if (!GUILD_ID || !TOKEN) {
+    console.error("[COMMANDS] Missing DISCORD_GUILD_ID or DISCORD_BOT_TOKEN.");
     return;
   }
 
   try {
     const rest = new REST({ version: "10" }).setToken(TOKEN);
-
     const route = Routes.applicationGuildCommands(
       readyClient.user.id,
       GUILD_ID
@@ -150,7 +147,6 @@ async function registerSlashCommands(readyClient) {
 
     const existingCommands = await rest.get(route);
 
-    // Keep other existing guild commands and replace only /vouch.
     const preservedCommands = existingCommands
       .filter(command => command.name !== "vouch")
       .map(command => {
@@ -213,24 +209,22 @@ function makeVouchEmbed({
   proofName
 }) {
   return new EmbedBuilder()
-    .setColor(0xFFFFFF)
+    .setColor("#E8B9ED")
+    .setTitle("NEW VOUCH")
     .setThumbnail(VOUCH_EMOJI_URL)
-    .setDescription([
-      "# NEW VOUCH",
-      "",
-      `**seller:** <@${sellerId}>`,
-      `**buyer:** <@${buyerId}>`,
-      `**items purchased:** ${item}`,
-      `**rating:** ${rating}/5`,
-      "**proof:** attached below",
-      "",
+    .setDescription(
+      `**seller:** <@${sellerId}>\n` +
+      `**buyer:** <@${buyerId}>\n` +
+      `**items purchased:** ${item}\n` +
+      `**rating:** ${rating}/5\n` +
+      `**proof:** 📎 [${proofName}](attachment://${proofName})\n\n` +
       "*thank you for vouching! shop again ♡*"
-    ].join("\n"))
+    )
     .setImage(`attachment://${proofName}`);
 }
 
 // ==================================================
-// VOUCH VALIDATION AND POSTING
+// SUBMIT VOUCH
 // ==================================================
 
 async function submitVouch({
@@ -243,7 +237,7 @@ async function submitVouch({
   uniqueId
 }) {
   if (!guild) {
-    throw new Error("This command must be used inside a server.");
+    throw new Error("Use this command inside the server.");
   }
 
   if (!seller || !buyer) {
@@ -261,7 +255,7 @@ async function submitVouch({
   item = (item || "").trim();
 
   if (!item || item.length > 500) {
-    throw new Error("Order description must be between 1 and 500 characters.");
+    throw new Error("Purchase description must be 1–500 characters.");
   }
 
   if (!proof || !proof.url) {
@@ -273,7 +267,7 @@ async function submitVouch({
     /\.(png|jpe?g|gif|webp|avif)$/i.test(proof.name || "");
 
   if (!isImage) {
-    throw new Error("Proof must be an image file.");
+    throw new Error("Proof must be an image.");
   }
 
   const sellerMember = await guild.members
@@ -288,14 +282,19 @@ async function submitVouch({
     .fetch(VOUCH_CHANNEL_ID)
     .catch(() => null);
 
-  if (!channel || !channel.isTextBased() || typeof channel.send !== "function") {
-    throw new Error("The configured vouch channel could not be found.");
+  if (
+    !channel ||
+    !channel.isTextBased() ||
+    typeof channel.send !== "function"
+  ) {
+    throw new Error("The vouches channel could not be found.");
   }
 
   const originalName = proof.name || "proof.png";
-  const extension = originalName.match(
-    /\.(png|jpe?g|gif|webp|avif)$/i
-  )?.[0]?.toLowerCase() || ".png";
+
+  const extension =
+    originalName.match(/\.(png|jpe?g|gif|webp|avif)$/i)?.[0]
+      ?.toLowerCase() || ".png";
 
   const proofName = `vouch-${uniqueId}${extension}`;
 
@@ -307,13 +306,27 @@ async function submitVouch({
     proofName
   });
 
-  // Discord receives the image as an attachment and displays it in the embed.
+  // Download the screenshot so Discord can display it in the embed.
+  const response = await fetch(proof.url);
+
+  if (!response.ok) {
+    throw new Error("Could not download the proof image.");
+  }
+
+  const imageBuffer = Buffer.from(await response.arrayBuffer());
+
+  if (!imageBuffer.length) {
+    throw new Error("The proof image was empty.");
+  }
+
   const posted = await channel.send({
     embeds: [embed],
-    files: [{
-      attachment: proof.url,
-      name: proofName
-    }],
+    files: [
+      {
+        attachment: imageBuffer,
+        name: proofName
+      }
+    ],
     allowedMentions: {
       users: [seller.id, buyer.id]
     }
@@ -340,30 +353,31 @@ client.once(Events.ClientReady, async readyClient => {
 });
 
 // ==================================================
-// SLASH VOUCH HANDLER — ACKNOWLEDGE IMMEDIATELY
+// /VOUCH INTERACTION HANDLER
 // ==================================================
 
 client.on(Events.InteractionCreate, async interaction => {
-  if (!interaction.isChatInputCommand()) return;
-  if (interaction.commandName !== "vouch") return;
+  if (
+    !interaction.isChatInputCommand() ||
+    interaction.commandName !== "vouch"
+  ) {
+    return;
+  }
 
-  console.log(
-    `[VOUCH] Received /vouch from ${interaction.user.tag}`
-  );
+  console.log(`[VOUCH] /vouch received from ${interaction.user.tag}`);
 
-  // Acknowledge immediately to avoid Discord's interaction timeout.
   try {
     await interaction.deferReply({ ephemeral: true });
   } catch (error) {
-    console.error("[VOUCH] Failed to acknowledge interaction:", error);
+    console.error("[VOUCH] Could not acknowledge command:", error);
     return;
   }
 
   try {
-    const seller = interaction.options.getUser("seller");
-    const rating = interaction.options.getInteger("rating");
-    const item = interaction.options.getString("order");
-    const proof = interaction.options.getAttachment("proof");
+    const seller = interaction.options.getUser("seller", true);
+    const rating = interaction.options.getInteger("rating", true);
+    const item = interaction.options.getString("order", true);
+    const proof = interaction.options.getAttachment("proof", true);
 
     await submitVouch({
       guild: interaction.guild,
@@ -380,19 +394,16 @@ client.on(Events.InteractionCreate, async interaction => {
     );
 
     console.log(
-      `[VOUCH] Success: buyer=${interaction.user.id}, ` +
-      `seller=${seller.id}, rating=${rating}/5, order=${item}`
+      `[VOUCH] Posted successfully. Buyer=${interaction.user.id}, ` +
+      `Seller=${seller.id}, Rating=${rating}/5`
     );
   } catch (error) {
-    console.error("[VOUCH] Failed to submit slash vouch:", error);
+    console.error("[VOUCH] Slash command failed:", error);
 
-    const response =
-      error.message && error.message.length < 500
-        ? `Your vouch could not be posted: ${error.message}`
-        : "Your vouch could not be posted. Please contact staff.";
-
-    await interaction.editReply(response).catch(editError => {
-      console.error("[VOUCH] Could not edit interaction reply:", editError);
+    await interaction.editReply(
+      `Your vouch could not be posted: ${error.message || "Unknown error."}`
+    ).catch(editError => {
+      console.error("[VOUCH] Reply failed:", editError);
     });
   }
 });
@@ -458,6 +469,7 @@ client.on(Events.GuildMemberRemove, async member => {
       .setFooter({ text: member.guild.name });
 
     await channel.send({ embeds: [embed] });
+
     console.log(`[GOODBYE] Sent for ${member.user.tag}`);
   } catch (error) {
     console.error("[GOODBYE] Error:", error);
@@ -495,7 +507,11 @@ async function sendPaymentEmbed(channel) {
       .setURL(PAYPAL_URL)
   );
 
-  const payload = { embeds: [embed], components: [row] };
+  const payload = {
+    embeds: [embed],
+    components: [row]
+  };
+
   const messages = await channel.messages.fetch({ limit: 100 });
 
   const matches = messages.filter(msg =>
@@ -536,8 +552,13 @@ async function updateServiceMessage(channel, embed, serviceName) {
 
       const description = msg.embeds[0].description || "";
 
-      if (serviceName === "DECOR") return description.includes("# DECOR");
-      if (serviceName === "NITRO") return description.includes("# NITRO");
+      if (serviceName === "DECOR") {
+        return description.includes("# DECOR");
+      }
+
+      if (serviceName === "NITRO") {
+        return description.includes("# NITRO");
+      }
 
       if (serviceName === "BOOSTIES") {
         return description.includes("# 1 MONTH") ||
@@ -567,6 +588,7 @@ async function updateServiceMessage(channel, embed, serviceName) {
     }
 
     const sent = await channel.send({ embeds: [embed] });
+
     console.log(`[${serviceName}] Message created.`);
     return sent;
   } catch (error) {
@@ -802,7 +824,7 @@ async function handleAFK(message) {
 }
 
 // ==================================================
-// MESSAGE COMMANDS — PREFIX VOUCH AND OTHER FEATURES
+// MESSAGE COMMANDS
 // ==================================================
 
 client.on(Events.MessageCreate, async message => {
@@ -811,11 +833,7 @@ client.on(Events.MessageCreate, async message => {
   const rawContent = message.content.trim();
   const content = rawContent.toLowerCase();
 
-  // --------------------------------------------------
-  // EXISTING ,VOUCH COMMAND
-  // Usage: ,vouch @seller 5 Nitro + attach proof image
-  // --------------------------------------------------
-
+  // Legacy ,vouch command. Use /vouch as the main command.
   if (/^,vouch(?:\s|$)/i.test(rawContent)) {
     if (processedVouchCommands.has(message.id)) return;
     processedVouchCommands.add(message.id);
@@ -884,10 +902,6 @@ client.on(Events.MessageCreate, async message => {
 
     return;
   }
-
-  // --------------------------------------------------
-  // AFK
-  // --------------------------------------------------
 
   try {
     const wasAFKCommand = await handleAFK(message);
@@ -1060,7 +1074,9 @@ async function sendEmbedToChannel(guild, channelId, embed, label) {
   const channel = await guild.channels.fetch(channelId);
 
   if (!channel || !channel.isTextBased()) {
-    throw new Error(`${label} channel not found or is not a text channel.`);
+    throw new Error(
+      `${label} channel not found or is not a text channel.`
+    );
   }
 
   await channel.send({
