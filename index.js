@@ -57,10 +57,6 @@ const VOUCH_CHANNEL_ID = "1530811494168657980";
 
 const WELCOME_ROLE_ID = "1531039846871728248";
 
-// ==================================================
-// AUTOMATIC REACTION
-// ==================================================
-
 const CHUPPY_TY_CHANNEL_ID = "1530811494168657980";
 const CHUPPY_TY_EMOJI = "<:uppyty:1561094713153429746>";
 
@@ -72,6 +68,10 @@ const AFK_GOING_EMOJI = "<:chuppybye:1561103844832846014>";
 const AFK_RETURN_EMOJI = "<:chuppyhi:1561103471325745242>";
 
 const afkUsers = new Map();
+
+// Prevent the same command message from being processed twice
+// by this running instance.
+const processedVouchCommands = new Set();
 
 // ==================================================
 // EMOJIS
@@ -260,6 +260,7 @@ async function sendPaymentEmbed(channel) {
       }
     }
 
+    console.log("Existing payment message updated.");
     return existingMessage;
   }
 
@@ -545,10 +546,6 @@ function makeVouchEmbed({
       ].join("\n")
     );
 
-  if (proofUrl && /\.(png|jpe?g|gif|webp)(\?.*)?$/i.test(proofUrl)) {
-    embed.setImage(proofUrl);
-  }
-
   return embed;
 }
 
@@ -649,13 +646,13 @@ async function handleAFK(message) {
 }
 
 // ==================================================
-// MESSAGE COMMANDS + AUTOMATIC REACTION + AFK + VOUCH
+// MESSAGE COMMANDS
 // ==================================================
 
 client.on(Events.MessageCreate, async (message) => {
   if (!message.guild) return;
 
-  // REACT TO BOT-POSTED VOUCH EMBEDS ONLY
+  // Automatically react to vouch embeds sent by this bot.
   if (
     message.channel.id === VOUCH_CHANNEL_ID &&
     message.author.id === client.user.id &&
@@ -673,7 +670,15 @@ client.on(Events.MessageCreate, async (message) => {
 
   if (message.author.bot) return;
 
-  // AFK, VOUCH, AND OTHER COMMANDS
+  // Automatic reaction to other messages in the configured channel.
+  if (message.channel.id === CHUPPY_TY_CHANNEL_ID) {
+    try {
+      await message.react(CHUPPY_TY_EMOJI);
+    } catch (error) {
+      console.error("Could not add Chuppy TY reaction:", error.message);
+    }
+  }
+
   try {
     const wasAFKCommand = await handleAFK(message);
     if (wasAFKCommand) return;
@@ -684,11 +689,24 @@ client.on(Events.MessageCreate, async (message) => {
     // ==================================================
     // VOUCH COMMAND
     // Usage: ,vouch @seller 5 item purchased
-    // Attach the proof screenshot to the command message.
-    // Publishes only the embed in the vouches channel.
+    // Attach proof to the command message.
     // ==================================================
 
     if (content.startsWith(",vouch")) {
+      // Avoid processing this exact Discord message twice
+      // within the same running bot instance.
+      if (processedVouchCommands.has(message.id)) {
+        console.log(`Duplicate vouch command ignored: ${message.id}`);
+        return;
+      }
+
+      processedVouchCommands.add(message.id);
+
+      // Keep the cache limited to recent command IDs.
+      setTimeout(() => {
+        processedVouchCommands.delete(message.id);
+      }, 10 * 60 * 1000);
+
       const match = rawContent.match(
         /^,vouch\s+<@!?(\d+)>\s+([1-5])\s+([\s\S]+)$/i
       );
@@ -765,12 +783,13 @@ client.on(Events.MessageCreate, async (message) => {
         !vouchChannel.send
       ) {
         await message.reply({
-          content:
-            "I couldn't find the vouches channel. Please contact staff.",
+          content: "I couldn't find the vouches channel. Please contact staff.",
           allowedMentions: { repliedUser: false }
         });
         return;
       }
+
+      const proofName = proof.name || "proof.png";
 
       const embed = makeVouchEmbed({
         sellerId,
@@ -778,10 +797,38 @@ client.on(Events.MessageCreate, async (message) => {
         item,
         rating,
         proofUrl: proof.url,
-        proofName: proof.name || "proof.png"
+        proofName
       });
 
-      // SEND ONLY THE VOUCH EMBED TO THE VOUCHES CHANNEL.
+      // Check recent bot vouches for a matching submission.
+      // This helps prevent duplicate posts after retries/reprocessing.
+      const recentMessages = await vouchChannel.messages.fetch({
+        limit: 25
+      });
+
+      const alreadyPosted = recentMessages.some((msg) => {
+        if (msg.author.id !== client.user.id) return false;
+
+        const description = msg.embeds[0]?.description || "";
+
+        return (
+          description.includes(`**seller:** <@${sellerId}>`) &&
+          description.includes(`**buyer:** <@${message.author.id}>`) &&
+          description.includes(`**items purchased:** ${item}`) &&
+          description.includes(proofName)
+        );
+      });
+
+      if (alreadyPosted) {
+        console.log(
+          `Duplicate vouch prevented for command ${message.id}.`
+        );
+
+        await message.delete().catch(() => {});
+        return;
+      }
+
+      // SEND THE VOUCH EMBED ONLY ONCE.
       await vouchChannel.send({
         embeds: [embed],
         allowedMentions: {
@@ -789,12 +836,15 @@ client.on(Events.MessageCreate, async (message) => {
         }
       });
 
-      // DELETE THE ORIGINAL COMMAND MESSAGE IF THE BOT HAS PERMISSION.
+      // Delete the command message if the bot has Manage Messages.
       await message.delete().catch((error) => {
-        console.error("Could not delete original vouch command:", error.message);
+        console.error(
+          "Could not delete original vouch command:",
+          error.message
+        );
       });
 
-      // NO SUCCESS REPLY — THE EMBED IS THE ONLY SUCCESS MESSAGE.
+      // No success reply: the vouch embed is the only success message.
       console.log(
         `Vouch submitted by ${message.author.tag} for ${sellerMember.user.tag}: ${rating}/5, ${item}`
       );
