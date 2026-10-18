@@ -47,6 +47,12 @@ const WELCOME_ROLE_ID = "1531039846871728248";
 const CHUPPY_TY_CHANNEL_ID = "1530811494168657980";
 const CHUPPY_TY_EMOJI = "<:uppyty:1561094713153429746>";
 
+// INVITE BOT AUTO-REACTION
+const INVITE_CHANNEL_ID = "1560249120667734016";
+const INVITE_BOT_ID = "499595256270946326";
+const INVITE_REACTION_EMOJI =
+  "<:chuppynewinv:1561398288593330326>";
+
 const AFK_GOING_EMOJI = "<:chuppybye:1561103844832846014>";
 const AFK_RETURN_EMOJI = "<:chuppyhi:1561103471325745242>";
 
@@ -730,6 +736,33 @@ client.on(Events.MessageCreate, async message => {
     await message.reply(
       `Something went wrong: ${error.message}`
     ).catch(() => {});
+  }
+});
+
+// ==================================================
+// AUTOMATIC REACTION — INVITE BOT MESSAGES
+// ==================================================
+
+client.on(Events.MessageCreate, async message => {
+  if (!message.guild) return;
+
+  // Only react in the designated invite channel.
+  if (message.channel.id !== INVITE_CHANNEL_ID) return;
+
+  // Only react to messages from the designated invite bot.
+  if (message.author.id !== INVITE_BOT_ID) return;
+
+  try {
+    await message.react(INVITE_REACTION_EMOJI);
+
+    console.log(
+      `[INVITE REACTION] Added Chuppy reaction to message ${message.id}`
+    );
+  } catch (error) {
+    console.error(
+      "[INVITE REACTION] Could not react to invite message:",
+      error
+    );
   }
 });
 
