@@ -53,12 +53,12 @@ const BOOSTIES_CHANNEL_ID = "1555769708928831489";
 const SELLERS_CHANNEL_ID = "1551713598181605496";
 const STAFF_CHANNEL_ID = "1561013244905132122";
 
-// Destination channel where customer vouches are published.
+// Vouch destination channel
 const VOUCH_CHANNEL_ID = "1530811494168657980";
 
 const WELCOME_ROLE_ID = "1531039846871728248";
 
-// AUTOMATIC REACTION
+// Automatic reaction
 const CHUPPY_TY_CHANNEL_ID = "1530811494168657980";
 const CHUPPY_TY_EMOJI = "<:uppyty:1561094713153429746>";
 
@@ -531,7 +531,7 @@ function makeVouchEmbed({
 }) {
   const embed = new EmbedBuilder()
     .setColor("#F2C8F2")
-    .setAuthor({ name: "new vouch  !!" })
+    .setTitle("New Vouch")
     .setThumbnail(VOUCH_EMOJI_URL)
     .setDescription(
       [
@@ -545,7 +545,6 @@ function makeVouchEmbed({
       ].join("\n")
     );
 
-  // Display the proof image inside the embed when Discord identifies it as an image.
   if (proofUrl && /\.(png|jpe?g|gif|webp)(\?.*)?$/i.test(proofUrl)) {
     embed.setImage(proofUrl);
   }
@@ -656,28 +655,30 @@ async function handleAFK(message) {
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot || !message.guild) return;
 
-  // AUTOMATIC CHUPPY TY REACTION
+  // AUTOMATIC REACTION
   if (message.channel.id === CHUPPY_TY_CHANNEL_ID) {
     try {
       await message.react(CHUPPY_TY_EMOJI);
-      console.log(`Added Chuppy TY reaction to message ${message.id}`);
     } catch (error) {
-      console.error("Could not add Chuppy TY reaction:", error.message);
+      console.error("Could not add reaction:", error.message);
     }
   }
 
   try {
-    // AFK SYSTEM
     const wasAFKCommand = await handleAFK(message);
     if (wasAFKCommand) return;
 
     const rawContent = message.content.trim();
     const content = rawContent.toLowerCase();
 
+    // ==================================================
     // VOUCH COMMAND
-    // Use this in a ticket: ,vouch @seller 5 item purchased
-    // Attach a proof screenshot to the same message.
-    // The bot publishes the vouch in VOUCH_CHANNEL_ID.
+    // Use in a ticket:
+    // ,vouch @seller 5 kitty purse
+    // Attach the proof screenshot to the same message.
+    // The vouch is published in VOUCH_CHANNEL_ID.
+    // ==================================================
+
     if (content.startsWith(",vouch")) {
       const match = rawContent.match(
         /^,vouch\s+<@!?(\d+)>\s+([1-5])\s+([\s\S]+)$/i
@@ -758,19 +759,15 @@ client.on(Events.MessageCreate, async (message) => {
         VOUCH_CHANNEL_ID
       );
 
-      if (
-        !vouchChannel ||
-        !vouchChannel.isTextBased() ||
-        !vouchChannel.send
-      ) {
+      if (!vouchChannel || !vouchChannel.isTextBased()) {
         await message.reply({
-          content:
-            "I couldn't find the vouches channel. Please contact staff.",
+          content: "I couldn't find the vouches channel. Please contact staff.",
           allowedMentions: { repliedUser: false }
         });
         return;
       }
 
+      // Send the vouch only to the vouches channel.
       await vouchChannel.send({
         embeds: [embed],
         allowedMentions: {
@@ -778,6 +775,7 @@ client.on(Events.MessageCreate, async (message) => {
         }
       });
 
+      // Confirmation in the ticket; no "Please submit vouches in..." message.
       await message.reply({
         content: `Your vouch has been submitted to <#${VOUCH_CHANNEL_ID}>!`,
         allowedMentions: { repliedUser: false }
@@ -789,13 +787,19 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
+    // ==================================================
     // PAYMENT
+    // ==================================================
+
     if (["!pay", ",pay", "!testpay"].includes(content)) {
       await sendPaymentEmbed(message.channel);
       return;
     }
 
+    // ==================================================
     // ADMIN COMMAND PERMISSION CHECK
+    // ==================================================
+
     const adminCommands = [
       "!nitro", ",nitro",
       "!decor", ",decor",
