@@ -1,3 +1,4 @@
+
 const http = require("http");
 
 const {
@@ -41,7 +42,7 @@ const BOOSTIES_CHANNEL_ID = "1555769708928831489";
 const SELLERS_CHANNEL_ID = "1551713598181605496";
 const STAFF_CHANNEL_ID = "1561013244905132122";
 
-// ROBUX CASH OUT CHANNEL
+// ROBUX CASH OUT
 const ROBUX_CASHOUT_CHANNEL_ID = "1552385740405473513";
 const ROBUX_EMOJI = "<:Robux:1561391606098038877>";
 
@@ -105,12 +106,12 @@ require("./vouch")(client);
 
 // ==================================================
 // ROBUX CASH OUT EMBED
-// Automatically creates or updates one message
+// Creates or updates the existing embed in its channel
 // ==================================================
 
 async function sendRobuxCashoutEmbed(channel) {
-  if (!channel || !channel.isTextBased()) {
-    throw new Error("Robux Cash out channel not found.");
+  if (!channel || !channel.isTextBased() || !channel.messages) {
+    throw new Error("Robux Cash out channel not found or invalid.");
   }
 
   const embed = new EmbedBuilder()
@@ -129,7 +130,7 @@ async function sendRobuxCashoutEmbed(channel) {
     allowedMentions: { parse: [] }
   };
 
-  // Find an existing Robux Cash out embed from this bot.
+  // Search the latest 100 messages for this bot's embed.
   const messages = await channel.messages.fetch({ limit: 100 });
 
   const matches = messages.filter(message =>
@@ -142,9 +143,10 @@ async function sendRobuxCashoutEmbed(channel) {
   const existing = matches.first();
 
   if (existing) {
-    // Update the existing message instead of creating duplicates.
+    // Update the existing embed.
     await existing.edit(payload);
 
+    // Remove any duplicate embeds from this bot.
     for (const duplicate of matches.values()) {
       if (duplicate.id !== existing.id) {
         await duplicate.delete().catch(error => {
@@ -160,10 +162,10 @@ async function sendRobuxCashoutEmbed(channel) {
     return existing;
   }
 
-  // No existing embed was found, so create it.
+  // Send a new embed if none exists.
   const sent = await channel.send(payload);
 
-  console.log("[ROBUX CASHOUT] Embed created.");
+  console.log("[ROBUX CASHOUT] New embed created.");
   return sent;
 }
 
@@ -179,17 +181,11 @@ client.once(Events.ClientReady, async readyClient => {
     type: 3
   });
 
-  // AUTOMATIC ROBUX CASH OUT EMBED
+  // Automatically create or update the Robux embed on startup.
   try {
     const channel = await readyClient.channels.fetch(
       ROBUX_CASHOUT_CHANNEL_ID
     );
-
-    if (!channel || !channel.isTextBased()) {
-      throw new Error(
-        `Channel ${ROBUX_CASHOUT_CHANNEL_ID} was not found or is not a text channel.`
-      );
-    }
 
     await sendRobuxCashoutEmbed(channel);
   } catch (error) {
@@ -267,7 +263,6 @@ client.on(Events.GuildMemberRemove, async member => {
 
 // ==================================================
 // PAYMENT EMBED — ,pay
-// Updates an existing message and removes duplicates
 // ==================================================
 
 async function sendPaymentEmbed(channel) {
@@ -687,6 +682,31 @@ client.on(Events.MessageCreate, async message => {
     const wasAFKCommand = await handleAFK(message);
     if (wasAFKCommand) return;
 
+    // ROBUX CASH OUT — !robuxcashout
+    if (content === "!robuxcashout") {
+      if (
+        !message.member.permissions.has(
+          PermissionsBitField.Flags.ManageGuild
+        )
+      ) {
+        await message.reply(
+          "You need **Manage Server** permission to use this command."
+        );
+        return;
+      }
+
+      const channel = await client.channels.fetch(
+        ROBUX_CASHOUT_CHANNEL_ID
+      );
+
+      await sendRobuxCashoutEmbed(channel);
+
+      await message.reply(
+        "Robux Cash out message updated successfully!"
+      );
+      return;
+    }
+
     // PAYMENT — ONLY ,pay
     if (content === ",pay") {
       await sendPaymentEmbed(message.channel);
@@ -830,10 +850,7 @@ client.on(Events.MessageCreate, async message => {
 client.on(Events.MessageCreate, async message => {
   if (!message.guild) return;
 
-  // Only react in the designated invite channel.
   if (message.channel.id !== INVITE_CHANNEL_ID) return;
-
-  // Only react to messages from the designated invite bot.
   if (message.author.id !== INVITE_BOT_ID) return;
 
   try {
@@ -857,13 +874,9 @@ client.on(Events.MessageCreate, async message => {
 client.on(Events.MessageCreate, async message => {
   if (!message.guild) return;
 
-  // Only react to messages sent by this bot.
   if (message.author.id !== client.user.id) return;
-
-  // Only react in the Chuppy TY channel.
   if (message.channel.id !== CHUPPY_TY_CHANNEL_ID) return;
 
-  // Only react to embeds whose title contains "vouch".
   const isVouch = message.embeds.some(embed =>
     (embed.title || "").toLowerCase().includes("vouch")
   );
@@ -872,6 +885,7 @@ client.on(Events.MessageCreate, async message => {
 
   try {
     await message.react(CHUPPY_TY_EMOJI);
+
     console.log(
       `[REACTION] Added uppyty to bot vouch ${message.id}`
     );
