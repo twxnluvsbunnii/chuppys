@@ -53,12 +53,14 @@ const BOOSTIES_CHANNEL_ID = "1555769708928831489";
 const SELLERS_CHANNEL_ID = "1551713598181605496";
 const STAFF_CHANNEL_ID = "1561013244905132122";
 
-// Destination channel where all customer vouches are published.
 const VOUCH_CHANNEL_ID = "1530811494168657980";
 
 const WELCOME_ROLE_ID = "1531039846871728248";
 
+// ==================================================
 // AUTOMATIC REACTION
+// ==================================================
+
 const CHUPPY_TY_CHANNEL_ID = "1530811494168657980";
 const CHUPPY_TY_EMOJI = "<:uppyty:1561094713153429746>";
 
@@ -69,7 +71,6 @@ const CHUPPY_TY_EMOJI = "<:uppyty:1561094713153429746>";
 const AFK_GOING_EMOJI = "<:chuppybye:1561103844832846014>";
 const AFK_RETURN_EMOJI = "<:chuppyhi:1561103471325745242>";
 
-// AFK statuses are stored in memory and reset if the bot restarts.
 const afkUsers = new Map();
 
 // ==================================================
@@ -188,7 +189,7 @@ client.on(Events.GuildMemberRemove, async (member) => {
 });
 
 // ==================================================
-// PAYMENT EMBED — ALL NUMBERS VISIBLE
+// PAYMENT EMBED
 // ==================================================
 
 async function sendPaymentEmbed(channel) {
@@ -259,13 +260,10 @@ async function sendPaymentEmbed(channel) {
       }
     }
 
-    console.log("Existing payment message updated.");
     return existingMessage;
   }
 
-  const newMessage = await channel.send(payload);
-  console.log("New payment message created.");
-  return newMessage;
+  return await channel.send(payload);
 }
 
 // ==================================================
@@ -547,8 +545,6 @@ function makeVouchEmbed({
       ].join("\n")
     );
 
-  // Display the attached image inside the embed when Discord identifies
-  // the attachment as an image.
   if (proofUrl && /\.(png|jpe?g|gif|webp)(\?.*)?$/i.test(proofUrl)) {
     embed.setImage(proofUrl);
   }
@@ -583,7 +579,6 @@ async function handleAFK(message) {
   const afkKey = `${guildId}:${userId}`;
   const rawContent = message.content.trim();
 
-  // ,afk with an optional reason
   const afkMatch = rawContent.match(/^,afk(?:\s+([\s\S]*))?$/i);
 
   if (afkMatch) {
@@ -610,7 +605,6 @@ async function handleAFK(message) {
     return true;
   }
 
-  // If this author was AFK, their next normal message clears it.
   if (afkUsers.has(afkKey)) {
     const oldAFK = afkUsers.get(afkKey);
     afkUsers.delete(afkKey);
@@ -629,7 +623,6 @@ async function handleAFK(message) {
     );
   }
 
-  // Tell users when they mention someone who is AFK.
   const notifiedUsers = new Set();
 
   for (const [mentionedUserId, user] of message.mentions.users) {
@@ -662,48 +655,39 @@ async function handleAFK(message) {
 client.on(Events.MessageCreate, async (message) => {
   if (!message.guild) return;
 
-  // AUTOMATIC REACTION TO BOT-POSTED VOUCHES
-  // This must run before ignoring bot messages, because the vouch embed is sent by this bot.
+  // REACT TO BOT-POSTED VOUCH EMBEDS ONLY
   if (
     message.channel.id === VOUCH_CHANNEL_ID &&
     message.author.id === client.user.id &&
     message.embeds.some((embed) =>
-      embed.description?.includes("NEW VOUCH") || embed.title === "New Vouch"
+      embed.description?.includes("NEW VOUCH") ||
+      embed.title === "New Vouch"
     )
   ) {
     try {
       await message.react(CHUPPY_TY_EMOJI);
-      console.log(`Added reaction to vouch ${message.id}`);
     } catch (error) {
       console.error("Could not react to vouch:", error.message);
     }
   }
 
-  // Ignore other bot messages for user commands and AFK handling.
   if (message.author.bot) return;
 
-  // AUTOMATIC CHUPPY TY REACTION TO OTHER MESSAGES IN THE CONFIGURED CHANNEL
-  if (message.channel.id === CHUPPY_TY_CHANNEL_ID) {
-    try {
-      await message.react(CHUPPY_TY_EMOJI);
-      console.log(`Added Chuppy TY reaction to message ${message.id}`);
-    } catch (error) {
-      console.error("Could not add Chuppy TY reaction:", error.message);
-    }
-  }
-
+  // AFK, VOUCH, AND OTHER COMMANDS
   try {
-    // AFK SYSTEM
     const wasAFKCommand = await handleAFK(message);
     if (wasAFKCommand) return;
 
     const rawContent = message.content.trim();
     const content = rawContent.toLowerCase();
 
+    // ==================================================
     // VOUCH COMMAND
-    // Customers run this in their ticket: ,vouch @seller 5 item purchased
-    // Attach an image proof to the same message. The bot publishes the vouch
-    // in VOUCH_CHANNEL_ID, regardless of which ticket channel the command is used in.
+    // Usage: ,vouch @seller 5 item purchased
+    // Attach the proof screenshot to the command message.
+    // Publishes only the embed in the vouches channel.
+    // ==================================================
+
     if (content.startsWith(",vouch")) {
       const match = rawContent.match(
         /^,vouch\s+<@!?(\d+)>\s+([1-5])\s+([\s\S]+)$/i
@@ -758,11 +742,31 @@ client.on(Events.MessageCreate, async (message) => {
         return;
       }
 
-      const sellerMember = await message.guild.members.fetch(sellerId).catch(() => null);
+      const sellerMember = await message.guild.members
+        .fetch(sellerId)
+        .catch(() => null);
 
       if (!sellerMember) {
         await message.reply({
-          content: "I couldn't find that seller in this server. Please mention a server member.",
+          content:
+            "I couldn't find that seller in this server. Please mention a server member.",
+          allowedMentions: { repliedUser: false }
+        });
+        return;
+      }
+
+      const vouchChannel = await message.guild.channels.fetch(
+        VOUCH_CHANNEL_ID
+      );
+
+      if (
+        !vouchChannel ||
+        !vouchChannel.isTextBased() ||
+        !vouchChannel.send
+      ) {
+        await message.reply({
+          content:
+            "I couldn't find the vouches channel. Please contact staff.",
           allowedMentions: { repliedUser: false }
         });
         return;
@@ -777,16 +781,7 @@ client.on(Events.MessageCreate, async (message) => {
         proofName: proof.name || "proof.png"
       });
 
-      const vouchChannel = await message.guild.channels.fetch(VOUCH_CHANNEL_ID);
-
-      if (!vouchChannel || !vouchChannel.isTextBased() || !vouchChannel.send) {
-        await message.reply({
-          content: "I couldn't find the vouches channel. Please contact staff.",
-          allowedMentions: { repliedUser: false }
-        });
-        return;
-      }
-
+      // SEND ONLY THE VOUCH EMBED TO THE VOUCHES CHANNEL.
       await vouchChannel.send({
         embeds: [embed],
         allowedMentions: {
@@ -794,24 +789,32 @@ client.on(Events.MessageCreate, async (message) => {
         }
       });
 
-      await message.reply({
-        content: `Your vouch has been submitted to <#${VOUCH_CHANNEL_ID}>!`,
-        allowedMentions: { repliedUser: false }
+      // DELETE THE ORIGINAL COMMAND MESSAGE IF THE BOT HAS PERMISSION.
+      await message.delete().catch((error) => {
+        console.error("Could not delete original vouch command:", error.message);
       });
 
+      // NO SUCCESS REPLY — THE EMBED IS THE ONLY SUCCESS MESSAGE.
       console.log(
         `Vouch submitted by ${message.author.tag} for ${sellerMember.user.tag}: ${rating}/5, ${item}`
       );
+
       return;
     }
 
-    // PAYMENT
+    // ==================================================
+    // PAYMENT COMMAND
+    // ==================================================
+
     if (["!pay", ",pay", "!testpay"].includes(content)) {
       await sendPaymentEmbed(message.channel);
       return;
     }
 
+    // ==================================================
     // ADMIN COMMAND PERMISSION CHECK
+    // ==================================================
+
     const adminCommands = [
       "!nitro", ",nitro",
       "!decor", ",decor",
@@ -821,7 +824,9 @@ client.on(Events.MessageCreate, async (message) => {
     ];
 
     if (adminCommands.includes(content)) {
-      if (!message.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+      if (!message.member.permissions.has(
+        PermissionsBitField.Flags.ManageGuild
+      )) {
         await message.reply(
           "You need **Manage Server** permission to use this command."
         );
@@ -829,7 +834,10 @@ client.on(Events.MessageCreate, async (message) => {
       }
     }
 
+    // ==================================================
     // NITRO
+    // ==================================================
+
     if (["!nitro", ",nitro"].includes(content)) {
       const channel = await client.channels.fetch(NITRO_CHANNEL_ID);
       await sendNitroServices(channel);
@@ -837,7 +845,10 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
+    // ==================================================
     // DECOR
+    // ==================================================
+
     if (["!decor", ",decor"].includes(content)) {
       const channel = await client.channels.fetch(DECOR_CHANNEL_ID);
       await sendDecorServices(channel);
@@ -845,7 +856,10 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
+    // ==================================================
     // BOOSTIES
+    // ==================================================
+
     if (["!boosties", ",boosties"].includes(content)) {
       const channel = await client.channels.fetch(BOOSTIES_CHANNEL_ID);
       await sendBoostiesServices(channel);
@@ -853,7 +867,10 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
+    // ==================================================
     // SELLERS
+    // ==================================================
+
     if (["!sellers", ",sellers"].includes(content)) {
       await sendEmbedToChannel(
         message.guild,
@@ -866,7 +883,10 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
+    // ==================================================
     // STAFF
+    // ==================================================
+
     if (["!staff", ",staff"].includes(content)) {
       await sendEmbedToChannel(
         message.guild,
@@ -879,7 +899,10 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
+    // ==================================================
     // TEST WELCOME
+    // ==================================================
+
     if (content === "!testwelcome") {
       const channel = await client.channels.fetch(WELCOME_CHANNEL_ID);
 
@@ -903,10 +926,14 @@ client.on(Events.MessageCreate, async (message) => {
         content: `${message.author}`,
         embeds: [embed]
       });
+
       return;
     }
 
+    // ==================================================
     // TEST GOODBYE
+    // ==================================================
+
     if (content === "!testgoodbye") {
       const channel = await client.channels.fetch(GOODBYE_CHANNEL_ID);
 
@@ -958,7 +985,9 @@ process.on("uncaughtException", (error) => {
 // ==================================================
 
 if (!TOKEN) {
-  console.error("DISCORD_BOT_TOKEN is missing from Render environment variables.");
+  console.error(
+    "DISCORD_BOT_TOKEN is missing from Render environment variables."
+  );
   process.exit(1);
 }
 
