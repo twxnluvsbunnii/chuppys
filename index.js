@@ -68,9 +68,6 @@ const AFK_GOING_EMOJI = "<:chuppybye:1561103844832846014>";
 const AFK_RETURN_EMOJI = "<:chuppyhi:1561103471325745242>";
 
 const afkUsers = new Map();
-
-// Prevent the same command message from being processed twice
-// by this running instance.
 const processedVouchCommands = new Set();
 
 // ==================================================
@@ -529,7 +526,7 @@ function makeVouchEmbed({
   proofUrl,
   proofName
 }) {
-  const embed = new EmbedBuilder()
+  return new EmbedBuilder()
     .setColor("#F2C8F2")
     .setThumbnail(VOUCH_EMOJI_URL)
     .setDescription(
@@ -544,20 +541,26 @@ function makeVouchEmbed({
         "",
         "*thank you for vouching! shop again ♡*"
       ].join("\n")
-    );
-
-  return embed;
+    )
+    .setImage(proofUrl);
 }
 
 // ==================================================
 // SEND EMBED TO A DESTINATION CHANNEL
 // ==================================================
 
-async function sendEmbedToChannel(guild, channelId, embed, label) {
+async function sendEmbedToChannel(
+  guild,
+  channelId,
+  embed,
+  label
+) {
   const channel = await guild.channels.fetch(channelId);
 
   if (!channel || !channel.isTextBased()) {
-    throw new Error(`${label} channel not found or is not a text channel.`);
+    throw new Error(
+      `${label} channel not found or is not a text channel.`
+    );
   }
 
   await channel.send({
@@ -598,7 +601,10 @@ async function handleAFK(message) {
       }
     });
 
-    console.log(`${message.author.tag} is now AFK: ${reason}`);
+    console.log(
+      `${message.author.tag} is now AFK: ${reason}`
+    );
+
     return true;
   }
 
@@ -652,7 +658,7 @@ async function handleAFK(message) {
 client.on(Events.MessageCreate, async (message) => {
   if (!message.guild) return;
 
-  // Automatically react to vouch embeds sent by this bot.
+  // React to vouch embeds sent by this bot.
   if (
     message.channel.id === VOUCH_CHANNEL_ID &&
     message.author.id === client.user.id &&
@@ -664,18 +670,24 @@ client.on(Events.MessageCreate, async (message) => {
     try {
       await message.react(CHUPPY_TY_EMOJI);
     } catch (error) {
-      console.error("Could not react to vouch:", error.message);
+      console.error(
+        "Could not react to vouch:",
+        error.message
+      );
     }
   }
 
   if (message.author.bot) return;
 
-  // Automatic reaction to other messages in the configured channel.
+  // React to messages in the configured thank-you channel.
   if (message.channel.id === CHUPPY_TY_CHANNEL_ID) {
     try {
       await message.react(CHUPPY_TY_EMOJI);
     } catch (error) {
-      console.error("Could not add Chuppy TY reaction:", error.message);
+      console.error(
+        "Could not add Chuppy TY reaction:",
+        error.message
+      );
     }
   }
 
@@ -689,23 +701,27 @@ client.on(Events.MessageCreate, async (message) => {
     // ==================================================
     // VOUCH COMMAND
     // Usage: ,vouch @seller 5 item purchased
-    // Attach proof to the command message.
+    // Attach proof to the same message.
     // ==================================================
 
     if (content.startsWith(",vouch")) {
-      // Avoid processing this exact Discord message twice
-      // within the same running bot instance.
       if (processedVouchCommands.has(message.id)) {
-        console.log(`Duplicate vouch command ignored: ${message.id}`);
+        console.log(
+          `Duplicate vouch command ignored: ${message.id}`
+        );
         return;
       }
 
       processedVouchCommands.add(message.id);
 
       // Keep the cache limited to recent command IDs.
-      setTimeout(() => {
+      const cleanup = setTimeout(() => {
         processedVouchCommands.delete(message.id);
       }, 10 * 60 * 1000);
+
+      if (typeof cleanup.unref === "function") {
+        cleanup.unref();
+      }
 
       const match = rawContent.match(
         /^,vouch\s+<@!?(\d+)>\s+([1-5])\s+([\s\S]+)$/i
@@ -715,7 +731,9 @@ client.on(Events.MessageCreate, async (message) => {
         await message.reply({
           content:
             "Use `,vouch @seller 5 item purchased` and attach your proof screenshot to the same message.",
-          allowedMentions: { repliedUser: false }
+          allowedMentions: {
+            repliedUser: false
+          }
         });
         return;
       }
@@ -727,7 +745,9 @@ client.on(Events.MessageCreate, async (message) => {
       if (sellerId === message.author.id) {
         await message.reply({
           content: "You cannot vouch for yourself.",
-          allowedMentions: { repliedUser: false }
+          allowedMentions: {
+            repliedUser: false
+          }
         });
         return;
       }
@@ -735,15 +755,20 @@ client.on(Events.MessageCreate, async (message) => {
       if (sellerId === client.user.id) {
         await message.reply({
           content: "You cannot submit a seller vouch for the bot.",
-          allowedMentions: { repliedUser: false }
+          allowedMentions: {
+            repliedUser: false
+          }
         });
         return;
       }
 
       if (!item || item.length > 500) {
         await message.reply({
-          content: "Please provide an item name (maximum 500 characters).",
-          allowedMentions: { repliedUser: false }
+          content:
+            "Please provide an item name (maximum 500 characters).",
+          allowedMentions: {
+            repliedUser: false
+          }
         });
         return;
       }
@@ -755,7 +780,9 @@ client.on(Events.MessageCreate, async (message) => {
       if (!proof) {
         await message.reply({
           content: "Please attach a proof screenshot to your vouch.",
-          allowedMentions: { repliedUser: false }
+          allowedMentions: {
+            repliedUser: false
+          }
         });
         return;
       }
@@ -768,7 +795,9 @@ client.on(Events.MessageCreate, async (message) => {
         await message.reply({
           content:
             "I couldn't find that seller in this server. Please mention a server member.",
-          allowedMentions: { repliedUser: false }
+          allowedMentions: {
+            repliedUser: false
+          }
         });
         return;
       }
@@ -783,8 +812,11 @@ client.on(Events.MessageCreate, async (message) => {
         !vouchChannel.send
       ) {
         await message.reply({
-          content: "I couldn't find the vouches channel. Please contact staff.",
-          allowedMentions: { repliedUser: false }
+          content:
+            "I couldn't find the vouches channel. Please contact staff.",
+          allowedMentions: {
+            repliedUser: false
+          }
         });
         return;
       }
@@ -800,35 +832,8 @@ client.on(Events.MessageCreate, async (message) => {
         proofName
       });
 
-      // Check recent bot vouches for a matching submission.
-      // This helps prevent duplicate posts after retries/reprocessing.
-      const recentMessages = await vouchChannel.messages.fetch({
-        limit: 25
-      });
-
-      const alreadyPosted = recentMessages.some((msg) => {
-        if (msg.author.id !== client.user.id) return false;
-
-        const description = msg.embeds[0]?.description || "";
-
-        return (
-          description.includes(`**seller:** <@${sellerId}>`) &&
-          description.includes(`**buyer:** <@${message.author.id}>`) &&
-          description.includes(`**items purchased:** ${item}`) &&
-          description.includes(proofName)
-        );
-      });
-
-      if (alreadyPosted) {
-        console.log(
-          `Duplicate vouch prevented for command ${message.id}.`
-        );
-
-        await message.delete().catch(() => {});
-        return;
-      }
-
-      // SEND THE VOUCH EMBED ONLY ONCE.
+      // Send one vouch for this command message.
+      // A repeated purchase is allowed, even if the details match.
       await vouchChannel.send({
         embeds: [embed],
         allowedMentions: {
@@ -836,7 +841,7 @@ client.on(Events.MessageCreate, async (message) => {
         }
       });
 
-      // Delete the command message if the bot has Manage Messages.
+      // Delete the original command if permitted.
       await message.delete().catch((error) => {
         console.error(
           "Could not delete original vouch command:",
@@ -844,7 +849,7 @@ client.on(Events.MessageCreate, async (message) => {
         );
       });
 
-      // No success reply: the vouch embed is the only success message.
+      // No success reply: only the vouch embed is posted.
       console.log(
         `Vouch submitted by ${message.author.tag} for ${sellerMember.user.tag}: ${rating}/5, ${item}`
       );
@@ -874,9 +879,11 @@ client.on(Events.MessageCreate, async (message) => {
     ];
 
     if (adminCommands.includes(content)) {
-      if (!message.member.permissions.has(
-        PermissionsBitField.Flags.ManageGuild
-      )) {
+      if (
+        !message.member.permissions.has(
+          PermissionsBitField.Flags.ManageGuild
+        )
+      ) {
         await message.reply(
           "You need **Manage Server** permission to use this command."
         );
