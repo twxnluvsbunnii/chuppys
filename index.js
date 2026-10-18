@@ -1,3 +1,4 @@
+
 const http = require("http");
 
 const {
@@ -128,29 +129,26 @@ const vouchSlashCommand = new SlashCommandBuilder()
   );
 
 // ==================================================
-// REGISTER /VOUCH WITHOUT REMOVING OTHER COMMANDS
+// REGISTER /VOUCH WHILE PRESERVING OTHER COMMANDS
 // ==================================================
 
 async function registerSlashCommands(readyClient) {
   if (!GUILD_ID || !TOKEN) {
-    console.error(
-      "[COMMANDS] DISCORD_GUILD_ID or DISCORD_BOT_TOKEN is missing."
+    throw new Error(
+      "DISCORD_GUILD_ID or DISCORD_BOT_TOKEN is missing."
     );
-    return;
   }
 
+  const rest = new REST({ version: "10" }).setToken(TOKEN);
+
+  const route = Routes.applicationGuildCommands(
+    readyClient.user.id,
+    GUILD_ID
+  );
+
   try {
-    const rest = new REST({ version: "10" }).setToken(TOKEN);
-
-    const route = Routes.applicationGuildCommands(
-      readyClient.user.id,
-      GUILD_ID
-    );
-
-    // Fetch the existing guild commands.
     const existingCommands = await rest.get(route);
 
-    // Preserve all existing commands except the old /vouch.
     const preservedCommands = existingCommands
       .filter(command => command.name !== "vouch")
       .map(command => {
@@ -169,10 +167,6 @@ async function registerSlashCommands(readyClient) {
             command.default_member_permissions;
         }
 
-        if (command.dm_permission != null) {
-          payload.dm_permission = command.dm_permission;
-        }
-
         if (command.nsfw != null) {
           payload.nsfw = command.nsfw;
         }
@@ -185,10 +179,18 @@ async function registerSlashCommands(readyClient) {
           payload.contexts = command.contexts;
         }
 
+        if (command.name_localizations != null) {
+          payload.name_localizations = command.name_localizations;
+        }
+
+        if (command.description_localizations != null) {
+          payload.description_localizations =
+            command.description_localizations;
+        }
+
         return payload;
       });
 
-    // Replace /vouch while preserving the other guild commands.
     await rest.put(route, {
       body: [
         ...preservedCommands,
@@ -200,7 +202,12 @@ async function registerSlashCommands(readyClient) {
       `[COMMANDS] /vouch registered for guild ${GUILD_ID}.`
     );
   } catch (error) {
-    console.error("[COMMANDS] Registration failed:", error);
+    console.error(
+      "[COMMANDS] Registration failed:",
+      error
+    );
+
+    throw error;
   }
 }
 
@@ -246,15 +253,25 @@ async function submitVouch({
   uniqueId
 }) {
   if (!guild) {
-    throw new Error("This command must be used inside a server.");
+    throw new Error(
+      "This command must be used inside your server."
+    );
   }
 
   if (!seller || !buyer) {
     throw new Error("Seller or buyer was not found.");
   }
 
-  if (seller.id === buyer.id || seller.id === client.user.id) {
-    throw new Error("You cannot vouch for yourself or the bot.");
+  if (!client.user) {
+    throw new Error("The bot is not ready yet.");
+  }
+
+  if (seller.id === buyer.id) {
+    throw new Error("You cannot vouch for yourself.");
+  }
+
+  if (seller.id === client.user.id) {
+    throw new Error("You cannot vouch for the bot.");
   }
 
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
@@ -275,24 +292,39 @@ async function submitVouch({
 
   const isImage =
     proof.contentType?.startsWith("image/") ||
-    /\.(png|jpe?g|gif|webp|avif)$/i.test(proof.name || "");
+    /\.(png|jpe?g|gif|webp|avif)$/i.test(
+      proof.name || ""
+    );
 
   if (!isImage) {
     throw new Error("Proof must be an image file.");
   }
 
-  // Verify that the seller is a member of this server.
+  console.log(
+    `[VOUCH] Checking seller ${seller.id} and channel ${VOUCH_CHANNEL_ID}.`
+  );
+
+  // Confirm the seller exists in this server.
   const sellerMember = await guild.members
     .fetch(seller.id)
     .catch(() => null);
 
   if (!sellerMember) {
-    throw new Error("I couldn't find that seller in this server.");
+    throw new Error(
+      "I couldn't find that seller in this server."
+    );
   }
 
+  // Fetch the configured vouch channel.
   const channel = await guild.channels
     .fetch(VOUCH_CHANNEL_ID)
-    .catch(() => null);
+    .catch(error => {
+      console.error(
+        "[VOUCH] Channel fetch failed:",
+        error
+      );
+      return null;
+    });
 
   if (
     !channel ||
@@ -300,7 +332,32 @@ async function submitVouch({
     typeof channel.send !== "function"
   ) {
     throw new Error(
-      "The configured vouch channel could not be found."
+      `Vouch channel ${VOUCH_CHANNEL_ID} was not found or cannot receive messages.`
+    );
+  }
+
+  // Verify the bot has the required channel permissions.
+  const botMember = guild.members.me;
+
+  if (!botMember) {
+    throw new Error(
+      "I couldn't find the bot's server membership."
+    );
+  }
+
+  const permissions = channel.permissionsFor(botMember);
+
+  if (
+    !permissions ||
+    !permissions.has([
+      PermissionsBitField.Flags.ViewChannel,
+      PermissionsBitField.Flags.SendMessages,
+      PermissionsBitField.Flags.EmbedLinks,
+      PermissionsBitField.Flags.AttachFiles
+    ])
+  ) {
+    throw new Error(
+      "The bot needs View Channel, Send Messages, Embed Links, and Attach Files permissions in the vouch channel."
     );
   }
 
@@ -320,7 +377,12 @@ async function submitVouch({
     proofName
   });
 
-  // Send the embed and proof image to the vouch channel.
+  console.log(
+    `[VOUCH] Sending embed and proof to channel ${channel.id}.`
+  );
+
+  // Upload the proof with the embed.
+  // Discord.js downloads the attachment URL and uploads it.
   const posted = await channel.send({
     embeds: [embed],
     files: [
@@ -334,14 +396,17 @@ async function submitVouch({
     }
   });
 
-  // Add the thank-you reaction.
-  await posted.react(CHUPPY_TY_EMOJI).catch(error => {
-    console.error("[VOUCH] Could not add reaction:", error);
-  });
-
   console.log(
-    `[VOUCH] Embed posted successfully in #${channel.name}.`
+    `[VOUCH] Message successfully sent. Message ID: ${posted.id}`
   );
+
+  // Reaction failure should not undo a successfully posted vouch.
+  await posted.react(CHUPPY_TY_EMOJI).catch(error => {
+    console.error(
+      "[VOUCH] Could not add thank-you reaction:",
+      error
+    );
+  });
 
   return posted;
 }
@@ -351,46 +416,41 @@ async function submitVouch({
 // ==================================================
 
 client.once(Events.ClientReady, async readyClient => {
-  console.log(`[READY] Logged in as ${readyClient.user.tag}`);
+  console.log(
+    `[READY] Logged in as ${readyClient.user.tag}`
+  );
+
   console.log("[READY] Chuppys bot is online.");
 
   readyClient.user.setActivity(".gg/chuppys", {
     type: 3
   });
 
-  await registerSlashCommands(readyClient);
+  try {
+    await registerSlashCommands(readyClient);
+  } catch (error) {
+    console.error(
+      "[COMMANDS] Slash-command registration failed during startup:",
+      error
+    );
+  }
 });
 
 // ==================================================
-// SLASH COMMAND HANDLER
-// LOG ALL INTERACTIONS BEFORE FILTERING
+// CORRECTED SLASH VOUCH HANDLER
 // ==================================================
 
 client.on(Events.InteractionCreate, async interaction => {
-  console.log(
-    `[INTERACTION] Received interaction type ${interaction.type}` +
-    (
-      interaction.isChatInputCommand()
-        ? `: /${interaction.commandName}`
-        : ""
-    )
-  );
-
   if (!interaction.isChatInputCommand()) return;
   if (interaction.commandName !== "vouch") return;
 
   console.log(
-    `[VOUCH] Received /vouch from ${interaction.user.tag} ` +
-    `(ID: ${interaction.user.id})`
+    `[VOUCH] Received /vouch from ${interaction.user.tag} (${interaction.user.id}).`
   );
 
   // Acknowledge immediately so Discord does not time out.
   try {
-    await interaction.deferReply({
-      ephemeral: true
-    });
-
-    console.log("[VOUCH] Interaction acknowledged successfully.");
+    await interaction.deferReply({ ephemeral: true });
   } catch (error) {
     console.error(
       "[VOUCH] Could not acknowledge interaction:",
@@ -405,37 +465,99 @@ client.on(Events.InteractionCreate, async interaction => {
     const item = interaction.options.getString("order");
     const proof = interaction.options.getAttachment("proof");
 
-    await submitVouch({
+    console.log("[VOUCH] Received options:", {
+      guildId: interaction.guildId,
+      sellerId: seller?.id,
+      buyerId: interaction.user.id,
+      rating,
+      item,
+      proofName: proof?.name,
+      proofContentType: proof?.contentType
+    });
+
+    if (!interaction.guild) {
+      throw new Error(
+        "Use /vouch inside your Discord server."
+      );
+    }
+
+    if (!seller || rating === null || !item || !proof) {
+      throw new Error(
+        "Please provide the seller, rating, order, and proof image."
+      );
+    }
+
+    if (seller.bot) {
+      throw new Error("You cannot vouch for a bot.");
+    }
+
+    if (seller.id === interaction.user.id) {
+      throw new Error("You cannot vouch for yourself.");
+    }
+
+    if (rating < 1 || rating > 5) {
+      throw new Error("Rating must be between 1 and 5.");
+    }
+
+    if (!item.trim()) {
+      throw new Error(
+        "Please enter what you purchased."
+      );
+    }
+
+    const isImage =
+      proof.contentType?.startsWith("image/") ||
+      /\.(png|jpe?g|gif|webp|avif)$/i.test(
+        proof.name || ""
+      );
+
+    if (!isImage) {
+      throw new Error(
+        "Your proof attachment must be an image."
+      );
+    }
+
+    console.log(
+      "[VOUCH] Validation passed. Submitting vouch..."
+    );
+
+    const posted = await submitVouch({
       guild: interaction.guild,
       seller,
       buyer: interaction.user,
       rating,
-      item,
+      item: item.trim(),
       proof,
       uniqueId: interaction.id
     });
 
+    console.log(
+      `[VOUCH] SUCCESS: ${posted.id} posted in ${posted.channelId}.`
+    );
+
     await interaction.editReply({
-      content: "Your vouch has been submitted successfully!"
+      content:
+        `✅ Your vouch was posted successfully in <#${VOUCH_CHANNEL_ID}>!`
     });
 
     console.log(
-      `[VOUCH] Success: buyer=${interaction.user.id}, ` +
-      `seller=${seller.id}, rating=${rating}/5, order=${item}`
+      `[VOUCH] Completed. Buyer: ${interaction.user.id}; ` +
+      `Seller: ${seller.id}; Rating: ${rating}/5.`
     );
   } catch (error) {
-    console.error("[VOUCH] Interaction failed:", error);
+    console.error("[VOUCH] SLASH COMMAND FAILED:", error);
 
     const errorMessage =
-      error.message && error.message.length < 500
-        ? error.message
-        : "Unknown error. Please contact staff.";
+      error instanceof Error
+        ? error.message.slice(0, 1000)
+        : "An unexpected error occurred. Check the Render logs.";
 
     await interaction.editReply({
-      content: `Your vouch could not be posted: ${errorMessage}`
+      content:
+        `❌ Your vouch could not be posted: ${errorMessage}`
     }).catch(editError => {
       console.error(
-        "[VOUCH] Could not edit interaction reply:",
+        "[VOUCH] Could not send failure response:",
         editError
       );
     });
@@ -455,7 +577,10 @@ client.on(Events.GuildMemberAdd, async member => {
     if (!channel || !channel.isTextBased()) return;
 
     await member.roles.add(WELCOME_ROLE_ID).catch(error => {
-      console.error("[WELCOME] Could not assign role:", error);
+      console.error(
+        "[WELCOME] Could not assign role:",
+        error
+      );
     });
 
     const embed = new EmbedBuilder()
@@ -476,7 +601,9 @@ client.on(Events.GuildMemberAdd, async member => {
       embeds: [embed]
     });
 
-    console.log(`[WELCOME] Sent for ${member.user.tag}`);
+    console.log(
+      `[WELCOME] Sent for ${member.user.tag}`
+    );
   } catch (error) {
     console.error("[WELCOME] Error:", error);
   }
@@ -510,7 +637,9 @@ client.on(Events.GuildMemberRemove, async member => {
       embeds: [embed]
     });
 
-    console.log(`[GOODBYE] Sent for ${member.user.tag}`);
+    console.log(
+      `[GOODBYE] Sent for ${member.user.tag}`
+    );
   } catch (error) {
     console.error("[GOODBYE] Error:", error);
   }
@@ -1012,7 +1141,8 @@ client.on(Events.MessageCreate, async message => {
       console.error("[VOUCH] Prefix command failed:", error);
 
       await message.reply({
-        content: `The vouch could not be posted: ${error.message}`,
+        content:
+          `The vouch could not be posted: ${error.message}`,
         allowedMentions: {
           repliedUser: false
         }
@@ -1035,9 +1165,7 @@ client.on(Events.MessageCreate, async message => {
     // PAYMENT
     // ------------------------------------------------
 
-    if (
-      ["!pay", ",pay", "!testpay"].includes(content)
-    ) {
+    if (["!pay", ",pay", "!testpay"].includes(content)) {
       await sendPaymentEmbed(message.channel);
       return;
     }
@@ -1322,5 +1450,8 @@ client.login(TOKEN)
     console.log("[STARTUP] Discord login successful.");
   })
   .catch(error => {
-    console.error("[STARTUP] Discord login failed:", error);
+    console.error(
+      "[STARTUP] Discord login failed:",
+      error
+    );
   });
