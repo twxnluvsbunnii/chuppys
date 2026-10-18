@@ -1,4 +1,3 @@
-
 const http = require("http");
 
 const {
@@ -54,9 +53,13 @@ const BOOSTIES_CHANNEL_ID = "1555769708928831489";
 const SELLERS_CHANNEL_ID = "1551713598181605496";
 const STAFF_CHANNEL_ID = "1561013244905132122";
 
+const VOUCH_CHANNEL_ID = "1530811494168657980";
 const WELCOME_ROLE_ID = "1531039846871728248";
 
+// ==================================================
 // AUTOMATIC REACTION
+// ==================================================
+
 const CHUPPY_TY_CHANNEL_ID = "1530811494168657980";
 const CHUPPY_TY_EMOJI = "<:uppyty:1561094713153429746>";
 
@@ -67,8 +70,6 @@ const CHUPPY_TY_EMOJI = "<:uppyty:1561094713153429746>";
 const AFK_GOING_EMOJI = "<:chuppybye:1561103844832846014>";
 const AFK_RETURN_EMOJI = "<:chuppyhi:1561103471325745242>";
 
-// Key format: guild ID + user ID
-// AFK statuses are kept separately for each server.
 const afkUsers = new Map();
 
 // ==================================================
@@ -78,6 +79,10 @@ const afkUsers = new Map();
 const SERVICE_EMOJI = "<a:aBouncyDiscord:1557138733717782599>";
 const BOOST_EMOJI = "<:white_nitro_boost:1557165507600326756>";
 const SELLER_EMOJI = "<:chuppyseller:1560283615445778503>";
+
+const VOUCH_EMOJI_ID = "1561197586554036318";
+const VOUCH_EMOJI_URL =
+  `https://cdn.discordapp.com/emojis/${VOUCH_EMOJI_ID}.png`;
 
 // ==================================================
 // WELCOME IMAGE
@@ -183,7 +188,7 @@ client.on(Events.GuildMemberRemove, async (member) => {
 });
 
 // ==================================================
-// PAYMENT EMBED — ALL NUMBERS VISIBLE
+// PAYMENT EMBED
 // ==================================================
 
 async function sendPaymentEmbed(channel) {
@@ -514,6 +519,45 @@ function makeStaffEmbed() {
 }
 
 // ==================================================
+// CHUPPYS VOUCH EMBED
+// ==================================================
+
+function makeVouchEmbed({
+  sellerId,
+  buyerId,
+  item,
+  rating,
+  proofUrl,
+  proofName
+}) {
+  const stars = "⭐".repeat(rating);
+
+  const embed = new EmbedBuilder()
+    .setColor("#F2C8F2")
+    .setAuthor({
+      name: "new vouch  !!"
+    })
+    .setThumbnail(VOUCH_EMOJI_URL)
+    .setDescription(
+      [
+        `**seller:** <@${sellerId}>`,
+        `**buyer:** <@${buyerId}>`,
+        `**item purchased:** ${item}`,
+        `**rating:** ${rating}/5 ${stars}`,
+        `**proof:** [${proofName}](${proofUrl})`,
+        "",
+        "*thank you for vouching! shop again ♡*"
+      ].join("\n")
+    );
+
+  if (proofUrl && /\.(png|jpe?g|gif|webp)(\?.*)?$/i.test(proofUrl)) {
+    embed.setImage(proofUrl);
+  }
+
+  return embed;
+}
+
+// ==================================================
 // SEND EMBED TO A DESTINATION CHANNEL
 // ==================================================
 
@@ -540,7 +584,6 @@ async function handleAFK(message) {
   const afkKey = `${guildId}:${userId}`;
   const rawContent = message.content.trim();
 
-  // ,afk with an optional reason
   const afkMatch = rawContent.match(/^,afk(?:\s+([\s\S]*))?$/i);
 
   if (afkMatch) {
@@ -567,9 +610,6 @@ async function handleAFK(message) {
     return true;
   }
 
-  // If this author was AFK, their next normal message clears it.
-  // AFK commands are handled above, so setting/changing a reason
-  // does not immediately remove the status.
   if (afkUsers.has(afkKey)) {
     const oldAFK = afkUsers.get(afkKey);
     afkUsers.delete(afkKey);
@@ -588,7 +628,6 @@ async function handleAFK(message) {
     );
   }
 
-  // Tell users when they mention someone who is AFK.
   const notifiedUsers = new Set();
 
   for (const [mentionedUserId, user] of message.mentions.users) {
@@ -615,7 +654,7 @@ async function handleAFK(message) {
 }
 
 // ==================================================
-// MESSAGE COMMANDS + AUTOMATIC REACTION + AFK
+// MESSAGE COMMANDS + REACTION + AFK + VOUCH
 // ==================================================
 
 client.on(Events.MessageCreate, async (message) => {
@@ -633,20 +672,150 @@ client.on(Events.MessageCreate, async (message) => {
 
   try {
     // AFK SYSTEM
-    // AFK commands and normal messages are handled before other commands.
     const wasAFKCommand = await handleAFK(message);
-
     if (wasAFKCommand) return;
 
-    const content = message.content.trim().toLowerCase();
+    const rawContent = message.content.trim();
+    const content = rawContent.toLowerCase();
 
+    // ==================================================
+    // VOUCH COMMAND
+    // Usage: ,vouch @seller 5 item purchased
+    // Attach proof screenshot to the same message.
+    // ==================================================
+
+    if (content.startsWith(",vouch")) {
+      if (message.channel.id !== VOUCH_CHANNEL_ID) {
+        await message.reply({
+          content: `Please submit vouches in <#${VOUCH_CHANNEL_ID}>.`,
+          allowedMentions: {
+            repliedUser: false
+          }
+        });
+        return;
+      }
+
+      const match = rawContent.match(
+        /^,vouch\s+<@!?(\d+)>\s+([1-5])\s+([\s\S]+)$/i
+      );
+
+      if (!match) {
+        await message.reply({
+          content:
+            "Use `,vouch @seller 5 item purchased` and attach your proof screenshot to the same message.",
+          allowedMentions: {
+            repliedUser: false
+          }
+        });
+        return;
+      }
+
+      const sellerId = match[1];
+      const rating = Number(match[2]);
+      const item = match[3].trim();
+
+      if (sellerId === message.author.id) {
+        await message.reply({
+          content: "You cannot vouch for yourself.",
+          allowedMentions: {
+            repliedUser: false
+          }
+        });
+        return;
+      }
+
+      if (sellerId === client.user.id) {
+        await message.reply({
+          content: "You cannot submit a seller vouch for the bot.",
+          allowedMentions: {
+            repliedUser: false
+          }
+        });
+        return;
+      }
+
+      if (!item || item.length > 500) {
+        await message.reply({
+          content: "Please provide an item name (maximum 500 characters).",
+          allowedMentions: {
+            repliedUser: false
+          }
+        });
+        return;
+      }
+
+      const proof = message.attachments.find((attachment) =>
+        attachment.contentType?.startsWith("image/")
+      );
+
+      if (!proof) {
+        await message.reply({
+          content: "Please attach a proof screenshot to your vouch.",
+          allowedMentions: {
+            repliedUser: false
+          }
+        });
+        return;
+      }
+
+      const sellerMember = await message.guild.members
+        .fetch(sellerId)
+        .catch(() => null);
+
+      if (!sellerMember) {
+        await message.reply({
+          content:
+            "I couldn't find that seller in this server. Please mention a server member.",
+          allowedMentions: {
+            repliedUser: false
+          }
+        });
+        return;
+      }
+
+      const embed = makeVouchEmbed({
+        sellerId,
+        buyerId: message.author.id,
+        item,
+        rating,
+        proofUrl: proof.url,
+        proofName: proof.name || "proof.png"
+      });
+
+      await message.channel.send({
+        embeds: [embed],
+        allowedMentions: {
+          users: [sellerId, message.author.id]
+        }
+      });
+
+      await message.reply({
+        content: "Your vouch has been submitted!",
+        allowedMentions: {
+          repliedUser: false
+        }
+      });
+
+      console.log(
+        `Vouch submitted by ${message.author.tag} for ${sellerMember.user.tag}: ${rating}/5, ${item}`
+      );
+
+      return;
+    }
+
+    // ==================================================
     // PAYMENT
+    // ==================================================
+
     if (["!pay", ",pay", "!testpay"].includes(content)) {
       await sendPaymentEmbed(message.channel);
       return;
     }
 
+    // ==================================================
     // ADMIN COMMAND PERMISSION CHECK
+    // ==================================================
+
     const adminCommands = [
       "!nitro", ",nitro",
       "!decor", ",decor",
@@ -656,7 +825,9 @@ client.on(Events.MessageCreate, async (message) => {
     ];
 
     if (adminCommands.includes(content)) {
-      if (!message.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+      if (!message.member.permissions.has(
+        PermissionsBitField.Flags.ManageGuild
+      )) {
         await message.reply(
           "You need **Manage Server** permission to use this command."
         );
@@ -664,7 +835,10 @@ client.on(Events.MessageCreate, async (message) => {
       }
     }
 
+    // ==================================================
     // NITRO
+    // ==================================================
+
     if (["!nitro", ",nitro"].includes(content)) {
       const channel = await client.channels.fetch(NITRO_CHANNEL_ID);
       await sendNitroServices(channel);
@@ -672,7 +846,10 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
+    // ==================================================
     // DECOR
+    // ==================================================
+
     if (["!decor", ",decor"].includes(content)) {
       const channel = await client.channels.fetch(DECOR_CHANNEL_ID);
       await sendDecorServices(channel);
@@ -680,7 +857,10 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
+    // ==================================================
     // BOOSTIES
+    // ==================================================
+
     if (["!boosties", ",boosties"].includes(content)) {
       const channel = await client.channels.fetch(BOOSTIES_CHANNEL_ID);
       await sendBoostiesServices(channel);
@@ -688,7 +868,10 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
+    // ==================================================
     // SELLERS
+    // ==================================================
+
     if (["!sellers", ",sellers"].includes(content)) {
       await sendEmbedToChannel(
         message.guild,
@@ -701,7 +884,10 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
+    // ==================================================
     // STAFF
+    // ==================================================
+
     if (["!staff", ",staff"].includes(content)) {
       await sendEmbedToChannel(
         message.guild,
@@ -714,7 +900,10 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
+    // ==================================================
     // TEST WELCOME
+    // ==================================================
+
     if (content === "!testwelcome") {
       const channel = await client.channels.fetch(WELCOME_CHANNEL_ID);
 
@@ -732,16 +921,22 @@ client.on(Events.MessageCreate, async (message) => {
         .setColor(0xFFFFFF)
         .setThumbnail(message.author.displayAvatarURL())
         .setImage(WELCOME_IMAGE)
-        .setFooter({ text: message.guild.name });
+        .setFooter({
+          text: message.guild.name
+        });
 
       await channel.send({
         content: `${message.author}`,
         embeds: [embed]
       });
+
       return;
     }
 
+    // ==================================================
     // TEST GOODBYE
+    // ==================================================
+
     if (content === "!testgoodbye") {
       const channel = await client.channels.fetch(GOODBYE_CHANNEL_ID);
 
@@ -758,9 +953,14 @@ client.on(Events.MessageCreate, async (message) => {
         )
         .setColor(0xFFFFFF)
         .setThumbnail(message.author.displayAvatarURL())
-        .setFooter({ text: message.guild.name });
+        .setFooter({
+          text: message.guild.name
+        });
 
-      await channel.send({ embeds: [embed] });
+      await channel.send({
+        embeds: [embed]
+      });
+
       return;
     }
   } catch (error) {
@@ -793,7 +993,9 @@ process.on("uncaughtException", (error) => {
 // ==================================================
 
 if (!TOKEN) {
-  console.error("DISCORD_BOT_TOKEN is missing from Render environment variables.");
+  console.error(
+    "DISCORD_BOT_TOKEN is missing from Render environment variables."
+  );
   process.exit(1);
 }
 
