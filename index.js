@@ -116,13 +116,13 @@ async function sendRobuxCashoutEmbed(channel) {
   }
 
   const embed = new EmbedBuilder()
-    .setTitle("Cashing Out Robux")
+    .setTitle("# Cashing Out Robux\n\n")
     .setThumbnail(ROBUX_CASHOUT_THUMBNAIL_URL)
     .setDescription(
       "RATES\n\n" +
-      "Below 10k\n" +
+      "**Below 10k**\n" +
       "4.5/k\n\n" +
-      "Above 10k\n" +
+      "**Above 10k**\n" +
       "4.7/k\n\n" +
       "-# make a cash out ticket now !! make sure u ping me in tickets <:uppyty:1561094713153429746>"
     )
