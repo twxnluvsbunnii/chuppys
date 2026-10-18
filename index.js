@@ -114,16 +114,21 @@ async function sendRobuxCashoutEmbed(channel) {
     throw new Error("Robux Cash out channel not found or invalid.");
   }
 
-  const embed = new EmbedBuilder()
-    .setTitle(`Robux Cash out ${ROBUX_EMOJI}`)
-    .setDescription(
-      "**RATES**\n\n" +
-      "**Below 10k**\n" +
-      "4.5/k\n\n" +
-      "**Above 10k**\n" +
-      "4.7/k"
-    )
-    .setColor("#FFFFFF");
+ const embed = new EmbedBuilder()
+  .setTitle("Cashing Out Robux")
+  .setThumbnail("YOUR_ROBUX_EMOJI_IMAGE_URL")
+  .setDescription(
+    "**RATES**\n\n" +
+    "**Below 10k**\n" +
+    "4.5/k\n\n" +
+    "**Above 10k**\n" +
+    "4.7/k\n\n" +
+    "-# make a cash out ticket now !! make sure u ping me in tickets <:uppyty:1561094713153429746>"
+  )
+  .setColor("#FFFFFF")
+  .setFooter({
+    text: ".gg/chuppys"
+  });
 
   const payload = {
     embeds: [embed],
