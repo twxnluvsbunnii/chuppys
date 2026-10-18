@@ -176,7 +176,8 @@ client.on(Events.GuildMemberRemove, async member => {
 });
 
 // ==================================================
-// PAYMENT EMBED
+// PAYMENT EMBED — ,pay
+// Updates one existing embed and removes duplicates
 // ==================================================
 
 async function sendPaymentEmbed(channel) {
@@ -224,21 +225,30 @@ async function sendPaymentEmbed(channel) {
     components: [row]
   };
 
+  // Fetch recent messages from this channel.
   const messages = await channel.messages.fetch({ limit: 100 });
 
+  // Find payment embeds sent by this bot.
   const matches = messages.filter(msg =>
     msg.author.id === client.user.id &&
     msg.embeds.some(e => e.title === "Payment Methods")
   );
 
+  // Keep and update one existing payment message.
   const existing = matches.first();
 
   if (existing) {
     await existing.edit(payload);
 
+    // Delete any additional matching payment embeds.
     for (const duplicate of matches.values()) {
       if (duplicate.id !== existing.id) {
-        await duplicate.delete().catch(() => {});
+        await duplicate.delete().catch(error => {
+          console.error(
+            "[PAYMENT] Could not delete duplicate:",
+            error
+          );
+        });
       }
     }
 
@@ -246,7 +256,11 @@ async function sendPaymentEmbed(channel) {
     return existing;
   }
 
-  return channel.send(payload);
+  // Only create a message when none exists.
+  const sent = await channel.send(payload);
+
+  console.log("[PAYMENT] New message created.");
+  return sent;
 }
 
 // ==================================================
@@ -582,15 +596,14 @@ async function handleAFK(message) {
 client.on(Events.MessageCreate, async message => {
   if (!message.guild || message.author.bot) return;
 
-  const rawContent = message.content.trim();
-  const content = rawContent.toLowerCase();
+  const content = message.content.trim().toLowerCase();
 
   try {
     const wasAFKCommand = await handleAFK(message);
     if (wasAFKCommand) return;
 
-    // PAYMENT
-    if (["!pay", ",pay", "!testpay"].includes(content)) {
+    // PAYMENT — ONLY ,pay
+    if (content === ",pay") {
       await sendPaymentEmbed(message.channel);
       return;
     }
