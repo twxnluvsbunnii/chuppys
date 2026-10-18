@@ -116,7 +116,7 @@ async function sendRobuxCashoutEmbed(channel) {
   }
 
   const embed = new EmbedBuilder()
-    .setTitle("# Cashing Out Robux\n\n")
+    .setTitle("Cashing Out Robux\n\n")
     .setThumbnail(ROBUX_CASHOUT_THUMBNAIL_URL)
     .setDescription(
       "RATES\n\n" +
