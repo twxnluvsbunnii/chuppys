@@ -50,6 +50,10 @@ const CHUPPY_TY_EMOJI = "<:uppyty:1561094713153429746>";
 const AFK_GOING_EMOJI = "<:chuppybye:1561103844832846014>";
 const AFK_RETURN_EMOJI = "<:chuppyhi:1561103471325745242>";
 
+const PAYMENT_EMOJI_ID = "1561388594625511514";
+const PAYMENT_EMOJI_URL =
+  `https://cdn.discordapp.com/emojis/${PAYMENT_EMOJI_ID}.png`;
+
 const SERVICE_EMOJI = "<a:aBouncyDiscord:1557138733717782599>";
 const BOOST_EMOJI = "<:white_nitro_boost:1557165507600326756>";
 const SELLER_EMOJI = "<:chuppyseller:1560283615445778503>";
@@ -85,7 +89,7 @@ const client = new Client({
 });
 
 // ==================================================
-// LOAD SEPARATE VOUCH MODULE
+// LOAD VOUCH MODULE
 // ==================================================
 
 require("./vouch")(client);
@@ -201,6 +205,7 @@ async function sendPaymentEmbed(channel) {
       }
     )
     .setColor("#FFFFFF")
+    .setThumbnail(PAYMENT_EMOJI_URL)
     .setFooter({ text: ".gg/chuppys" });
 
   const row = new ActionRowBuilder().addComponents(
