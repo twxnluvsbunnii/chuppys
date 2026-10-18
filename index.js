@@ -526,11 +526,10 @@ function makeVouchEmbed({
   buyerId,
   item,
   rating,
-  proofUrl,
   proofName
 }) {
-  const embed = new EmbedBuilder()
-    .setColor("#F2C8F2")
+  return new EmbedBuilder()
+    .setColor("#FFFFFF")
     .setThumbnail(VOUCH_EMOJI_URL)
     .setDescription(
       [
@@ -540,14 +539,12 @@ function makeVouchEmbed({
         `**buyer:** <@${buyerId}>`,
         `**items purchased:** ${item}`,
         `**rating:** ${rating}/5`,
-        `**proof:** [📎 ${proofName}](${proofUrl})`,
+        `**proof:** 📎 ${proofName}`,
         "",
         "*thank you for vouching! shop again ♡*"
       ].join("\n")
-    );
-
-  return embed;
-}
+    )
+    .setImage(`attachment://${proofName}`);
 
 // ==================================================
 // SEND EMBED TO A DESTINATION CHANNEL
@@ -686,171 +683,183 @@ client.on(Events.MessageCreate, async (message) => {
     const rawContent = message.content.trim();
     const content = rawContent.toLowerCase();
 
-    // ==================================================
-    // VOUCH COMMAND
-    // Usage: ,vouch @seller 5 item purchased
-    // Attach proof to the command message.
-    // ==================================================
+// ==================================================
+// VOUCH COMMAND
+// Usage: ,vouch @seller 5 item purchased
+// Attach a proof screenshot to the command.
+// ==================================================
 
-    if (content.startsWith(",vouch")) {
-      // Avoid processing this exact Discord message twice
-      // within the same running bot instance.
-      if (processedVouchCommands.has(message.id)) {
-        console.log(`Duplicate vouch command ignored: ${message.id}`);
-        return;
-      }
+if (/^,vouch(?:\s|$)/i.test(rawContent)) {
+  if (processedVouchCommands.has(message.id)) return;
 
-      processedVouchCommands.add(message.id);
+  processedVouchCommands.add(message.id);
 
-      // Keep the cache limited to recent command IDs.
-      setTimeout(() => {
-        processedVouchCommands.delete(message.id);
-      }, 10 * 60 * 1000);
+  const cleanup = setTimeout(() => {
+    processedVouchCommands.delete(message.id);
+  }, 10 * 60 * 1000);
 
-      const match = rawContent.match(
-        /^,vouch\s+<@!?(\d+)>\s+([1-5])\s+([\s\S]+)$/i
-      );
+  if (typeof cleanup.unref === "function") {
+    cleanup.unref();
+  }
 
-      if (!match) {
-        await message.reply({
-          content:
-            "Use `,vouch @seller 5 item purchased` and attach your proof screenshot to the same message.",
-          allowedMentions: { repliedUser: false }
-        });
-        return;
-      }
+  const match = rawContent.match(
+    /^,vouch\s+<@!?(\d+)>\s+([1-5])\s+([\s\S]+)$/i
+  );
 
-      const sellerId = match[1];
-      const rating = Number(match[2]);
-      const item = match[3].trim();
+  if (!match) {
+    await message.reply({
+      content:
+        "Use `,vouch @seller 5 item purchased` and attach your proof screenshot.",
+      allowedMentions: { repliedUser: false }
+    });
+    return;
+  }
 
-      if (sellerId === message.author.id) {
-        await message.reply({
-          content: "You cannot vouch for yourself.",
-          allowedMentions: { repliedUser: false }
-        });
-        return;
-      }
+  const sellerId = match[1];
+  const rating = Number(match[2]);
+  const item = match[3].trim();
 
-      if (sellerId === client.user.id) {
-        await message.reply({
-          content: "You cannot submit a seller vouch for the bot.",
-          allowedMentions: { repliedUser: false }
-        });
-        return;
-      }
+  if (sellerId === message.author.id) {
+    await message.reply({
+      content: "You cannot vouch for yourself.",
+      allowedMentions: { repliedUser: false }
+    });
+    return;
+  }
 
-      if (!item || item.length > 500) {
-        await message.reply({
-          content: "Please provide an item name (maximum 500 characters).",
-          allowedMentions: { repliedUser: false }
-        });
-        return;
-      }
+  if (sellerId === client.user.id) {
+    await message.reply({
+      content: "You cannot submit a seller vouch for the bot.",
+      allowedMentions: { repliedUser: false }
+    });
+    return;
+  }
 
-      const proof = message.attachments.find((attachment) =>
-        attachment.contentType?.startsWith("image/")
-      );
+  if (!item || item.length > 500) {
+    await message.reply({
+      content: "Please provide an item name under 500 characters.",
+      allowedMentions: { repliedUser: false }
+    });
+    return;
+  }
 
-      if (!proof) {
-        await message.reply({
-          content: "Please attach a proof screenshot to your vouch.",
-          allowedMentions: { repliedUser: false }
-        });
-        return;
-      }
+  const proof = message.attachments.find((attachment) =>
+    attachment.contentType?.startsWith("image/")
+  );
 
-      const sellerMember = await message.guild.members
-        .fetch(sellerId)
-        .catch(() => null);
+  if (!proof) {
+    await message.reply({
+      content: "Please attach a proof screenshot to your vouch.",
+      allowedMentions: { repliedUser: false }
+    });
+    return;
+  }
 
-      if (!sellerMember) {
-        await message.reply({
-          content:
-            "I couldn't find that seller in this server. Please mention a server member.",
-          allowedMentions: { repliedUser: false }
-        });
-        return;
-      }
+  const sellerMember = await message.guild.members
+    .fetch(sellerId)
+    .catch(() => null);
 
-      const vouchChannel = await message.guild.channels.fetch(
-        VOUCH_CHANNEL_ID
-      );
+  if (!sellerMember) {
+    await message.reply({
+      content: "I couldn't find that seller in this server.",
+      allowedMentions: { repliedUser: false }
+    });
+    return;
+  }
 
-      if (
-        !vouchChannel ||
-        !vouchChannel.isTextBased() ||
-        !vouchChannel.send
-      ) {
-        await message.reply({
-          content: "I couldn't find the vouches channel. Please contact staff.",
-          allowedMentions: { repliedUser: false }
-        });
-        return;
-      }
+  const vouchChannel = await message.guild.channels
+    .fetch(VOUCH_CHANNEL_ID)
+    .catch(() => null);
 
-      const proofName = proof.name || "proof.png";
+  if (
+    !vouchChannel ||
+    !vouchChannel.isTextBased() ||
+    !vouchChannel.send
+  ) {
+    await message.reply({
+      content: "I couldn't find the vouches channel. Please contact staff.",
+      allowedMentions: { repliedUser: false }
+    });
+    return;
+  }
 
-      const embed = makeVouchEmbed({
-        sellerId,
-        buyerId: message.author.id,
-        item,
-        rating,
-        proofUrl: proof.url,
-        proofName
-      });
+  try {
+    // Use a safe filename for Discord's attachment:// URL.
+    const originalName = proof.name || "proof.png";
+    const extensionMatch = originalName.match(/\.(png|jpe?g|gif|webp)$/i);
+    const extension = extensionMatch
+      ? extensionMatch[0].toLowerCase()
+      : ".png";
 
-      // Check recent bot vouches for a matching submission.
-      // This helps prevent duplicate posts after retries/reprocessing.
-      const recentMessages = await vouchChannel.messages.fetch({
-        limit: 25
-      });
+    const proofName = `vouch-proof-${message.id}${extension}`;
 
-      const alreadyPosted = recentMessages.some((msg) => {
-        if (msg.author.id !== client.user.id) return false;
+    const embed = makeVouchEmbed({
+      sellerId,
+      buyerId: message.author.id,
+      item,
+      rating,
+      proofName
+    });
 
-        const description = msg.embeds[0]?.description || "";
-
-        return (
-          description.includes(`**seller:** <@${sellerId}>`) &&
-          description.includes(`**buyer:** <@${message.author.id}>`) &&
-          description.includes(`**items purchased:** ${item}`) &&
-          description.includes(proofName)
-        );
-      });
-
-      if (alreadyPosted) {
-        console.log(
-          `Duplicate vouch prevented for command ${message.id}.`
-        );
-
-        await message.delete().catch(() => {});
-        return;
-      }
-
-      // SEND THE VOUCH EMBED ONLY ONCE.
-      await vouchChannel.send({
-        embeds: [embed],
-        allowedMentions: {
-          users: [sellerId, message.author.id]
+    // Send the actual proof file with the embed.
+    // The image is embedded using attachment://, so it does not
+    // depend on the original command message remaining available.
+    const vouchMessage = await vouchChannel.send({
+      embeds: [embed],
+      files: [
+        {
+          attachment: proof.url,
+          name: proofName
         }
-      });
+      ],
+      allowedMentions: {
+        users: [sellerId, message.author.id]
+      }
+    });
 
-      // Delete the command message if the bot has Manage Messages.
-      await message.delete().catch((error) => {
-        console.error(
-          "Could not delete original vouch command:",
-          error.message
-        );
-      });
-
-      // No success reply: the vouch embed is the only success message.
-      console.log(
-        `Vouch submitted by ${message.author.tag} for ${sellerMember.user.tag}: ${rating}/5, ${item}`
-      );
-
-      return;
+    // Confirm that the vouch was successfully posted before deleting
+    // the original command.
+    if (!vouchMessage) {
+      throw new Error("Discord did not return the sent vouch message.");
     }
+
+    // Add the Chuppys thank-you reaction.
+    await vouchMessage.react(CHUPPY_TY_EMOJI).catch((error) => {
+      console.error("Could not react to vouch:", error.message);
+    });
+
+    // Delete the command and its original attachment only after posting.
+    await message.delete().catch((error) => {
+      console.error(
+        "Could not delete original vouch command:",
+        error.message
+      );
+    });
+
+    // Send the confirmation requested.
+    await message.channel.send({
+      content:
+        `${message.author}, your vouch has been submitted to <#${VOUCH_CHANNEL_ID}>!`,
+      allowedMentions: {
+        users: [message.author.id]
+      }
+    });
+
+    console.log(
+      `Vouch submitted by ${message.author.tag} for ${sellerMember.user.tag}: ${rating}/5, ${item}`
+    );
+  } catch (error) {
+    console.error("Vouch submission failed:", error);
+
+    await message.reply({
+      content:
+        "I couldn't send your vouch. Please try again or contact staff.",
+      allowedMentions: { repliedUser: false }
+    }).catch(() => {});
+  }
+
+  return;
+}
 
     // ==================================================
     // PAYMENT COMMAND
