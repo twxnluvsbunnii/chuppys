@@ -1,4 +1,3 @@
-
 const http = require("http");
 
 const {
@@ -48,21 +47,28 @@ const ROBUX_CASHOUT_THUMBNAIL_URL =
 
 // ==================================================
 // VOUCH COUNTER SETTINGS
-// Counts EVERY message in both vouch channels.
 // ==================================================
 
+// Source channels
 const PERSONAL_VOUCH_CHANNEL_ID = "1562227276051910676";
 const VOUCH_CHANNEL_ID = "1530811494168657980";
 
+// Counter channels
+const CHUPPY_COUNT_CHANNEL_ID = "1553242286412922960";
+const SERVER_COUNT_CHANNEL_ID = "1562266346891247688";
+
+// Both source channels contribute to the server-wide total.
 const VOUCH_SOURCE_CHANNEL_IDS = [
   PERSONAL_VOUCH_CHANNEL_ID,
   VOUCH_CHANNEL_ID
 ];
 
-const VOUCH_COUNT_CHANNEL_ID = "1562266346891247688";
+// Personal counter channel name formatting
+const CHUPPY_COUNT_PREFIX = "﹕𐔌・chuppy total vouches : ";
+const CHUPPY_COUNT_SUFFIX = " 〃・꒱";
 
-const VOUCH_COUNT_PREFIX = "﹕𐔌・chuppy total vouches : ";
-const VOUCH_COUNT_SUFFIX = " 〃・꒱";
+// Server-wide counter channel name formatting
+const SERVER_COUNT_PREFIX = "server total vouches : ";
 
 const WELCOME_ROLE_ID = "1531039846871728248";
 
@@ -106,7 +112,6 @@ const afkUsers = new Map();
 // AUTOMATIC VOUCH COUNTER STATE
 // ==================================================
 
-let vouchMessageCount = 0;
 let vouchCounterTimer = null;
 let vouchCounterUpdateRunning = false;
 let vouchCounterRecountRequested = false;
@@ -199,23 +204,7 @@ async function sendRobuxCashoutEmbed(channel) {
 // AUTOMATIC VOUCH COUNTER FUNCTIONS
 // ==================================================
 
-// Rename the counter channel to the current total.
-async function updateVouchCounterName(channel) {
-  const name =
-    `${VOUCH_COUNT_PREFIX}${vouchMessageCount}${VOUCH_COUNT_SUFFIX}`;
-
-  if (channel.name === name) return;
-
-  if (typeof channel.setName !== "function") {
-    throw new Error("Counter channel does not support renaming.");
-  }
-
-  await channel.setName(name);
-
-  console.log(`[VOUCH COUNTER] Channel renamed to: ${name}`);
-}
-
-// Count EVERY message in a channel, regardless of author,
+// Count every message in a channel, regardless of author,
 // content, attachments, embeds, or whether it was forwarded.
 async function countChannelMessages(channel) {
   if (
@@ -244,10 +233,7 @@ async function countChannelMessages(channel) {
       break;
     }
 
-    // Count all messages in this batch.
     count += messages.size;
-
-    // Fetch the next older batch.
     before = messages.last().id;
 
     if (messages.size < 100) {
@@ -258,7 +244,23 @@ async function countChannelMessages(channel) {
   return count;
 }
 
-// Recount both vouch channels from their actual message history.
+// Rename a counter channel only when its name needs updating.
+async function renameCounterChannel(channelId, name) {
+  const channel = await client.channels.fetch(channelId);
+
+  if (!channel || typeof channel.setName !== "function") {
+    throw new Error(
+      `Counter channel ${channelId} was not found or cannot be renamed.`
+    );
+  }
+
+  if (channel.name !== name) {
+    await channel.setName(name);
+    console.log(`[VOUCH COUNTER] Updated channel name: ${name}`);
+  }
+}
+
+// Count personal and regular vouches independently.
 async function recountAllVouches() {
   if (vouchCounterUpdateRunning) {
     vouchCounterRecountRequested = true;
@@ -271,56 +273,41 @@ async function recountAllVouches() {
     do {
       vouchCounterRecountRequested = false;
 
-      console.log(
-        "[VOUCH COUNTER] Counting all messages in both vouch channels..."
+      console.log("[VOUCH COUNTER] Starting full recount...");
+
+      const personalChannel = await client.channels.fetch(
+        PERSONAL_VOUCH_CHANNEL_ID
       );
 
-      let total = 0;
-
-      for (const channelId of VOUCH_SOURCE_CHANNEL_IDS) {
-        const channel = await client.channels.fetch(channelId);
-
-        if (
-          !channel ||
-          !channel.isTextBased() ||
-          !channel.messages
-        ) {
-          throw new Error(
-            `Cannot read vouch channel ${channelId}.`
-          );
-        }
-
-        const count = await countChannelMessages(channel);
-        total += count;
-
-        console.log(
-          `[VOUCH COUNTER] Channel ${channelId}: ${count} messages.`
-        );
-      }
-
-      const counterChannel = await client.channels.fetch(
-        VOUCH_COUNT_CHANNEL_ID
+      const regularChannel = await client.channels.fetch(
+        VOUCH_CHANNEL_ID
       );
 
-      if (
-        !counterChannel ||
-        typeof counterChannel.setName !== "function"
-      ) {
-        throw new Error(
-          "Counter channel not found or cannot be renamed."
-        );
-      }
+      // Count all messages in the personal vouch channel.
+      const personalCount = await countChannelMessages(personalChannel);
 
-      vouchMessageCount = total;
+      // Count all messages in the regular vouch channel.
+      const regularCount = await countChannelMessages(regularChannel);
 
-      await updateVouchCounterName(counterChannel);
+      // Chuppy's counter includes PERSONAL vouches only.
+      const chuppyName =
+        `${CHUPPY_COUNT_PREFIX}${personalCount}${CHUPPY_COUNT_SUFFIX}`;
+
+      // Server counter includes BOTH channels.
+      const serverTotal = personalCount + regularCount;
+      const serverName = `${SERVER_COUNT_PREFIX}${serverTotal}`;
+
+      // Update both counter channels independently.
+      await Promise.all([
+        renameCounterChannel(CHUPPY_COUNT_CHANNEL_ID, chuppyName),
+        renameCounterChannel(SERVER_COUNT_CHANNEL_ID, serverName)
+      ]);
 
       console.log(
-        `[VOUCH COUNTER] Correct total: ${vouchMessageCount}`
+        `[VOUCH COUNTER] Personal: ${personalCount} | ` +
+        `Regular: ${regularCount} | Server total: ${serverTotal}`
       );
-
     } while (vouchCounterRecountRequested);
-
   } catch (error) {
     console.error("[VOUCH COUNTER] Recount failed:", error);
   } finally {
@@ -332,7 +319,7 @@ async function recountAllVouches() {
   }
 }
 
-// Wait briefly so a burst of messages/deletions causes one recount.
+// Wait briefly so bursts of messages/deletions trigger one recount.
 function scheduleVouchCounterUpdate() {
   clearTimeout(vouchCounterTimer);
 
@@ -353,10 +340,10 @@ client.once(Events.ClientReady, async readyClient => {
     type: 3
   });
 
-  // Initial scan includes old messages in both channels.
+  // Recount existing message history on startup.
   await recountAllVouches();
 
-  // Recount periodically to correct missed events.
+  // Recount every five minutes to correct missed events.
   setInterval(() => {
     if (client.isReady()) {
       scheduleVouchCounterUpdate();
@@ -368,8 +355,8 @@ client.once(Events.ClientReady, async readyClient => {
 // VOUCH COUNTER MESSAGE / DELETION LISTENERS
 // ==================================================
 
-// Any new message in either vouch channel triggers a recount.
-// This includes messages from users, bots, and forwarded messages.
+// Every new message in either vouch channel triggers a recount.
+// Bot messages also count.
 client.on(Events.MessageCreate, message => {
   if (!VOUCH_SOURCE_CHANNEL_IDS.includes(message.channel.id)) return;
 
@@ -383,7 +370,7 @@ client.on(Events.MessageDelete, message => {
   scheduleVouchCounterUpdate();
 });
 
-// Recount after messages are deleted in bulk.
+// Recount after multiple messages are deleted.
 client.on(Events.MessageBulkDelete, messages => {
   const affectsVouchChannel = messages.some(message =>
     VOUCH_SOURCE_CHANNEL_IDS.includes(message.channel.id)
