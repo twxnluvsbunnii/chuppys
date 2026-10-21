@@ -48,9 +48,14 @@ const ROBUX_CASHOUT_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1561094713153429746.png";
 
 // AUTOMATIC MESSAGE COUNTER
+// Text channel whose messages are counted
+const VOUCH_TEXT_CHANNEL_ID = "1562266346891247688";
+
+// Voice channel whose name displays the count
 const VOUCH_COUNT_CHANNEL_ID = "1562227276051910676";
-const VOUCH_COUNT_PREFIX = "﹕𐔌・chuppy total vouches : ";
-const VOUCH_COUNT_SUFFIX = " 〃・꒱";
+
+const VOUCH_COUNT_PREFIX = "୨・chuppy total vouches : ";
+const VOUCH_COUNT_SUFFIX = " // ・૩";
 
 const WELCOME_ROLE_ID = "1531039846871728248";
 
@@ -152,7 +157,6 @@ async function sendRobuxCashoutEmbed(channel) {
     allowedMentions: { parse: [] }
   };
 
-  // Find an existing cashout embed to avoid duplicates.
   const messages = await channel.messages.fetch({ limit: 100 });
 
   const matches = messages.filter(message =>
@@ -195,6 +199,7 @@ async function sendRobuxCashoutEmbed(channel) {
 
 // ==================================================
 // AUTOMATIC MESSAGE COUNTER FUNCTIONS
+// Counts the TEXT channel and renames the VOICE channel
 // ==================================================
 
 async function updateVouchCounterName(channel) {
@@ -209,22 +214,45 @@ async function updateVouchCounterName(channel) {
 }
 
 async function initializeVouchCounter() {
-  const channel = await client.channels.fetch(
-    VOUCH_COUNT_CHANNEL_ID
+  // Fetch the text channel containing the messages to count.
+  const textChannel = await client.channels.fetch(
+    VOUCH_TEXT_CHANNEL_ID
   );
 
-  if (!channel || !channel.isTextBased() || !channel.messages) {
+  if (
+    !textChannel ||
+    !textChannel.isTextBased() ||
+    !textChannel.messages
+  ) {
     throw new Error(
-      "Counter channel not found or is not a text channel."
+      "Vouch text channel not found or cannot access its message history."
     );
   }
 
-  if (!channel.guild) {
-    throw new Error("Counter channel is not in a server.");
+  // Fetch the voice channel that displays the counter.
+  const counterChannel = await client.channels.fetch(
+    VOUCH_COUNT_CHANNEL_ID
+  );
+
+  if (
+    !counterChannel ||
+    !counterChannel.isVoiceBased()
+  ) {
+    throw new Error(
+      "Counter channel not found or is not a voice channel."
+    );
+  }
+
+  if (textChannel.guildId !== counterChannel.guildId) {
+    throw new Error(
+      "The vouch text channel and counter channel must be in the same server."
+    );
   }
 
   // Snapshot the latest messages before scanning older history.
-  const newestMessages = await channel.messages.fetch({ limit: 100 });
+  const newestMessages = await textChannel.messages.fetch({
+    limit: 100
+  });
 
   const newestMessageId = newestMessages.first()?.id;
 
@@ -233,7 +261,7 @@ async function initializeVouchCounter() {
 
   // Fetch all older messages in batches of 100.
   while (before) {
-    const olderMessages = await channel.messages.fetch({
+    const olderMessages = await textChannel.messages.fetch({
       limit: 100,
       before
     });
@@ -246,8 +274,9 @@ async function initializeVouchCounter() {
     if (olderMessages.size < 100) break;
   }
 
-  // Add messages received during initialization that were not
-  // already included in the initial snapshot.
+  // Add messages sent after the initial snapshot.
+  // Pagination goes backwards from the snapshot, so these
+  // newer messages are not included in the historical count.
   for (const messageId of pendingVouchMessages) {
     if (
       !newestMessageId ||
@@ -262,7 +291,7 @@ async function initializeVouchCounter() {
   vouchMessageCount = count;
   vouchCounterReady = true;
 
-  await updateVouchCounterName(channel);
+  await updateVouchCounterName(counterChannel);
 
   console.log(
     `[VOUCH COUNTER] Initialized with ${vouchMessageCount} messages.`
@@ -279,8 +308,8 @@ async function refreshVouchCounterName() {
       VOUCH_COUNT_CHANNEL_ID
     );
 
-    if (!channel || !channel.isTextBased()) {
-      throw new Error("Counter channel is unavailable.");
+    if (!channel || !channel.isVoiceBased()) {
+      throw new Error("Counter voice channel is unavailable.");
     }
 
     await updateVouchCounterName(channel);
@@ -319,16 +348,18 @@ client.once(Events.ClientReady, async readyClient => {
 
 // ==================================================
 // AUTOMATIC MESSAGE COUNTER LISTENER
-// COUNTS ALL MESSAGES, INCLUDING BOT MESSAGES
+// COUNTS ALL MESSAGES IN THE VOUCH TEXT CHANNEL
+// INCLUDING BOT MESSAGES
 // ==================================================
 
 client.on(Events.MessageCreate, async message => {
   if (!message.guild) return;
 
-  if (message.channel.id !== VOUCH_COUNT_CHANNEL_ID) return;
+  // Count messages in the text channel, NOT the voice channel.
+  if (message.channel.id !== VOUCH_TEXT_CHANNEL_ID) return;
 
-  // During startup, save message IDs so messages arriving while
-  // the historical count is being calculated aren't lost.
+  // During startup, record messages arriving while the
+  // historical count is being calculated.
   if (!vouchCounterReady) {
     pendingVouchMessages.add(message.id);
     return;
@@ -336,7 +367,7 @@ client.on(Events.MessageCreate, async message => {
 
   vouchMessageCount++;
 
-  // Debounce channel renames to reduce Discord API requests.
+  // Debounce renaming to reduce Discord API requests.
   clearTimeout(vouchCounterTimer);
 
   vouchCounterTimer = setTimeout(() => {
