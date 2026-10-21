@@ -1,3 +1,4 @@
+
 const http = require("http");
 
 const {
@@ -47,7 +48,8 @@ const ROBUX_CASHOUT_THUMBNAIL_URL =
 
 // ==================================================
 // VOUCH COUNTER SETTINGS
-// Count both personal and regular vouch channels.
+// Counts every message authored by this bot in both
+// vouch channels, including old messages.
 // ==================================================
 
 const PERSONAL_VOUCH_CHANNEL_ID = "1562227276051910676";
@@ -109,9 +111,7 @@ let vouchMessageCount = 0;
 let vouchCounterReady = false;
 let vouchCounterTimer = null;
 let vouchCounterUpdateRunning = false;
-
-// Messages received while the initial history scan is running.
-const pendingVouchMessages = new Map();
+let vouchCounterRecountRequested = false;
 
 // ==================================================
 // DISCORD CLIENT
@@ -201,6 +201,7 @@ async function sendRobuxCashoutEmbed(channel) {
 // AUTOMATIC VOUCH COUNTER FUNCTIONS
 // ==================================================
 
+// Update the name of the counter channel.
 async function updateVouchCounterName(channel) {
   const name =
     `${VOUCH_COUNT_PREFIX}${vouchMessageCount}${VOUCH_COUNT_SUFFIX}`;
@@ -216,6 +217,9 @@ async function updateVouchCounterName(channel) {
   console.log(`[VOUCH COUNTER] Channel renamed to: ${name}`);
 }
 
+// Count ALL historical messages authored by this bot
+// in one source channel. Messages from users and other
+// bots are not included.
 async function countChannelMessages(channel) {
   if (
     !channel ||
@@ -227,139 +231,123 @@ async function countChannelMessages(channel) {
     );
   }
 
-  // Fetch the newest messages first to establish a snapshot.
-  const newestMessages = await channel.messages.fetch({ limit: 100 });
+  let count = 0;
+  let before;
 
-  const newestMessageId = newestMessages.first()?.id || null;
+  while (true) {
+    const options = { limit: 100 };
 
-  let count = newestMessages.size;
-  let before = newestMessages.last()?.id || null;
+    if (before) {
+      options.before = before;
+    }
 
-  // Scan older messages in batches of 100.
-  while (before) {
-    const olderMessages = await channel.messages.fetch({
-      limit: 100,
-      before
-    });
+    const messages = await channel.messages.fetch(options);
 
-    if (olderMessages.size === 0) break;
+    if (messages.size === 0) {
+      break;
+    }
 
-    count += olderMessages.size;
-    before = olderMessages.last()?.id || null;
+    for (const message of messages.values()) {
+      if (message.author.id === client.user.id) {
+        count++;
+      }
+    }
 
-    if (olderMessages.size < 100) break;
+    // Continue with the oldest message in this batch.
+    before = messages.last().id;
+
+    if (messages.size < 100) {
+      break;
+    }
   }
 
-  return { count, newestMessageId };
+  return count;
 }
 
-async function initializeVouchCounter() {
-  console.log("[VOUCH COUNTER] Scanning both vouch channels...");
-
-  const counterChannel = await client.channels.fetch(
-    VOUCH_COUNT_CHANNEL_ID
-  );
-
-  if (
-    !counterChannel ||
-    typeof counterChannel.setName !== "function"
-  ) {
-    throw new Error(
-      "Counter channel not found or cannot be renamed."
-    );
+// Recount both vouch channels from their actual history.
+// If another recount is requested while one is running,
+// perform another pass so recent changes are not missed.
+async function recountAllVouches() {
+  if (vouchCounterUpdateRunning) {
+    vouchCounterRecountRequested = true;
+    return;
   }
-
-  const totals = new Map();
-  let total = 0;
-
-  // Scan both personal and regular vouch channels.
-  for (const channelId of VOUCH_SOURCE_CHANNEL_IDS) {
-    const channel = await client.channels.fetch(channelId);
-
-    if (
-      !channel ||
-      !channel.isTextBased() ||
-      !channel.messages
-    ) {
-      throw new Error(
-        `Cannot read vouch channel ${channelId}.`
-      );
-    }
-
-    if (channel.guildId !== counterChannel.guildId) {
-      throw new Error(
-        "Both vouch channels and the counter must be in the same server."
-      );
-    }
-
-    const result = await countChannelMessages(channel);
-
-    totals.set(channelId, result);
-    total += result.count;
-
-    console.log(
-      `[VOUCH COUNTER] Channel ${channelId}: ${result.count} messages.`
-    );
-  }
-
-  // Count messages received during the initial scan if they were
-  // created after that channel's newest-message snapshot.
-  for (const [messageId, channelId] of pendingVouchMessages) {
-    const snapshot = totals.get(channelId);
-
-    if (!snapshot) continue;
-
-    if (
-      !snapshot.newestMessageId ||
-      BigInt(messageId) > BigInt(snapshot.newestMessageId)
-    ) {
-      total++;
-    }
-  }
-
-  pendingVouchMessages.clear();
-
-  vouchMessageCount = total;
-  vouchCounterReady = true;
-
-  await updateVouchCounterName(counterChannel);
-
-  console.log(
-    `[VOUCH COUNTER] Initialized with ${vouchMessageCount} messages across both channels.`
-  );
-}
-
-async function refreshVouchCounterName() {
-  if (!vouchCounterReady || vouchCounterUpdateRunning) return;
 
   vouchCounterUpdateRunning = true;
 
   try {
-    const channel = await client.channels.fetch(
-      VOUCH_COUNT_CHANNEL_ID
-    );
+    do {
+      vouchCounterRecountRequested = false;
 
-    if (!channel || typeof channel.setName !== "function") {
-      throw new Error("Counter channel is unavailable.");
-    }
+      console.log("[VOUCH COUNTER] Recounting both vouch channels...");
 
-    await updateVouchCounterName(channel);
+      let total = 0;
+
+      for (const channelId of VOUCH_SOURCE_CHANNEL_IDS) {
+        const channel = await client.channels.fetch(channelId);
+
+        if (
+          !channel ||
+          !channel.isTextBased() ||
+          !channel.messages
+        ) {
+          throw new Error(
+            `Cannot read vouch channel ${channelId}.`
+          );
+        }
+
+        const count = await countChannelMessages(channel);
+        total += count;
+
+        console.log(
+          `[VOUCH COUNTER] Channel ${channelId}: ${count} bot messages.`
+        );
+      }
+
+      const counterChannel = await client.channels.fetch(
+        VOUCH_COUNT_CHANNEL_ID
+      );
+
+      if (
+        !counterChannel ||
+        typeof counterChannel.setName !== "function"
+      ) {
+        throw new Error(
+          "Counter channel not found or cannot be renamed."
+        );
+      }
+
+      vouchMessageCount = total;
+      vouchCounterReady = true;
+
+      await updateVouchCounterName(counterChannel);
+
+      console.log(
+        `[VOUCH COUNTER] Correct total: ${vouchMessageCount}`
+      );
+
+    } while (vouchCounterRecountRequested);
+
   } catch (error) {
-    console.error(
-      "[VOUCH COUNTER] Could not update channel name:",
-      error
-    );
+    console.error("[VOUCH COUNTER] Recount failed:", error);
   } finally {
     vouchCounterUpdateRunning = false;
+
+    // If a recount was requested during the final moments
+    // of this pass, schedule another attempt.
+    if (vouchCounterRecountRequested) {
+      scheduleVouchCounterUpdate();
+    }
   }
 }
 
+// Debounce bursts of messages or deletions before recounting.
 function scheduleVouchCounterUpdate() {
   clearTimeout(vouchCounterTimer);
 
   vouchCounterTimer = setTimeout(() => {
-    refreshVouchCounterName();
-  }, 10000);
+    recountAllVouches();
+  }, 2000);
 }
 
 // ==================================================
@@ -374,32 +362,47 @@ client.once(Events.ClientReady, async readyClient => {
     type: 3
   });
 
-  try {
-    await initializeVouchCounter();
-  } catch (error) {
-    console.error(
-      "[VOUCH COUNTER] Initialization failed:",
-      error
-    );
-  }
+  // Count all existing bot-authored messages on startup.
+  await recountAllVouches();
+
+  // Recheck every five minutes to correct missed events.
+  setInterval(() => {
+    if (client.isReady()) {
+      scheduleVouchCounterUpdate();
+    }
+  }, 5 * 60 * 1000);
 });
 
 // ==================================================
-// AUTOMATIC MESSAGE COUNTER LISTENER
-// Counts messages in either vouch channel.
+// VOUCH COUNTER MESSAGE / DELETION LISTENERS
 // ==================================================
 
+// When the bot sends a new message in either vouch channel,
+// recount the actual history instead of blindly adding 1.
 client.on(Events.MessageCreate, message => {
-  if (!message.guild) return;
+  if (!VOUCH_SOURCE_CHANNEL_IDS.includes(message.channel.id)) return;
+  if (message.author.id !== client.user.id) return;
+
+  scheduleVouchCounterUpdate();
+});
+
+// Recount after any message is deleted from either channel.
+// This also handles deletions of older bot messages.
+client.on(Events.MessageDelete, message => {
   if (!VOUCH_SOURCE_CHANNEL_IDS.includes(message.channel.id)) return;
 
-  if (!vouchCounterReady) {
-    pendingVouchMessages.set(message.id, message.channel.id);
-    return;
-  }
-
-  vouchMessageCount++;
   scheduleVouchCounterUpdate();
+});
+
+// Recount after bulk deletion in either vouch channel.
+client.on(Events.MessageBulkDelete, messages => {
+  const affectsVouchChannel = messages.some(message =>
+    VOUCH_SOURCE_CHANNEL_IDS.includes(message.channel.id)
+  );
+
+  if (affectsVouchChannel) {
+    scheduleVouchCounterUpdate();
+  }
 });
 
 // ==================================================
