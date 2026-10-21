@@ -68,7 +68,8 @@ const CHUPPY_COUNT_PREFIX = "﹕𐔌・chuppy total vouches : ";
 const CHUPPY_COUNT_SUFFIX = " 〃・꒱";
 
 // Server-wide counter channel name formatting
-const SERVER_COUNT_PREFIX = "server total vouches : ";
+const SERVER_COUNT_PREFIX = "﹕𐔌・server total vouches : ";
+const CHUPPY_COUNT_SUFFIX = " 〃・꒱";
 
 const WELCOME_ROLE_ID = "1531039846871728248";
 
