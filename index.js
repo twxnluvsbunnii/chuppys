@@ -48,14 +48,15 @@ const ROBUX_CASHOUT_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1561094713153429746.png";
 
 // AUTOMATIC MESSAGE COUNTER
-// Text channel whose messages are counted
-const VOUCH_TEXT_CHANNEL_ID = "1562266346891247688";
+// Source: text channel whose messages are counted.
+const VOUCH_TEXT_CHANNEL_ID = "1562227276051910676";
 
-// Voice channel whose name displays the count
-const VOUCH_COUNT_CHANNEL_ID = "1562227276051910676";
+// Destination: channel whose name displays the total.
+// This can be a text or voice channel.
+const VOUCH_COUNT_CHANNEL_ID = "1562266346891247688";
 
-const VOUCH_COUNT_PREFIX = "୨・chuppy total vouches : ";
-const VOUCH_COUNT_SUFFIX = " // ・૩";
+const VOUCH_COUNT_PREFIX = "﹕𐔌・chuppy total vouches : ";
+const VOUCH_COUNT_SUFFIX = " 〃・꒱";
 
 const WELCOME_ROLE_ID = "1531039846871728248";
 
@@ -148,9 +149,7 @@ async function sendRobuxCashoutEmbed(channel) {
       "-# make a cash out ticket now !! make sure u ping me in tickets <:uppyty:1561094713153429746>"
     )
     .setColor("#FFFFFF")
-    .setFooter({
-      text: ".gg/chuppys"
-    });
+    .setFooter({ text: ".gg/chuppys" });
 
   const payload = {
     embeds: [embed],
@@ -199,7 +198,6 @@ async function sendRobuxCashoutEmbed(channel) {
 
 // ==================================================
 // AUTOMATIC MESSAGE COUNTER FUNCTIONS
-// Counts the TEXT channel and renames the VOICE channel
 // ==================================================
 
 async function updateVouchCounterName(channel) {
@@ -208,13 +206,17 @@ async function updateVouchCounterName(channel) {
 
   if (channel.name === name) return;
 
+  if (typeof channel.setName !== "function") {
+    throw new Error("Counter channel does not support renaming.");
+  }
+
   await channel.setName(name);
 
   console.log(`[VOUCH COUNTER] Channel renamed to: ${name}`);
 }
 
 async function initializeVouchCounter() {
-  // Fetch the text channel containing the messages to count.
+  // Fetch the text channel to count.
   const textChannel = await client.channels.fetch(
     VOUCH_TEXT_CHANNEL_ID
   );
@@ -225,21 +227,22 @@ async function initializeVouchCounter() {
     !textChannel.messages
   ) {
     throw new Error(
-      "Vouch text channel not found or cannot access its message history."
+      "Vouch text channel not found or cannot read message history."
     );
   }
 
-  // Fetch the voice channel that displays the counter.
+  // Fetch the destination channel.
+  // It may be a voice channel OR a text channel.
   const counterChannel = await client.channels.fetch(
     VOUCH_COUNT_CHANNEL_ID
   );
 
   if (
     !counterChannel ||
-    !counterChannel.isVoiceBased()
+    typeof counterChannel.setName !== "function"
   ) {
     throw new Error(
-      "Counter channel not found or is not a voice channel."
+      "Counter channel not found or cannot be renamed."
     );
   }
 
@@ -249,7 +252,9 @@ async function initializeVouchCounter() {
     );
   }
 
-  // Snapshot the latest messages before scanning older history.
+  console.log("[VOUCH COUNTER] Scanning existing messages...");
+
+  // Fetch the latest messages first.
   const newestMessages = await textChannel.messages.fetch({
     limit: 100
   });
@@ -259,7 +264,7 @@ async function initializeVouchCounter() {
   let count = newestMessages.size;
   let before = newestMessages.last()?.id;
 
-  // Fetch all older messages in batches of 100.
+  // Continue fetching older messages in batches of 100.
   while (before) {
     const olderMessages = await textChannel.messages.fetch({
       limit: 100,
@@ -274,9 +279,8 @@ async function initializeVouchCounter() {
     if (olderMessages.size < 100) break;
   }
 
-  // Add messages sent after the initial snapshot.
-  // Pagination goes backwards from the snapshot, so these
-  // newer messages are not included in the historical count.
+  // Include messages received while the historical scan ran.
+  // Messages already present in the newest snapshot are excluded.
   for (const messageId of pendingVouchMessages) {
     if (
       !newestMessageId ||
@@ -308,8 +312,8 @@ async function refreshVouchCounterName() {
       VOUCH_COUNT_CHANNEL_ID
     );
 
-    if (!channel || !channel.isVoiceBased()) {
-      throw new Error("Counter voice channel is unavailable.");
+    if (!channel || typeof channel.setName !== "function") {
+      throw new Error("Counter channel is unavailable.");
     }
 
     await updateVouchCounterName(channel);
@@ -325,7 +329,6 @@ async function refreshVouchCounterName() {
 
 // ==================================================
 // BOT READY
-// INITIALIZES THE AUTOMATIC MESSAGE COUNTER
 // ==================================================
 
 client.once(Events.ClientReady, async readyClient => {
@@ -348,18 +351,14 @@ client.once(Events.ClientReady, async readyClient => {
 
 // ==================================================
 // AUTOMATIC MESSAGE COUNTER LISTENER
-// COUNTS ALL MESSAGES IN THE VOUCH TEXT CHANNEL
-// INCLUDING BOT MESSAGES
+// COUNTS ALL MESSAGES, INCLUDING BOT MESSAGES
 // ==================================================
 
 client.on(Events.MessageCreate, async message => {
   if (!message.guild) return;
-
-  // Count messages in the text channel, NOT the voice channel.
   if (message.channel.id !== VOUCH_TEXT_CHANNEL_ID) return;
 
-  // During startup, record messages arriving while the
-  // historical count is being calculated.
+  // During initialization, store IDs so new messages aren't lost.
   if (!vouchCounterReady) {
     pendingVouchMessages.add(message.id);
     return;
@@ -459,22 +458,10 @@ async function sendPaymentEmbed(channel) {
       "Please make sure the payment information is correct before sending."
     )
     .addFields(
-      {
-        name: "Cash App",
-        value: `\`${CASHAPP_USERNAME}\``
-      },
-      {
-        name: "PayPal",
-        value: `\`${PAYPAL_USERNAME}\``
-      },
-      {
-        name: "Apple Pay",
-        value: `\`${APPLE_PAY}\``
-      },
-      {
-        name: "Zelle",
-        value: `\`${ZELLE}\``
-      }
+      { name: "Cash App", value: `\`${CASHAPP_USERNAME}\`` },
+      { name: "PayPal", value: `\`${PAYPAL_USERNAME}\`` },
+      { name: "Apple Pay", value: `\`${APPLE_PAY}\`` },
+      { name: "Zelle", value: `\`${ZELLE}\`` }
     )
     .setColor("#FFFFFF")
     .setThumbnail(PAYMENT_EMOJI_URL)
