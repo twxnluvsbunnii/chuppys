@@ -1,3 +1,4 @@
+
 const http = require("http");
 
 const {
@@ -49,33 +50,27 @@ const ROBUX_CASHOUT_THUMBNAIL_URL =
 // VOUCH COUNTER SETTINGS
 // ==================================================
 
-// Source channels
 const PERSONAL_VOUCH_CHANNEL_ID = "1562227276051910676";
 const VOUCH_CHANNEL_ID = "1530811494168657980";
 
-// Counter channels
 const CHUPPY_COUNT_CHANNEL_ID = "1553242286412922960";
 const SERVER_COUNT_CHANNEL_ID = "1562266346891247688";
 
-// Both source channels contribute to the server-wide total.
 const VOUCH_SOURCE_CHANNEL_IDS = [
   PERSONAL_VOUCH_CHANNEL_ID,
   VOUCH_CHANNEL_ID
 ];
 
-// Personal counter channel name formatting
 const CHUPPY_COUNT_PREFIX = "﹕𐔌・chuppy total vouches : ";
 const CHUPPY_COUNT_SUFFIX = " 〃・꒱";
 
-// Server-wide counter channel name formatting
 const SERVER_COUNT_PREFIX = "﹕𐔌・server total vouches : ";
-const CHUPPY_COUNT_SUFFIX = " 〃・꒱";
+const SERVER_COUNT_SUFFIX = " 〃・꒱";
 
 const WELCOME_ROLE_ID = "1531039846871728248";
 
 const CHUPPY_TY_EMOJI = "<:uppyty:1561094713153429746>";
 
-// INVITE BOT AUTO-REACTION
 const INVITE_CHANNEL_ID = "1560249120667734016";
 const INVITE_BOT_ID = "499595256270946326";
 const INVITE_REACTION_EMOJI =
@@ -130,7 +125,6 @@ const client = new Client({
   ]
 });
 
-// Load the separate /vouch command module once.
 require("./vouch")(client);
 
 // ==================================================
@@ -167,7 +161,6 @@ async function sendRobuxCashoutEmbed(channel) {
     message.author.id === client.user.id &&
     message.embeds.some(existingEmbed => {
       const title = existingEmbed.title || "";
-
       return (
         title.startsWith("Cashing Out Robux") ||
         title.startsWith("Robux Cash out")
@@ -196,7 +189,6 @@ async function sendRobuxCashoutEmbed(channel) {
   }
 
   const sent = await channel.send(payload);
-
   console.log("[ROBUX CASHOUT] New embed created.");
   return sent;
 }
@@ -205,14 +197,8 @@ async function sendRobuxCashoutEmbed(channel) {
 // AUTOMATIC VOUCH COUNTER FUNCTIONS
 // ==================================================
 
-// Count every message in a channel, regardless of author,
-// content, attachments, embeds, or whether it was forwarded.
 async function countChannelMessages(channel) {
-  if (
-    !channel ||
-    !channel.isTextBased() ||
-    !channel.messages
-  ) {
+  if (!channel || !channel.isTextBased() || !channel.messages) {
     throw new Error(
       `Vouch source channel ${channel?.id || "unknown"} is unavailable.`
     );
@@ -223,29 +209,21 @@ async function countChannelMessages(channel) {
 
   while (true) {
     const options = { limit: 100 };
-
-    if (before) {
-      options.before = before;
-    }
+    if (before) options.before = before;
 
     const messages = await channel.messages.fetch(options);
 
-    if (messages.size === 0) {
-      break;
-    }
+    if (messages.size === 0) break;
 
     count += messages.size;
     before = messages.last().id;
 
-    if (messages.size < 100) {
-      break;
-    }
+    if (messages.size < 100) break;
   }
 
   return count;
 }
 
-// Rename a counter channel only when its name needs updating.
 async function renameCounterChannel(channelId, name) {
   const channel = await client.channels.fetch(channelId);
 
@@ -261,7 +239,6 @@ async function renameCounterChannel(channelId, name) {
   }
 }
 
-// Count personal and regular vouches independently.
 async function recountAllVouches() {
   if (vouchCounterUpdateRunning) {
     vouchCounterRecountRequested = true;
@@ -284,21 +261,18 @@ async function recountAllVouches() {
         VOUCH_CHANNEL_ID
       );
 
-      // Count all messages in the personal vouch channel.
       const personalCount = await countChannelMessages(personalChannel);
-
-      // Count all messages in the regular vouch channel.
       const regularCount = await countChannelMessages(regularChannel);
 
-      // Chuppy's counter includes PERSONAL vouches only.
+      // Personal counter counts only the personal vouch channel.
       const chuppyName =
         `${CHUPPY_COUNT_PREFIX}${personalCount}${CHUPPY_COUNT_SUFFIX}`;
 
-      // Server counter includes BOTH channels.
+      // Server counter counts both vouch source channels.
       const serverTotal = personalCount + regularCount;
-      const serverName = `${SERVER_COUNT_PREFIX}${serverTotal}`;
+      const serverName =
+        `${SERVER_COUNT_PREFIX}${serverTotal}${SERVER_COUNT_SUFFIX}`;
 
-      // Update both counter channels independently.
       await Promise.all([
         renameCounterChannel(CHUPPY_COUNT_CHANNEL_ID, chuppyName),
         renameCounterChannel(SERVER_COUNT_CHANNEL_ID, serverName)
@@ -320,7 +294,6 @@ async function recountAllVouches() {
   }
 }
 
-// Wait briefly so bursts of messages/deletions trigger one recount.
 function scheduleVouchCounterUpdate() {
   clearTimeout(vouchCounterTimer);
 
@@ -337,18 +310,12 @@ client.once(Events.ClientReady, async readyClient => {
   console.log(`[READY] Logged in as ${readyClient.user.tag}`);
   console.log("[READY] Chuppys bot is online.");
 
-  readyClient.user.setActivity(".gg/chuppys", {
-    type: 3
-  });
+  readyClient.user.setActivity(".gg/chuppys", { type: 3 });
 
-  // Recount existing message history on startup.
   await recountAllVouches();
 
-  // Recount every five minutes to correct missed events.
   setInterval(() => {
-    if (client.isReady()) {
-      scheduleVouchCounterUpdate();
-    }
+    if (client.isReady()) scheduleVouchCounterUpdate();
   }, 5 * 60 * 1000);
 });
 
@@ -356,30 +323,22 @@ client.once(Events.ClientReady, async readyClient => {
 // VOUCH COUNTER MESSAGE / DELETION LISTENERS
 // ==================================================
 
-// Every new message in either vouch channel triggers a recount.
-// Bot messages also count.
 client.on(Events.MessageCreate, message => {
   if (!VOUCH_SOURCE_CHANNEL_IDS.includes(message.channel.id)) return;
-
   scheduleVouchCounterUpdate();
 });
 
-// Recount after a single message is deleted.
 client.on(Events.MessageDelete, message => {
   if (!VOUCH_SOURCE_CHANNEL_IDS.includes(message.channel.id)) return;
-
   scheduleVouchCounterUpdate();
 });
 
-// Recount after multiple messages are deleted.
 client.on(Events.MessageBulkDelete, messages => {
   const affectsVouchChannel = messages.some(message =>
     VOUCH_SOURCE_CHANNEL_IDS.includes(message.channel.id)
   );
 
-  if (affectsVouchChannel) {
-    scheduleVouchCounterUpdate();
-  }
+  if (affectsVouchChannel) scheduleVouchCounterUpdate();
 });
 
 // ==================================================
@@ -388,10 +347,7 @@ client.on(Events.MessageBulkDelete, messages => {
 
 client.on(Events.GuildMemberAdd, async member => {
   try {
-    const channel = await member.guild.channels.fetch(
-      WELCOME_CHANNEL_ID
-    );
-
+    const channel = await member.guild.channels.fetch(WELCOME_CHANNEL_ID);
     if (!channel || !channel.isTextBased()) return;
 
     await member.roles.add(WELCOME_ROLE_ID).catch(error => {
@@ -409,11 +365,7 @@ client.on(Events.GuildMemberAdd, async member => {
       .setImage(WELCOME_IMAGE)
       .setFooter({ text: member.guild.name });
 
-    await channel.send({
-      content: `${member}`,
-      embeds: [embed]
-    });
-
+    await channel.send({ content: `${member}`, embeds: [embed] });
     console.log(`[WELCOME] Sent for ${member.user.tag}`);
   } catch (error) {
     console.error("[WELCOME] Error:", error);
@@ -426,10 +378,7 @@ client.on(Events.GuildMemberAdd, async member => {
 
 client.on(Events.GuildMemberRemove, async member => {
   try {
-    const channel = await member.guild.channels.fetch(
-      GOODBYE_CHANNEL_ID
-    );
-
+    const channel = await member.guild.channels.fetch(GOODBYE_CHANNEL_ID);
     if (!channel || !channel.isTextBased()) return;
 
     const embed = new EmbedBuilder()
@@ -443,7 +392,6 @@ client.on(Events.GuildMemberRemove, async member => {
       .setFooter({ text: member.guild.name });
 
     await channel.send({ embeds: [embed] });
-
     console.log(`[GOODBYE] Sent for ${member.user.tag}`);
   } catch (error) {
     console.error("[GOODBYE] Error:", error);
@@ -486,11 +434,7 @@ async function sendPaymentEmbed(channel) {
       .setURL(PAYPAL_URL)
   );
 
-  const payload = {
-    embeds: [embed],
-    components: [row]
-  };
-
+  const payload = { embeds: [embed], components: [row] };
   const messages = await channel.messages.fetch({ limit: 100 });
 
   const matches = messages.filter(msg =>
@@ -506,10 +450,7 @@ async function sendPaymentEmbed(channel) {
     for (const duplicate of matches.values()) {
       if (duplicate.id !== existing.id) {
         await duplicate.delete().catch(error => {
-          console.error(
-            "[PAYMENT] Could not delete duplicate:",
-            error
-          );
+          console.error("[PAYMENT] Could not delete duplicate:", error);
         });
       }
     }
@@ -519,7 +460,6 @@ async function sendPaymentEmbed(channel) {
   }
 
   const sent = await channel.send(payload);
-
   console.log("[PAYMENT] New message created.");
   return sent;
 }
@@ -537,22 +477,14 @@ async function updateServiceMessage(channel, embed, serviceName) {
     const messages = await channel.messages.fetch({ limit: 100 });
 
     const matching = messages.filter(msg => {
-      if (
-        msg.author.id !== client.user.id ||
-        !msg.embeds.length
-      ) {
+      if (msg.author.id !== client.user.id || !msg.embeds.length) {
         return false;
       }
 
       const description = msg.embeds[0].description || "";
 
-      if (serviceName === "DECOR") {
-        return description.includes("# DECOR");
-      }
-
-      if (serviceName === "NITRO") {
-        return description.includes("# NITRO");
-      }
+      if (serviceName === "DECOR") return description.includes("# DECOR");
+      if (serviceName === "NITRO") return description.includes("# NITRO");
 
       if (serviceName === "BOOSTIES") {
         return (
@@ -567,11 +499,7 @@ async function updateServiceMessage(channel, embed, serviceName) {
     const existing = matching.first();
 
     if (existing) {
-      await existing.edit({
-        content: "",
-        embeds: [embed],
-        components: []
-      });
+      await existing.edit({ content: "", embeds: [embed], components: [] });
 
       for (const duplicate of matching.values()) {
         if (duplicate.id !== existing.id) {
@@ -584,7 +512,6 @@ async function updateServiceMessage(channel, embed, serviceName) {
     }
 
     const sent = await channel.send({ embeds: [embed] });
-
     console.log(`[${serviceName}] Message created.`);
     return sent;
   } catch (error) {
@@ -789,9 +716,7 @@ async function handleAFK(message) {
   const afkKey = `${guildId}:${userId}`;
   const rawContent = message.content.trim();
 
-  const afkMatch = rawContent.match(
-    /^,afk(?:\s+([\s\S]*))?$/i
-  );
+  const afkMatch = rawContent.match(/^,afk(?:\s+([\s\S]*))?$/i);
 
   if (afkMatch) {
     const reason = (afkMatch[1] || "No reason provided.")
@@ -840,7 +765,6 @@ async function handleAFK(message) {
     const afkData = afkUsers.get(mentionedAFKKey);
 
     if (!afkData || notifiedUsers.has(mentionedUserId)) continue;
-
     notifiedUsers.add(mentionedUserId);
 
     await message.channel.send({
@@ -867,23 +791,15 @@ client.on(Events.MessageCreate, async message => {
     const wasAFKCommand = await handleAFK(message);
     if (wasAFKCommand) return;
 
-    // ROBUX CASH OUT
     if (content === "!robuxcashout") {
-      if (
-        !message.member.permissions.has(
-          PermissionsBitField.Flags.ManageGuild
-        )
-      ) {
+      if (!message.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
         await message.reply(
           "You need **Manage Server** permission to use this command."
         );
         return;
       }
 
-      const channel = await client.channels.fetch(
-        ROBUX_CASHOUT_CHANNEL_ID
-      );
-
+      const channel = await client.channels.fetch(ROBUX_CASHOUT_CHANNEL_ID);
       await sendRobuxCashoutEmbed(channel);
 
       await message.reply(
@@ -892,13 +808,11 @@ client.on(Events.MessageCreate, async message => {
       return;
     }
 
-    // PAYMENT
     if (content === ",pay") {
       await sendPaymentEmbed(message.channel);
       return;
     }
 
-    // ADMIN COMMANDS
     const adminCommands = [
       "!nitro", ",nitro",
       "!decor", ",decor",
@@ -908,11 +822,7 @@ client.on(Events.MessageCreate, async message => {
     ];
 
     if (adminCommands.includes(content)) {
-      if (
-        !message.member.permissions.has(
-          PermissionsBitField.Flags.ManageGuild
-        )
-      ) {
+      if (!message.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
         await message.reply(
           "You need **Manage Server** permission to use this command."
         );
@@ -920,7 +830,6 @@ client.on(Events.MessageCreate, async message => {
       }
     }
 
-    // NITRO
     if (["!nitro", ",nitro"].includes(content)) {
       const channel = await client.channels.fetch(NITRO_CHANNEL_ID);
       await sendNitroServices(channel);
@@ -928,7 +837,6 @@ client.on(Events.MessageCreate, async message => {
       return;
     }
 
-    // DECOR
     if (["!decor", ",decor"].includes(content)) {
       const channel = await client.channels.fetch(DECOR_CHANNEL_ID);
       await sendDecorServices(channel);
@@ -936,7 +844,6 @@ client.on(Events.MessageCreate, async message => {
       return;
     }
 
-    // BOOSTIES
     if (["!boosties", ",boosties"].includes(content)) {
       const channel = await client.channels.fetch(BOOSTIES_CHANNEL_ID);
       await sendBoostiesServices(channel);
@@ -944,7 +851,6 @@ client.on(Events.MessageCreate, async message => {
       return;
     }
 
-    // SELLERS
     if (["!sellers", ",sellers"].includes(content)) {
       await sendEmbedToChannel(
         message.guild,
@@ -957,7 +863,6 @@ client.on(Events.MessageCreate, async message => {
       return;
     }
 
-    // STAFF
     if (["!staff", ",staff"].includes(content)) {
       await sendEmbedToChannel(
         message.guild,
@@ -970,7 +875,6 @@ client.on(Events.MessageCreate, async message => {
       return;
     }
 
-    // TEST WELCOME
     if (content === "!testwelcome") {
       const channel = await client.channels.fetch(WELCOME_CHANNEL_ID);
 
@@ -990,14 +894,10 @@ client.on(Events.MessageCreate, async message => {
         .setImage(WELCOME_IMAGE)
         .setFooter({ text: message.guild.name });
 
-      await channel.send({
-        content: `${message.author}`,
-        embeds: [embed]
-      });
+      await channel.send({ content: `${message.author}`, embeds: [embed] });
       return;
     }
 
-    // TEST GOODBYE
     if (content === "!testgoodbye") {
       const channel = await client.channels.fetch(GOODBYE_CHANNEL_ID);
 
