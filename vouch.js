@@ -8,35 +8,28 @@ PermissionsBitField
 // VOUCH CHANNEL SETTINGS
 // ==================================================
 
-// Personal vouch channel for you and your boyfriend
 const PERSONAL_VOUCH_CHANNEL_ID = “1562227276051910676”;
-
-// Regular vouch channel for all other sellers
 const VOUCH_CHANNEL_ID = “1530811494168657980”;
 
-// Your Discord ID and your boyfriend’s Discord ID
 const PERSONAL_SELLER_IDS = [
 “1530733554869473320”,
 “1490962480963260466”
 ];
 
-// Thank-you reaction
 const THANK_YOU_EMOJI = “<:uppyty:1561094713153429746>”;
 
 // ==================================================
-// CHANNEL ROUTING
+// ROUTE VOUCHES TO THE CORRECT CHANNEL
 // ==================================================
 
 function getVouchChannelId(sellerId) {
-if (PERSONAL_SELLER_IDS.includes(sellerId)) {
-return PERSONAL_VOUCH_CHANNEL_ID;
-}
-
-return VOUCH_CHANNEL_ID;
+return PERSONAL_SELLER_IDS.includes(sellerId)
+? PERSONAL_VOUCH_CHANNEL_ID
+: VOUCH_CHANNEL_ID;
 }
 
 // ==================================================
-// SLASH COMMAND
+// VOUCH SLASH COMMAND
 // ==================================================
 
 const vouchCommand = new SlashCommandBuilder()
@@ -71,7 +64,7 @@ option
 );
 
 // ==================================================
-// REGISTER COMMAND WITHOUT REMOVING OTHER COMMANDS
+// REGISTER THE COMMAND
 // ==================================================
 
 async function registerVouch(client) {
@@ -79,19 +72,20 @@ try {
 const guildId = process.env.GUILD_ID;
 
 if (!guildId) {
-  console.error("VOUCH ERROR: GUILD_ID is missing from your environment variables.");
+  console.error("VOUCH ERROR: GUILD_ID is missing from environment variables.");
   return;
 }
 await client.application.fetch();
 const existingCommands = await client.application.commands.fetch({
   guildId
 });
+// Preserve other commands and replace only /vouch.
 const commands = existingCommands
   .filter(command => command.name !== "vouch")
   .map(command => command.toJSON());
 commands.push(vouchCommand.toJSON());
 await client.application.commands.set(commands, guildId);
-console.log("Vouch slash command registered successfully.");
+console.log("Vouch command registered successfully.");
 
 } catch (error) {
 console.error(“Failed to register vouch command:”, error);
@@ -99,23 +93,22 @@ console.error(“Failed to register vouch command:”, error);
 }
 
 // ==================================================
-// SUBMIT VOUCH
+// SUBMIT A VOUCH
 // ==================================================
 
 async function submitVouch(interaction) {
 try {
-if (!interaction.inGuild()) {
-return interaction.reply({
-content: “You can only submit a vouch inside a server.”,
-ephemeral: true
-});
-}
+const seller = interaction.options.getUser(“seller”);
+const rating = interaction.options.getInteger(“rating”);
+const order = interaction.options.getString(“order”);
+const proof = interaction.options.getAttachment(“proof”);
 
-const seller = interaction.options.getUser("seller");
-const rating = interaction.options.getInteger("rating");
-const order = interaction.options.getString("order");
-const proof = interaction.options.getAttachment("proof");
-// Prevent invalid seller selections
+if (!interaction.inGuild()) {
+  return interaction.reply({
+    content: "You can only submit a vouch inside a server.",
+    ephemeral: true
+  });
+}
 if (seller.bot) {
   return interaction.reply({
     content: "You cannot leave a vouch for a bot.",
@@ -128,21 +121,19 @@ if (seller.id === interaction.user.id) {
     ephemeral: true
   });
 }
-// Validate order description
 if (!order || !order.trim()) {
   return interaction.reply({
     content: "Please provide a description of your order.",
     ephemeral: true
   });
 }
-// Validate proof attachment
 if (!proof || !proof.contentType?.startsWith("image/")) {
   return interaction.reply({
-    content: "Please upload an image as your proof.",
+    content: "Please upload an image file as your proof.",
     ephemeral: true
   });
 }
-// Choose the correct channel based on the seller
+// Select the destination based on the seller.
 const channelId = getVouchChannelId(seller.id);
 const channel = await interaction.client.channels.fetch(channelId);
 if (!channel || !channel.isTextBased() || !channel.isSendable()) {
@@ -151,7 +142,6 @@ if (!channel || !channel.isTextBased() || !channel.isSendable()) {
     ephemeral: true
   });
 }
-// Check bot permissions
 const botMember = await interaction.guild.members.fetchMe();
 const permissions = channel.permissionsFor(botMember);
 if (
@@ -159,15 +149,17 @@ if (
   !permissions.has([
     PermissionsBitField.Flags.ViewChannel,
     PermissionsBitField.Flags.SendMessages,
-    PermissionsBitField.Flags.EmbedLinks
+    PermissionsBitField.Flags.EmbedLinks,
+    PermissionsBitField.Flags.ReadMessageHistory,
+    PermissionsBitField.Flags.AddReactions
   ])
 ) {
   return interaction.reply({
-    content: "I don't have permission to send vouches in the selected channel.",
+    content: "I need permission to view the vouch channel, send embeds, read message history, and add reactions.",
     ephemeral: true
   });
 }
-// Build the vouch embed
+// Create the vouch embed.
 const embed = new EmbedBuilder()
   .setColor(0xffb6d9)
   .setTitle("NEW VOUCH")
@@ -183,17 +175,18 @@ const embed = new EmbedBuilder()
     text: `Vouch submitted by ${interaction.user.username}`
   })
   .setTimestamp();
-// Send the vouch to the correct channel
+// Post the vouch in the correct channel.
 const vouchMessage = await channel.send({
   embeds: [embed]
 });
-// Add the thank-you reaction
-await vouchMessage.react(THANK_YOU_EMOJI).catch(error => {
-  console.error("Could not add the vouch reaction:", error);
-});
-// Confirm to the person submitting the vouch
+// Add the thank-you reaction.
+try {
+  await vouchMessage.react(THANK_YOU_EMOJI);
+} catch (error) {
+  console.error("Could not add the thank-you reaction:", error);
+}
 return interaction.reply({
-  content: `Your vouch for **${seller.username}** has been submitted successfully!`,
+  content: `Your vouch for ${seller.username} was submitted successfully!`,
   ephemeral: true
 });
 
@@ -213,7 +206,7 @@ return interaction.reply(reply).catch(() => {});
 }
 
 // ==================================================
-// CONNECT VOUCH SYSTEM TO YOUR EXISTING BOT
+// CONNECT THE VOUCH SYSTEM TO YOUR BOT
 // ==================================================
 
 module.exports = function (client) {
