@@ -2,21 +2,21 @@ const {
 SlashCommandBuilder,
 EmbedBuilder,
 PermissionsBitField
-} = require(“discord.js”);
+} = require("discord.js");
 
 // ==================================================
 // VOUCH CHANNEL SETTINGS
 // ==================================================
 
-const PERSONAL_VOUCH_CHANNEL_ID = “1562227276051910676”;
-const VOUCH_CHANNEL_ID = “1530811494168657980”;
+const PERSONAL_VOUCH_CHANNEL_ID = "1562227276051910676”;
+const VOUCH_CHANNEL_ID = "1530811494168657980”;
 
 const PERSONAL_SELLER_IDS = [
-“1530733554869473320”,
-“1490962480963260466”
+"1530733554869473320”,
+"1490962480963260466”
 ];
 
-const THANK_YOU_EMOJI = “<:uppyty:1561094713153429746>”;
+const THANK_YOU_EMOJI = "<:uppyty:1561094713153429746>”;
 
 // ==================================================
 // ROUTE VOUCHES TO THE CORRECT CHANNEL
@@ -33,33 +33,33 @@ return PERSONAL_SELLER_IDS.includes(sellerId)
 // ==================================================
 
 const vouchCommand = new SlashCommandBuilder()
-.setName(“vouch”)
-.setDescription(“Leave a vouch for a seller.”)
+.setName("vouch”)
+.setDescription("Leave a vouch for a seller.”)
 .addUserOption(option =>
 option
-.setName(“seller”)
-.setDescription(“The seller you are vouching for.”)
+.setName("seller”)
+.setDescription("The seller you are vouching for.”)
 .setRequired(true)
 )
 .addIntegerOption(option =>
 option
-.setName(“rating”)
-.setDescription(“Rate your experience from 1 to 5.”)
+.setName("rating”)
+.setDescription("Rate your experience from 1 to 5.”)
 .setRequired(true)
 .setMinValue(1)
 .setMaxValue(5)
 )
 .addStringOption(option =>
 option
-.setName(“order”)
-.setDescription(“Describe what you purchased.”)
+.setName("order”)
+.setDescription("Describe what you purchased.”)
 .setRequired(true)
 .setMaxLength(500)
 )
 .addAttachmentOption(option =>
 option
-.setName(“proof”)
-.setDescription(“Upload an image as proof of your order.”)
+.setName("proof”)
+.setDescription("Upload an image as proof of your order.”)
 .setRequired(true)
 );
 
