@@ -48,8 +48,7 @@ const ROBUX_CASHOUT_THUMBNAIL_URL =
 
 // ==================================================
 // VOUCH COUNTER SETTINGS
-// Counts every message authored by this bot in both
-// vouch channels, including old messages.
+// Counts EVERY message in both vouch channels.
 // ==================================================
 
 const PERSONAL_VOUCH_CHANNEL_ID = "1562227276051910676";
@@ -108,7 +107,6 @@ const afkUsers = new Map();
 // ==================================================
 
 let vouchMessageCount = 0;
-let vouchCounterReady = false;
 let vouchCounterTimer = null;
 let vouchCounterUpdateRunning = false;
 let vouchCounterRecountRequested = false;
@@ -201,7 +199,7 @@ async function sendRobuxCashoutEmbed(channel) {
 // AUTOMATIC VOUCH COUNTER FUNCTIONS
 // ==================================================
 
-// Update the name of the counter channel.
+// Rename the counter channel to the current total.
 async function updateVouchCounterName(channel) {
   const name =
     `${VOUCH_COUNT_PREFIX}${vouchMessageCount}${VOUCH_COUNT_SUFFIX}`;
@@ -217,9 +215,8 @@ async function updateVouchCounterName(channel) {
   console.log(`[VOUCH COUNTER] Channel renamed to: ${name}`);
 }
 
-// Count ALL historical messages authored by this bot
-// in one source channel. Messages from users and other
-// bots are not included.
+// Count EVERY message in a channel, regardless of author,
+// content, attachments, embeds, or whether it was forwarded.
 async function countChannelMessages(channel) {
   if (
     !channel ||
@@ -247,13 +244,10 @@ async function countChannelMessages(channel) {
       break;
     }
 
-    for (const message of messages.values()) {
-      if (message.author.id === client.user.id) {
-        count++;
-      }
-    }
+    // Count all messages in this batch.
+    count += messages.size;
 
-    // Continue with the oldest message in this batch.
+    // Fetch the next older batch.
     before = messages.last().id;
 
     if (messages.size < 100) {
@@ -264,9 +258,7 @@ async function countChannelMessages(channel) {
   return count;
 }
 
-// Recount both vouch channels from their actual history.
-// If another recount is requested while one is running,
-// perform another pass so recent changes are not missed.
+// Recount both vouch channels from their actual message history.
 async function recountAllVouches() {
   if (vouchCounterUpdateRunning) {
     vouchCounterRecountRequested = true;
@@ -279,7 +271,9 @@ async function recountAllVouches() {
     do {
       vouchCounterRecountRequested = false;
 
-      console.log("[VOUCH COUNTER] Recounting both vouch channels...");
+      console.log(
+        "[VOUCH COUNTER] Counting all messages in both vouch channels..."
+      );
 
       let total = 0;
 
@@ -300,7 +294,7 @@ async function recountAllVouches() {
         total += count;
 
         console.log(
-          `[VOUCH COUNTER] Channel ${channelId}: ${count} bot messages.`
+          `[VOUCH COUNTER] Channel ${channelId}: ${count} messages.`
         );
       }
 
@@ -318,7 +312,6 @@ async function recountAllVouches() {
       }
 
       vouchMessageCount = total;
-      vouchCounterReady = true;
 
       await updateVouchCounterName(counterChannel);
 
@@ -333,15 +326,13 @@ async function recountAllVouches() {
   } finally {
     vouchCounterUpdateRunning = false;
 
-    // If a recount was requested during the final moments
-    // of this pass, schedule another attempt.
     if (vouchCounterRecountRequested) {
       scheduleVouchCounterUpdate();
     }
   }
 }
 
-// Debounce bursts of messages or deletions before recounting.
+// Wait briefly so a burst of messages/deletions causes one recount.
 function scheduleVouchCounterUpdate() {
   clearTimeout(vouchCounterTimer);
 
@@ -362,10 +353,10 @@ client.once(Events.ClientReady, async readyClient => {
     type: 3
   });
 
-  // Count all existing bot-authored messages on startup.
+  // Initial scan includes old messages in both channels.
   await recountAllVouches();
 
-  // Recheck every five minutes to correct missed events.
+  // Recount periodically to correct missed events.
   setInterval(() => {
     if (client.isReady()) {
       scheduleVouchCounterUpdate();
@@ -377,24 +368,22 @@ client.once(Events.ClientReady, async readyClient => {
 // VOUCH COUNTER MESSAGE / DELETION LISTENERS
 // ==================================================
 
-// When the bot sends a new message in either vouch channel,
-// recount the actual history instead of blindly adding 1.
+// Any new message in either vouch channel triggers a recount.
+// This includes messages from users, bots, and forwarded messages.
 client.on(Events.MessageCreate, message => {
   if (!VOUCH_SOURCE_CHANNEL_IDS.includes(message.channel.id)) return;
-  if (message.author.id !== client.user.id) return;
 
   scheduleVouchCounterUpdate();
 });
 
-// Recount after any message is deleted from either channel.
-// This also handles deletions of older bot messages.
+// Recount after a single message is deleted.
 client.on(Events.MessageDelete, message => {
   if (!VOUCH_SOURCE_CHANNEL_IDS.includes(message.channel.id)) return;
 
   scheduleVouchCounterUpdate();
 });
 
-// Recount after bulk deletion in either vouch channel.
+// Recount after messages are deleted in bulk.
 client.on(Events.MessageBulkDelete, messages => {
   const affectsVouchChannel = messages.some(message =>
     VOUCH_SOURCE_CHANNEL_IDS.includes(message.channel.id)
