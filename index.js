@@ -1,4 +1,3 @@
-
 const http = require("http");
 
 const {
@@ -42,17 +41,23 @@ const BOOSTIES_CHANNEL_ID = "1555769708928831489";
 const SELLERS_CHANNEL_ID = "1551713598181605496";
 const STAFF_CHANNEL_ID = "1561013244905132122";
 
-// ROBUX CASH OUT
 const ROBUX_CASHOUT_CHANNEL_ID = "1552385740405473513";
 const ROBUX_CASHOUT_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1561094713153429746.png";
 
-// AUTOMATIC MESSAGE COUNTER
-// Source: text channel whose messages are counted.
-const VOUCH_TEXT_CHANNEL_ID = "1562227276051910676";
+// ==================================================
+// VOUCH COUNTER SETTINGS
+// Count both personal and regular vouch channels.
+// ==================================================
 
-// Destination: channel whose name displays the total.
-// This can be a text or voice channel.
+const PERSONAL_VOUCH_CHANNEL_ID = "1562227276051910676";
+const VOUCH_CHANNEL_ID = "1530811494168657980";
+
+const VOUCH_SOURCE_CHANNEL_IDS = [
+  PERSONAL_VOUCH_CHANNEL_ID,
+  VOUCH_CHANNEL_ID
+];
+
 const VOUCH_COUNT_CHANNEL_ID = "1562266346891247688";
 
 const VOUCH_COUNT_PREFIX = "﹕𐔌・chuppy total vouches : ";
@@ -60,7 +65,6 @@ const VOUCH_COUNT_SUFFIX = " 〃・꒱";
 
 const WELCOME_ROLE_ID = "1531039846871728248";
 
-const CHUPPY_TY_CHANNEL_ID = "1530811494168657980";
 const CHUPPY_TY_EMOJI = "<:uppyty:1561094713153429746>";
 
 // INVITE BOT AUTO-REACTION
@@ -98,7 +102,7 @@ const PAYMENT_METHODS_TEXT =
 const afkUsers = new Map();
 
 // ==================================================
-// AUTOMATIC MESSAGE COUNTER STATE
+// AUTOMATIC VOUCH COUNTER STATE
 // ==================================================
 
 let vouchMessageCount = 0;
@@ -106,7 +110,8 @@ let vouchCounterReady = false;
 let vouchCounterTimer = null;
 let vouchCounterUpdateRunning = false;
 
-const pendingVouchMessages = new Set();
+// Messages received while the initial history scan is running.
+const pendingVouchMessages = new Map();
 
 // ==================================================
 // DISCORD CLIENT
@@ -121,15 +126,11 @@ const client = new Client({
   ]
 });
 
-// ==================================================
-// LOAD VOUCH MODULE
-// ==================================================
-
+// Load the separate /vouch command module once.
 require("./vouch")(client);
 
 // ==================================================
 // ROBUX CASH OUT EMBED
-// ONLY RUNS WHEN !robuxcashout IS USED
 // ==================================================
 
 async function sendRobuxCashoutEmbed(channel) {
@@ -197,7 +198,7 @@ async function sendRobuxCashoutEmbed(channel) {
 }
 
 // ==================================================
-// AUTOMATIC MESSAGE COUNTER FUNCTIONS
+// AUTOMATIC VOUCH COUNTER FUNCTIONS
 // ==================================================
 
 async function updateVouchCounterName(channel) {
@@ -215,24 +216,46 @@ async function updateVouchCounterName(channel) {
   console.log(`[VOUCH COUNTER] Channel renamed to: ${name}`);
 }
 
-async function initializeVouchCounter() {
-  // Fetch the text channel to count.
-  const textChannel = await client.channels.fetch(
-    VOUCH_TEXT_CHANNEL_ID
-  );
-
+async function countChannelMessages(channel) {
   if (
-    !textChannel ||
-    !textChannel.isTextBased() ||
-    !textChannel.messages
+    !channel ||
+    !channel.isTextBased() ||
+    !channel.messages
   ) {
     throw new Error(
-      "Vouch text channel not found or cannot read message history."
+      `Vouch source channel ${channel?.id || "unknown"} is unavailable.`
     );
   }
 
-  // Fetch the destination channel.
-  // It may be a voice channel OR a text channel.
+  // Fetch the newest messages first to establish a snapshot.
+  const newestMessages = await channel.messages.fetch({ limit: 100 });
+
+  const newestMessageId = newestMessages.first()?.id || null;
+
+  let count = newestMessages.size;
+  let before = newestMessages.last()?.id || null;
+
+  // Scan older messages in batches of 100.
+  while (before) {
+    const olderMessages = await channel.messages.fetch({
+      limit: 100,
+      before
+    });
+
+    if (olderMessages.size === 0) break;
+
+    count += olderMessages.size;
+    before = olderMessages.last()?.id || null;
+
+    if (olderMessages.size < 100) break;
+  }
+
+  return { count, newestMessageId };
+}
+
+async function initializeVouchCounter() {
+  console.log("[VOUCH COUNTER] Scanning both vouch channels...");
+
   const counterChannel = await client.channels.fetch(
     VOUCH_COUNT_CHANNEL_ID
   );
@@ -246,64 +269,68 @@ async function initializeVouchCounter() {
     );
   }
 
-  if (textChannel.guildId !== counterChannel.guildId) {
-    throw new Error(
-      "The vouch text channel and counter channel must be in the same server."
+  const totals = new Map();
+  let total = 0;
+
+  // Scan both personal and regular vouch channels.
+  for (const channelId of VOUCH_SOURCE_CHANNEL_IDS) {
+    const channel = await client.channels.fetch(channelId);
+
+    if (
+      !channel ||
+      !channel.isTextBased() ||
+      !channel.messages
+    ) {
+      throw new Error(
+        `Cannot read vouch channel ${channelId}.`
+      );
+    }
+
+    if (channel.guildId !== counterChannel.guildId) {
+      throw new Error(
+        "Both vouch channels and the counter must be in the same server."
+      );
+    }
+
+    const result = await countChannelMessages(channel);
+
+    totals.set(channelId, result);
+    total += result.count;
+
+    console.log(
+      `[VOUCH COUNTER] Channel ${channelId}: ${result.count} messages.`
     );
   }
 
-  console.log("[VOUCH COUNTER] Scanning existing messages...");
+  // Count messages received during the initial scan if they were
+  // created after that channel's newest-message snapshot.
+  for (const [messageId, channelId] of pendingVouchMessages) {
+    const snapshot = totals.get(channelId);
 
-  // Fetch the latest messages first.
-  const newestMessages = await textChannel.messages.fetch({
-    limit: 100
-  });
+    if (!snapshot) continue;
 
-  const newestMessageId = newestMessages.first()?.id;
-
-  let count = newestMessages.size;
-  let before = newestMessages.last()?.id;
-
-  // Continue fetching older messages in batches of 100.
-  while (before) {
-    const olderMessages = await textChannel.messages.fetch({
-      limit: 100,
-      before
-    });
-
-    if (olderMessages.size === 0) break;
-
-    count += olderMessages.size;
-    before = olderMessages.last().id;
-
-    if (olderMessages.size < 100) break;
-  }
-
-  // Include messages received while the historical scan ran.
-  // Messages already present in the newest snapshot are excluded.
-  for (const messageId of pendingVouchMessages) {
     if (
-      !newestMessageId ||
-      BigInt(messageId) > BigInt(newestMessageId)
+      !snapshot.newestMessageId ||
+      BigInt(messageId) > BigInt(snapshot.newestMessageId)
     ) {
-      count++;
+      total++;
     }
   }
 
   pendingVouchMessages.clear();
 
-  vouchMessageCount = count;
+  vouchMessageCount = total;
   vouchCounterReady = true;
 
   await updateVouchCounterName(counterChannel);
 
   console.log(
-    `[VOUCH COUNTER] Initialized with ${vouchMessageCount} messages.`
+    `[VOUCH COUNTER] Initialized with ${vouchMessageCount} messages across both channels.`
   );
 }
 
 async function refreshVouchCounterName() {
-  if (vouchCounterUpdateRunning) return;
+  if (!vouchCounterReady || vouchCounterUpdateRunning) return;
 
   vouchCounterUpdateRunning = true;
 
@@ -325,6 +352,14 @@ async function refreshVouchCounterName() {
   } finally {
     vouchCounterUpdateRunning = false;
   }
+}
+
+function scheduleVouchCounterUpdate() {
+  clearTimeout(vouchCounterTimer);
+
+  vouchCounterTimer = setTimeout(() => {
+    refreshVouchCounterName();
+  }, 10000);
 }
 
 // ==================================================
@@ -351,27 +386,20 @@ client.once(Events.ClientReady, async readyClient => {
 
 // ==================================================
 // AUTOMATIC MESSAGE COUNTER LISTENER
-// COUNTS ALL MESSAGES, INCLUDING BOT MESSAGES
+// Counts messages in either vouch channel.
 // ==================================================
 
-client.on(Events.MessageCreate, async message => {
+client.on(Events.MessageCreate, message => {
   if (!message.guild) return;
-  if (message.channel.id !== VOUCH_TEXT_CHANNEL_ID) return;
+  if (!VOUCH_SOURCE_CHANNEL_IDS.includes(message.channel.id)) return;
 
-  // During initialization, store IDs so new messages aren't lost.
   if (!vouchCounterReady) {
-    pendingVouchMessages.add(message.id);
+    pendingVouchMessages.set(message.id, message.channel.id);
     return;
   }
 
   vouchMessageCount++;
-
-  // Debounce renaming to reduce Discord API requests.
-  clearTimeout(vouchCounterTimer);
-
-  vouchCounterTimer = setTimeout(() => {
-    refreshVouchCounterName();
-  }, 10000);
+  scheduleVouchCounterUpdate();
 });
 
 // ==================================================
@@ -487,7 +515,7 @@ async function sendPaymentEmbed(channel) {
 
   const matches = messages.filter(msg =>
     msg.author.id === client.user.id &&
-    msg.embeds.some(e => e.title === "Payment Methods")
+    msg.embeds.some(embed => embed.title === "Payment Methods")
   );
 
   const existing = matches.first();
@@ -859,7 +887,7 @@ client.on(Events.MessageCreate, async message => {
     const wasAFKCommand = await handleAFK(message);
     if (wasAFKCommand) return;
 
-    // ROBUX CASH OUT — ONLY WHEN !robuxcashout IS TYPED
+    // ROBUX CASH OUT
     if (content === "!robuxcashout") {
       if (
         !message.member.permissions.has(
@@ -884,7 +912,7 @@ client.on(Events.MessageCreate, async message => {
       return;
     }
 
-    // PAYMENT — ,pay
+    // PAYMENT
     if (content === ",pay") {
       await sendPaymentEmbed(message.channel);
       return;
@@ -1026,7 +1054,6 @@ client.on(Events.MessageCreate, async message => {
 
 client.on(Events.MessageCreate, async message => {
   if (!message.guild) return;
-
   if (message.channel.id !== INVITE_CHANNEL_ID) return;
   if (message.author.id !== INVITE_BOT_ID) return;
 
@@ -1034,41 +1061,11 @@ client.on(Events.MessageCreate, async message => {
     await message.react(INVITE_REACTION_EMOJI);
 
     console.log(
-      `[INVITE REACTION] Added Chuppy reaction to message ${message.id}`
+      `[INVITE REACTION] Added reaction to message ${message.id}`
     );
   } catch (error) {
     console.error(
       "[INVITE REACTION] Could not react to invite message:",
-      error
-    );
-  }
-});
-
-// ==================================================
-// AUTOMATIC REACTION — BOT VOUCH MESSAGES ONLY
-// ==================================================
-
-client.on(Events.MessageCreate, async message => {
-  if (!message.guild) return;
-
-  if (message.author.id !== client.user.id) return;
-  if (message.channel.id !== CHUPPY_TY_CHANNEL_ID) return;
-
-  const isVouch = message.embeds.some(embed =>
-    (embed.title || "").toLowerCase().includes("vouch")
-  );
-
-  if (!isVouch) return;
-
-  try {
-    await message.react(CHUPPY_TY_EMOJI);
-
-    console.log(
-      `[REACTION] Added uppyty to bot vouch ${message.id}`
-    );
-  } catch (error) {
-    console.error(
-      "[REACTION] Could not react to bot vouch:",
       error
     );
   }
