@@ -2,7 +2,7 @@ const {
 SlashCommandBuilder,
 EmbedBuilder,
 PermissionsBitField
-} = require("discord.js");
+} = require("discord.js”);
 
 // ==================================================
 // VOUCH CHANNEL SETTINGS
@@ -23,9 +23,11 @@ const THANK_YOU_EMOJI = "<:uppyty:1561094713153429746>”;
 // ==================================================
 
 function getVouchChannelId(sellerId) {
-return PERSONAL_SELLER_IDS.includes(sellerId)
-? PERSONAL_VOUCH_CHANNEL_ID
-: VOUCH_CHANNEL_ID;
+if (PERSONAL_SELLER_IDS.includes(sellerId)) {
+return PERSONAL_VOUCH_CHANNEL_ID;
+}
+
+return VOUCH_CHANNEL_ID;
 }
 
 // ==================================================
@@ -72,13 +74,14 @@ try {
 const guildId = process.env.GUILD_ID;
 
 if (!guildId) {
-  console.error("VOUCH ERROR: GUILD_ID is missing from environment variables.");
+  console.error(
+    "VOUCH ERROR: GUILD_ID is missing from environment variables."
+  );
   return;
 }
 await client.application.fetch();
-const existingCommands = await client.application.commands.fetch({
-  guildId
-});
+const existingCommands =
+  await client.application.commands.fetch({ guildId });
 // Preserve other commands and replace only /vouch.
 const commands = existingCommands
   .filter(command => command.name !== "vouch")
@@ -98,17 +101,17 @@ console.error(“Failed to register vouch command:”, error);
 
 async function submitVouch(interaction) {
 try {
-const seller = interaction.options.getUser(“seller”);
-const rating = interaction.options.getInteger(“rating”);
-const order = interaction.options.getString(“order”);
-const proof = interaction.options.getAttachment(“proof”);
-
 if (!interaction.inGuild()) {
-  return interaction.reply({
-    content: "You can only submit a vouch inside a server.",
-    ephemeral: true
-  });
+return interaction.reply({
+content: “You can only submit a vouch inside a server.”,
+ephemeral: true
+});
 }
+
+const seller = interaction.options.getUser("seller");
+const rating = interaction.options.getInteger("rating");
+const order = interaction.options.getString("order");
+const proof = interaction.options.getAttachment("proof");
 if (seller.bot) {
   return interaction.reply({
     content: "You cannot leave a vouch for a bot.",
@@ -133,15 +136,22 @@ if (!proof || !proof.contentType?.startsWith("image/")) {
     ephemeral: true
   });
 }
-// Select the destination based on the seller.
+// Select the correct channel for the seller.
 const channelId = getVouchChannelId(seller.id);
-const channel = await interaction.client.channels.fetch(channelId);
-if (!channel || !channel.isTextBased() || !channel.isSendable()) {
+const channel =
+  await interaction.client.channels.fetch(channelId);
+if (
+  !channel ||
+  !channel.isTextBased() ||
+  !channel.isSendable()
+) {
   return interaction.reply({
-    content: "I couldn't access the vouch channel. Please contact an administrator.",
+    content:
+      "I couldn't access the vouch channel. Please contact an administrator.",
     ephemeral: true
   });
 }
+// Check bot permissions.
 const botMember = await interaction.guild.members.fetchMe();
 const permissions = channel.permissionsFor(botMember);
 if (
@@ -150,12 +160,12 @@ if (
     PermissionsBitField.Flags.ViewChannel,
     PermissionsBitField.Flags.SendMessages,
     PermissionsBitField.Flags.EmbedLinks,
-    PermissionsBitField.Flags.ReadMessageHistory,
     PermissionsBitField.Flags.AddReactions
   ])
 ) {
   return interaction.reply({
-    content: "I need permission to view the vouch channel, send embeds, read message history, and add reactions.",
+    content:
+      "I need permission to view the vouch channel, send embeds, and add reactions.",
     ephemeral: true
   });
 }
@@ -175,7 +185,7 @@ const embed = new EmbedBuilder()
     text: `Vouch submitted by ${interaction.user.username}`
   })
   .setTimestamp();
-// Post the vouch in the correct channel.
+// Send the vouch to the correct channel.
 const vouchMessage = await channel.send({
   embeds: [embed]
 });
@@ -183,10 +193,14 @@ const vouchMessage = await channel.send({
 try {
   await vouchMessage.react(THANK_YOU_EMOJI);
 } catch (error) {
-  console.error("Could not add the thank-you reaction:", error);
+  console.error(
+    "Could not add the thank-you reaction:",
+    error
+  );
 }
 return interaction.reply({
-  content: `Your vouch for ${seller.username} was submitted successfully!`,
+  content:
+    `Your vouch for ${seller.username} was submitted successfully!`,
   ephemeral: true
 });
 
@@ -194,7 +208,8 @@ return interaction.reply({
 console.error(“Error submitting vouch:”, error);
 
 const reply = {
-  content: "Something went wrong while submitting your vouch. Please try again later.",
+  content:
+    "Something went wrong while submitting your vouch. Please try again later.",
   ephemeral: true
 };
 if (interaction.replied || interaction.deferred) {
