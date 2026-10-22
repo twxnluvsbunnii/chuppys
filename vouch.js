@@ -1,4 +1,3 @@
-
 const {
   SlashCommandBuilder,
   EmbedBuilder,
@@ -10,96 +9,83 @@ const {
 // ==================================================
 
 const PERSONAL_VOUCH_CHANNEL_ID = "1562227276051910676";
-const REGULAR_VOUCH_CHANNEL_ID = "1530811494168657980";
+const VOUCH_CHANNEL_ID = "1530811494168657980";
 
 const THANK_YOU_EMOJI = "<:uppyty:1561094713153429746>";
 
 // ==================================================
-// PERSONAL SELLERS
-// These sellers use the personal vouch channel.
+// SELLER ID MAPPING
 // ==================================================
 
-const PERSONAL_SELLERS = [
+const SELLERS = [
   {
     id: "1530733554869473320",
-    name: "﹕𐔌・bunnii 〃・꒱"
+    name: "﹕𐔌・bunnii 〃・꒱",
+    personal: true
   },
   {
     id: "1490962480963260466",
-    name: "﹕𐔌・twxn 〃・꒱"
-  }
-];
-
-// ==================================================
-// REGULAR SELLERS
-// These sellers use the regular vouch channel.
-// ==================================================
-
-const REGULAR_SELLERS = [
+    name: "﹕𐔌・twxn 〃・꒱",
+    personal: true
+  },
   {
     id: "1192248188409749684",
-    name: "﹕𐔌・angel 〃・꒱"
+    name: "﹕𐔌・angel 〃・꒱",
+    personal: false
   },
   {
     id: "1079241163455873074",
-    name: "﹕𐔌・felony 〃・꒱"
+    name: "﹕𐔌・felony 〃・꒱",
+    personal: false
   },
   {
     id: "1032693136163622993",
-    name: "﹕𐔌・cusi 〃・꒱"
+    name: "﹕𐔌・cusi 〃・꒱",
+    personal: false
   },
   {
     id: "1320199904219496530",
-    name: "﹕𐔌・dav 〃・꒱"
+    name: "﹕𐔌・dav 〃・꒱",
+    personal: false
   },
   {
     id: "952566845939023892",
-    name: "﹕𐔌・momo 〃・꒱"
+    name: "﹕𐔌・momo 〃・꒱",
+    personal: false
   },
   {
     id: "1473335012769267807",
-    name: "﹕𐔌・kitako 〃・꒱"
+    name: "﹕𐔌・kitako 〃・꒱",
+    personal: false
   },
   {
     id: "1472856287527309313",
-    name: "﹕𐔌・coraline 〃・꒱"
+    name: "﹕𐔌・coraline 〃・꒱",
+    personal: false
   },
   {
     id: "1269188505935024141",
-    name: "﹕𐔌・maya 〃・꒱"
+    name: "﹕𐔌・maya 〃・꒱",
+    personal: false
   }
 ];
 
-// Combine the approved seller lists.
-const ALL_SELLERS = [
-  ...PERSONAL_SELLERS,
-  ...REGULAR_SELLERS
-];
-
 // ==================================================
-// FIND SELLER
-// ==================================================
-
-function findSeller(sellerId) {
-  return ALL_SELLERS.find(
-    seller => seller.id === sellerId
-  );
-}
-
-// ==================================================
-// SELECT VOUCH CHANNEL BY SELLER ID
+// SELECT CHANNEL USING THE SELLER'S ACTUAL ID
 // ==================================================
 
 function getVouchChannelId(sellerId) {
-  const isPersonalSeller = PERSONAL_SELLERS.some(
+  const selectedSeller = SELLERS.find(
     seller => seller.id === sellerId
   );
 
-  if (isPersonalSeller) {
-    return PERSONAL_VOUCH_CHANNEL_ID;
+  if (!selectedSeller) {
+    throw new Error(`Unknown seller ID: ${sellerId}`);
   }
 
-  return REGULAR_VOUCH_CHANNEL_ID;
+  return selectedSeller.personal
+    ? PERSONAL_VOUCH_CHANNEL_ID
+    : VOUCH_CHANNEL_ID;
 }
 
 // ==================================================
@@ -108,14 +94,14 @@ function getVouchChannelId(sellerId) {
 
 const vouchCommand = new SlashCommandBuilder()
   .setName("vouch")
-  .setDescription("Leave a vouch for a Chuppys seller.")
+  .setDescription("Leave a vouch for a seller.")
   .addStringOption(option =>
     option
       .setName("seller")
       .setDescription("Choose the seller you purchased from.")
       .setRequired(true)
       .addChoices(
-        ...ALL_SELLERS.map(seller => ({
+        ...SELLERS.map(seller => ({
           name: seller.name,
           value: seller.id
         }))
@@ -139,13 +125,12 @@ const vouchCommand = new SlashCommandBuilder()
   .addAttachmentOption(option =>
     option
       .setName("proof")
-      .setDescription("Upload an image proving your order.")
+      .setDescription("Upload an image as proof of your order.")
       .setRequired(true)
   );
 
 // ==================================================
 // REGISTER /VOUCH
-// Preserve other existing slash commands.
 // ==================================================
 
 async function registerVouch(client) {
@@ -155,9 +140,7 @@ async function registerVouch(client) {
       process.env.GUILD_ID;
 
     if (!guildId) {
-      console.error(
-        "[VOUCH] Missing DISCORD_GUILD_ID or GUILD_ID."
-      );
+      console.error("[VOUCH] Missing DISCORD_GUILD_ID.");
       return;
     }
 
@@ -166,104 +149,78 @@ async function registerVouch(client) {
     const existingCommands =
       await client.application.commands.fetch({ guildId });
 
+    // Preserve all other slash commands.
     const commands = existingCommands
       .filter(command => command.name !== "vouch")
       .map(command => command.toJSON());
 
     commands.push(vouchCommand.toJSON());
 
-    await client.application.commands.set(
-      commands,
-      guildId
-    );
+    await client.application.commands.set(commands, guildId);
 
-    console.log(
-      "[VOUCH] /vouch registered successfully."
-    );
+    console.log("[VOUCH] /vouch registered successfully.");
+    console.log("[VOUCH] Seller choices:", SELLERS.length);
   } catch (error) {
-    console.error(
-      "[VOUCH] Registration failed:",
-      error
-    );
+    console.error("[VOUCH] Registration failed:", error);
   }
 }
 
 // ==================================================
-// SUBMIT A VOUCH
+// SUBMIT VOUCH
 // ==================================================
 
 async function submitVouch(interaction) {
   try {
     if (!interaction.inGuild()) {
       return interaction.reply({
-        content:
-          "You can only submit a vouch inside the server.",
+        content: "You can only submit a vouch inside the server.",
         ephemeral: true
       });
     }
 
-    // The dropdown value is the selected seller's user ID.
-    const sellerId =
-      interaction.options.getString("seller");
+    // This is now the selected seller's actual ID.
+    const sellerId = interaction.options.getString("seller");
+    const rating = interaction.options.getInteger("rating");
+    const order = interaction.options.getString("order");
+    const proof = interaction.options.getAttachment("proof");
 
-    const sellerData = findSeller(sellerId);
+    const selectedSeller = SELLERS.find(
+      seller => seller.id === sellerId
+    );
 
-    const rating =
-      interaction.options.getInteger("rating");
+    console.log(`[VOUCH] Buyer: ${interaction.user.tag}`);
+    console.log(`[VOUCH] Selected seller ID: ${sellerId}`);
+    console.log(
+      `[VOUCH] Selected seller name: ${
+        selectedSeller?.name || "UNKNOWN"
+      }`
+    );
 
-    const order =
-      interaction.options.getString("order");
-
-    const proof =
-      interaction.options.getAttachment("proof");
-
-    // Validate the selected seller.
-    if (!sellerData) {
+    if (!selectedSeller) {
       return interaction.reply({
-        content:
-          "Please select a valid approved Chuppys seller.",
-        ephemeral: true
-      });
-    }
-
-    if (sellerData.id === interaction.user.id) {
-      return interaction.reply({
-        content:
-          "You cannot vouch for yourself.",
+        content: "That seller is not in the seller list.",
         ephemeral: true
       });
     }
 
     if (!order || !order.trim()) {
       return interaction.reply({
-        content:
-          "Please describe your order.",
+        content: "Please describe what you purchased.",
         ephemeral: true
       });
     }
 
-    if (
-      !proof ||
-      !proof.contentType?.startsWith("image/")
-    ) {
+    if (!proof || !proof.contentType?.startsWith("image/")) {
       return interaction.reply({
-        content:
-          "Please upload an image as proof of your order.",
+        content: "Please upload an image as your proof.",
         ephemeral: true
       });
     }
 
-    // Route using the selected seller's actual ID.
-    const channelId =
-      getVouchChannelId(sellerData.id);
+    // Resolve the destination from the selected seller ID.
+    const channelId = getVouchChannelId(sellerId);
 
-    console.log(
-      `[VOUCH] Seller: ${sellerData.name} (${sellerData.id})`
-    );
-
-    console.log(
-      `[VOUCH] Destination channel: ${channelId}`
-    );
+    console.log(`[VOUCH] Destination channel: ${channelId}`);
 
     const channel =
       await interaction.client.channels.fetch(channelId);
@@ -273,88 +230,86 @@ async function submitVouch(interaction) {
       !channel.isTextBased() ||
       !channel.isSendable()
     ) {
-      console.error(
-        `[VOUCH] Cannot send to channel ${channelId}.`
-      );
+      console.error(`[VOUCH] Destination unavailable: ${channelId}`);
 
       return interaction.reply({
-        content:
-          "I couldn't access the correct vouch channel. Please contact staff.",
+        content: "I couldn't access the correct vouch channel.",
         ephemeral: true
       });
     }
 
-    // Check the bot's channel permissions.
-    const botMember =
-      await interaction.guild.members.fetchMe();
-
-    const permissions =
-      channel.permissionsFor(botMember);
+    const botMember = await interaction.guild.members.fetchMe();
+    const permissions = channel.permissionsFor(botMember);
 
     if (
       !permissions ||
       !permissions.has([
         PermissionsBitField.Flags.ViewChannel,
         PermissionsBitField.Flags.SendMessages,
-        PermissionsBitField.Flags.EmbedLinks
+        PermissionsBitField.Flags.EmbedLinks,
+        PermissionsBitField.Flags.ReadMessageHistory,
+        PermissionsBitField.Flags.AddReactions
       ])
     ) {
       return interaction.reply({
         content:
-          "The bot needs View Channel, Send Messages, and Embed Links permissions in the destination channel.",
+          "I need permission to view the channel, send messages and embeds, read message history, and add reactions.",
         ephemeral: true
       });
     }
 
-    // Build the pink vouch embed.
-    // The seller is displayed using the decorative lowercase name.
+    // Fetch the seller for the embed mention.
+    const sellerUser =
+      await interaction.client.users.fetch(sellerId);
+
     const embed = new EmbedBuilder()
       .setColor(0xffb6d9)
       .setTitle("NEW VOUCH")
       .setDescription(
         `Thank you for leaving a vouch!\n\n` +
-        `**Seller:** ${sellerData.name}\n` +
+        `**Seller:** ${sellerUser}\n` +
         `**Buyer:** ${interaction.user}\n` +
         `**Rating:** ${"⭐".repeat(rating)} (${rating}/5)\n` +
         `**Order:** ${order.trim()}`
       )
       .setImage(proof.url)
       .setFooter({
-        text:
-          `Vouch submitted by ${interaction.user.username}`
+        text: `Vouch submitted by ${interaction.user.username}`
       })
       .setTimestamp();
 
-    // Send the embed to the correct channel only.
+    // Send the embed ONLY to the selected destination.
     const vouchMessage = await channel.send({
-      embeds: [embed]
+      embeds: [embed],
+      allowedMentions: {
+        users: [sellerId],
+        parse: []
+      }
     });
 
-    // Add the thank-you reaction.
+    console.log(
+      `[VOUCH] Successfully sent message ${vouchMessage.id} ` +
+      `to channel ${channelId}`
+    );
+
     try {
       await vouchMessage.react(THANK_YOU_EMOJI);
     } catch (error) {
-      console.error(
-        "[VOUCH] Could not add thank-you reaction:",
-        error
-      );
+      console.error("[VOUCH] Reaction failed:", error.message);
     }
 
     return interaction.reply({
       content:
-        `Your vouch for ${sellerData.name} was submitted successfully!`,
+        `Your vouch for ${selectedSeller.name} was submitted successfully!`,
       ephemeral: true
     });
 
   } catch (error) {
-    console.error(
-      "[VOUCH] Submission error:",
-      error
-    );
+    console.error("[VOUCH] Submission failed:", error);
 
     const reply = {
       content:
-        "Something went wrong while submitting your vouch. Please try again later.",
+        "Something went wrong submitting your vouch. Please try again later.",
       ephemeral: true
     };
 
@@ -367,17 +322,19 @@ async function submitVouch(interaction) {
 }
 
 // ==================================================
-// CONNECT VOUCH SYSTEM TO THE BOT
+// CONNECT TO THE BOT
 // ==================================================
 
 module.exports = function (client) {
-  client.once("ready", async () => {
+  client.once("clientReady", async () => {
     await registerVouch(client);
   });
 
   client.on("interactionCreate", async interaction => {
     if (!interaction.isChatInputCommand()) return;
     if (interaction.commandName !== "vouch") return;
+
+    console.log("[VOUCH] /vouch interaction received.");
 
     await submitVouch(interaction);
   });
