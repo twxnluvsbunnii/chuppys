@@ -15,77 +15,91 @@ const REGULAR_VOUCH_CHANNEL_ID = "1530811494168657980";
 const THANK_YOU_EMOJI = "<:uppyty:1561094713153429746>";
 
 // ==================================================
-// APPROVED SELLERS
-// Customers select a seller by name in /vouch.
+// PERSONAL SELLERS
+// These sellers use the personal vouch channel.
 // ==================================================
 
 const PERSONAL_SELLERS = [
   {
     id: "1530733554869473320",
-    name: "You"
+    name: "﹕𐔌・bunnii 〃・꒱"
   },
   {
     id: "1490962480963260466",
-    name: "Boyfriend"
+    name: "﹕𐔌・twxn 〃・꒱"
   }
 ];
+
+// ==================================================
+// REGULAR SELLERS
+// These sellers use the regular vouch channel.
+// ==================================================
 
 const REGULAR_SELLERS = [
   {
     id: "1192248188409749684",
-    name: "Angel"
+    name: "﹕𐔌・angel 〃・꒱"
   },
   {
     id: "1079241163455873074",
-    name: "Felony"
+    name: "﹕𐔌・felony 〃・꒱"
   },
   {
     id: "1032693136163622993",
-    name: "cusi"
+    name: "﹕𐔌・cusi 〃・꒱"
   },
   {
     id: "1320199904219496530",
-    name: "Dav"
+    name: "﹕𐔌・dav 〃・꒱"
   },
   {
     id: "952566845939023892",
-    name: "momo"
+    name: "﹕𐔌・momo 〃・꒱"
   },
   {
     id: "1473335012769267807",
-    name: "kitako"
+    name: "﹕𐔌・kitako 〃・꒱"
   },
   {
     id: "1472856287527309313",
-    name: "Coraline"
+    name: "﹕𐔌・coraline 〃・꒱"
   },
   {
     id: "1269188505935024141",
-    name: "Maya"
+    name: "﹕𐔌・maya 〃・꒱"
   }
 ];
 
+// Combine the approved seller lists.
 const ALL_SELLERS = [
   ...PERSONAL_SELLERS,
   ...REGULAR_SELLERS
 ];
 
 // ==================================================
-// FIND SELLER AND SELECT DESTINATION
+// FIND SELLER
 // ==================================================
 
 function findSeller(sellerId) {
-  return ALL_SELLERS.find(seller => seller.id === sellerId);
+  return ALL_SELLERS.find(
+    seller => seller.id === sellerId
+  );
 }
+
+// ==================================================
+// SELECT VOUCH CHANNEL BY SELLER ID
+// ==================================================
 
 function getVouchChannelId(sellerId) {
   const isPersonalSeller = PERSONAL_SELLERS.some(
     seller => seller.id === sellerId
   );
 
-  return isPersonalSeller
-    ? PERSONAL_VOUCH_CHANNEL_ID
-    : REGULAR_VOUCH_CHANNEL_ID;
+  if (isPersonalSeller) {
+    return PERSONAL_VOUCH_CHANNEL_ID;
+  }
+
+  return REGULAR_VOUCH_CHANNEL_ID;
 }
 
 // ==================================================
@@ -131,7 +145,7 @@ const vouchCommand = new SlashCommandBuilder()
 
 // ==================================================
 // REGISTER /VOUCH
-// Preserve other registered slash commands.
+// Preserve other existing slash commands.
 // ==================================================
 
 async function registerVouch(client) {
@@ -158,70 +172,98 @@ async function registerVouch(client) {
 
     commands.push(vouchCommand.toJSON());
 
-    await client.application.commands.set(commands, guildId);
+    await client.application.commands.set(
+      commands,
+      guildId
+    );
 
-    console.log("[VOUCH] /vouch registered successfully.");
+    console.log(
+      "[VOUCH] /vouch registered successfully."
+    );
   } catch (error) {
-    console.error("[VOUCH] Registration failed:", error);
+    console.error(
+      "[VOUCH] Registration failed:",
+      error
+    );
   }
 }
 
 // ==================================================
-// SUBMIT VOUCH
+// SUBMIT A VOUCH
 // ==================================================
 
 async function submitVouch(interaction) {
   try {
     if (!interaction.inGuild()) {
       return interaction.reply({
-        content: "You can only submit a vouch inside the server.",
+        content:
+          "You can only submit a vouch inside the server.",
         ephemeral: true
       });
     }
 
-    // The selected option contains the seller's Discord user ID.
-    const sellerId = interaction.options.getString("seller");
+    // The dropdown value is the selected seller's user ID.
+    const sellerId =
+      interaction.options.getString("seller");
+
     const sellerData = findSeller(sellerId);
 
-    const rating = interaction.options.getInteger("rating");
-    const order = interaction.options.getString("order");
-    const proof = interaction.options.getAttachment("proof");
+    const rating =
+      interaction.options.getInteger("rating");
 
+    const order =
+      interaction.options.getString("order");
+
+    const proof =
+      interaction.options.getAttachment("proof");
+
+    // Validate the selected seller.
     if (!sellerData) {
       return interaction.reply({
-        content: "Please select a valid approved seller.",
+        content:
+          "Please select a valid approved Chuppys seller.",
         ephemeral: true
       });
     }
 
     if (sellerData.id === interaction.user.id) {
       return interaction.reply({
-        content: "You cannot vouch for yourself.",
+        content:
+          "You cannot vouch for yourself.",
         ephemeral: true
       });
     }
 
     if (!order || !order.trim()) {
       return interaction.reply({
-        content: "Please describe your order.",
+        content:
+          "Please describe your order.",
         ephemeral: true
       });
     }
 
-    if (!proof || !proof.contentType?.startsWith("image/")) {
+    if (
+      !proof ||
+      !proof.contentType?.startsWith("image/")
+    ) {
       return interaction.reply({
-        content: "Please upload an image as proof of your order.",
+        content:
+          "Please upload an image as proof of your order.",
         ephemeral: true
       });
     }
 
-    // Route according to the selected seller.
-    const channelId = getVouchChannelId(sellerData.id);
+    // Route using the selected seller's actual ID.
+    const channelId =
+      getVouchChannelId(sellerData.id);
 
     console.log(
-      `[VOUCH] Seller selected: ${sellerData.name} (${sellerData.id})`
+      `[VOUCH] Seller: ${sellerData.name} (${sellerData.id})`
     );
-    console.log(`[VOUCH] Destination channel: ${channelId}`);
+
+    console.log(
+      `[VOUCH] Destination channel: ${channelId}`
+    );
 
     const channel =
       await interaction.client.channels.fetch(channelId);
@@ -232,7 +274,7 @@ async function submitVouch(interaction) {
       !channel.isSendable()
     ) {
       console.error(
-        `[VOUCH] Destination channel ${channelId} is unavailable.`
+        `[VOUCH] Cannot send to channel ${channelId}.`
       );
 
       return interaction.reply({
@@ -242,9 +284,12 @@ async function submitVouch(interaction) {
       });
     }
 
-    // Check bot permissions.
-    const botMember = await interaction.guild.members.fetchMe();
-    const permissions = channel.permissionsFor(botMember);
+    // Check the bot's channel permissions.
+    const botMember =
+      await interaction.guild.members.fetchMe();
+
+    const permissions =
+      channel.permissionsFor(botMember);
 
     if (
       !permissions ||
@@ -256,25 +301,27 @@ async function submitVouch(interaction) {
     ) {
       return interaction.reply({
         content:
-          "The bot needs View Channel, Send Messages, and Embed Links permissions in the vouch channel.",
+          "The bot needs View Channel, Send Messages, and Embed Links permissions in the destination channel.",
         ephemeral: true
       });
     }
 
     // Build the pink vouch embed.
+    // The seller is displayed using the decorative lowercase name.
     const embed = new EmbedBuilder()
       .setColor(0xffb6d9)
       .setTitle("NEW VOUCH")
       .setDescription(
         `Thank you for leaving a vouch!\n\n` +
-        `**Seller:** <@${sellerData.id}>\n` +
+        `**Seller:** ${sellerData.name}\n` +
         `**Buyer:** ${interaction.user}\n` +
         `**Rating:** ${"⭐".repeat(rating)} (${rating}/5)\n` +
         `**Order:** ${order.trim()}`
       )
       .setImage(proof.url)
       .setFooter({
-        text: `Vouch submitted by ${interaction.user.username}`
+        text:
+          `Vouch submitted by ${interaction.user.username}`
       })
       .setTimestamp();
 
@@ -283,7 +330,7 @@ async function submitVouch(interaction) {
       embeds: [embed]
     });
 
-    // Add the custom thank-you reaction.
+    // Add the thank-you reaction.
     try {
       await vouchMessage.react(THANK_YOU_EMOJI);
     } catch (error) {
@@ -300,7 +347,10 @@ async function submitVouch(interaction) {
     });
 
   } catch (error) {
-    console.error("[VOUCH] Submission error:", error);
+    console.error(
+      "[VOUCH] Submission error:",
+      error
+    );
 
     const reply = {
       content:
