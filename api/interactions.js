@@ -8,9 +8,36 @@ export const config = {
   }
 };
 
+// ==================================================
+// VOUCH CHANNEL SETTINGS
+// ==================================================
+
+const PERSONAL_VOUCH_CHANNEL_ID = "1562227276051910676";
 const VOUCH_CHANNEL_ID = "1530811494168657980";
+
+const PERSONAL_SELLER_IDS = [
+  "1530733554869473320", // Bunnii
+  "1490962480963260466"  // Twxn
+];
+
 const VOUCH_EMOJI_URL =
   "https://cdn.discordapp.com/emojis/1561197586554036318.png";
+
+// ==================================================
+// SELECT THE CORRECT VOUCH CHANNEL
+// ==================================================
+
+function getVouchChannelId(sellerId) {
+  if (PERSONAL_SELLER_IDS.includes(sellerId)) {
+    return PERSONAL_VOUCH_CHANNEL_ID;
+  }
+
+  return VOUCH_CHANNEL_ID;
+}
+
+// ==================================================
+// ROLE GROUPS
+// ==================================================
 
 const ROLE_GROUPS = {
   chuppys_self_roles: {
@@ -128,7 +155,10 @@ function verifyDiscordSignature(
 
 async function discordFetch(url, options = {}) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
+
+  const timeout = setTimeout(() => {
+    controller.abort();
+  }, 8000);
 
   try {
     const response = await fetch(url, {
@@ -155,7 +185,9 @@ async function discordFetch(url, options = {}) {
     };
   } catch (error) {
     if (error.name === "AbortError") {
-      throw new Error("Discord API request timed out after 8 seconds.");
+      throw new Error(
+        "Discord API request timed out after 8 seconds."
+      );
     }
 
     throw new Error(
@@ -295,9 +327,12 @@ async function processVouchInteraction(interaction) {
     }
 
     if (!interaction.guild_id) {
-      throw new Error("Use /vouch inside your Discord server.");
+      throw new Error(
+        "Use /vouch inside your Discord server."
+      );
     }
 
+    // Read slash-command options.
     const options = Object.fromEntries(
       (interaction.data.options || []).map(option => [
         option.name,
@@ -308,12 +343,14 @@ async function processVouchInteraction(interaction) {
     const resolved = interaction.data.resolved || {};
 
     const sellerId = options.seller;
+
     const buyerId =
       interaction.member?.user?.id ||
       interaction.user?.id;
 
     const rating = options.rating;
     const order = options.order?.trim();
+
     const proof = resolved.attachments?.[options.proof];
     const seller = resolved.users?.[sellerId];
 
@@ -325,34 +362,64 @@ async function processVouchInteraction(interaction) {
       hasProof: Boolean(proof)
     });
 
+    // Validate buyer and seller.
     if (!sellerId || !buyerId) {
-      throw new Error("Could not identify the buyer or seller.");
+      throw new Error(
+        "Could not identify the buyer or seller."
+      );
     }
 
     if (seller?.bot) {
-      throw new Error("You cannot vouch for a bot.");
+      throw new Error(
+        "You cannot vouch for a bot."
+      );
     }
 
     if (sellerId === buyerId) {
-      throw new Error("You cannot vouch for yourself.");
+      throw new Error(
+        "You cannot vouch for yourself."
+      );
     }
 
-    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
-      throw new Error("Rating must be between 1 and 5.");
+    // Validate rating.
+    if (
+      !Number.isInteger(rating) ||
+      rating < 1 ||
+      rating > 5
+    ) {
+      throw new Error(
+        "Rating must be between 1 and 5."
+      );
     }
 
+    // Validate order description.
     if (!order) {
-      throw new Error("Please enter what you purchased.");
+      throw new Error(
+        "Please enter what you purchased."
+      );
     }
 
+    if (order.length > 500) {
+      throw new Error(
+        "Your order description must be 500 characters or fewer."
+      );
+    }
+
+    // Validate proof attachment.
     if (!proof) {
-      throw new Error("Please attach proof of your purchase.");
+      throw new Error(
+        "Please attach proof of your purchase."
+      );
     }
 
     const isImage =
-      (proof.content_type &&
-        proof.content_type.startsWith("image/")) ||
-      /\.(png|jpe?g|gif|webp)$/i.test(proof.filename || "");
+      (
+        proof.content_type &&
+        proof.content_type.startsWith("image/")
+      ) ||
+      /\.(png|jpe?g|gif|webp)$/i.test(
+        proof.filename || ""
+      );
 
     if (!isImage) {
       throw new Error(
@@ -360,12 +427,15 @@ async function processVouchInteraction(interaction) {
       );
     }
 
+    // Create the same vouch embed.
     const embed = {
       color: 0xffffff,
       title: "NEW VOUCH",
+
       thumbnail: {
         url: VOUCH_EMOJI_URL
       },
+
       description:
         `**seller:** <@${sellerId}>\n` +
         `**buyer:** <@${buyerId}>\n` +
@@ -373,26 +443,47 @@ async function processVouchInteraction(interaction) {
         `**rating:** ${rating}/5\n` +
         `**proof:** 📎 ${proof.filename || "Purchase proof"}\n\n` +
         "*thank you for vouching! shop again ♡*",
+
       image: {
         url: proof.url
       },
+
       timestamp: new Date().toISOString()
     };
 
+    // ==================================================
+    // ROUTE BASED ON THE SELECTED SELLER'S USER ID
+    // ==================================================
+
+    const targetChannelId = getVouchChannelId(sellerId);
+
+    const isPersonalVouch =
+      targetChannelId === PERSONAL_VOUCH_CHANNEL_ID;
+
     console.log(
-      `[VOUCH DEBUG] Sending vouch to channel ${VOUCH_CHANNEL_ID}.`
+      `[VOUCH DEBUG] Selected seller ID: ${sellerId}`
     );
 
+    console.log(
+      `[VOUCH DEBUG] Vouch destination: ${
+        isPersonalVouch ? "PERSONAL" : "REGULAR"
+      } channel (${targetChannelId})`
+    );
+
+    // Send the vouch to exactly one selected channel.
     const result = await discordFetch(
-      `https://discord.com/api/v10/channels/${VOUCH_CHANNEL_ID}/messages`,
+      `https://discord.com/api/v10/channels/${targetChannelId}/messages`,
       {
         method: "POST",
+
         headers: {
           Authorization: `Bot ${botToken}`,
           "Content-Type": "application/json"
         },
+
         body: JSON.stringify({
           embeds: [embed],
+
           allowed_mentions: {
             parse: [],
             users: [sellerId, buyerId]
@@ -409,18 +500,25 @@ async function processVouchInteraction(interaction) {
     }
 
     console.log(
-      `[VOUCH DEBUG] Vouch posted successfully. Message ID: ` +
-      `${result.data?.id || "unknown"}`
+      `[VOUCH DEBUG] Vouch posted successfully. ` +
+      `Message ID: ${result.data?.id || "unknown"} | ` +
+      `Channel: ${targetChannelId}`
     );
 
+    // Confirm privately to the person who submitted the vouch.
     await updateOriginalResponse(
       interaction,
       "Your vouch was submitted successfully! ♡"
     );
 
-    console.log("[VOUCH DEBUG] Completed /vouch successfully.");
+    console.log(
+      "[VOUCH DEBUG] Completed /vouch successfully."
+    );
   } catch (error) {
-    console.error("[VOUCH DEBUG] /vouch failed:", error);
+    console.error(
+      "[VOUCH DEBUG] /vouch failed:",
+      error
+    );
 
     try {
       await updateOriginalResponse(
@@ -447,7 +545,10 @@ export default async function handler(req, res) {
 
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
-    return res.status(405).send("Method not allowed");
+
+    return res.status(405).send(
+      "Method not allowed"
+    );
   }
 
   let body;
@@ -460,19 +561,28 @@ export default async function handler(req, res) {
       error.message
     );
 
-    return res.status(400).send("Invalid request body");
+    return res.status(400).send(
+      "Invalid request body"
+    );
   }
 
-  const signature = req.headers["x-signature-ed25519"];
-  const timestamp = req.headers["x-signature-timestamp"];
-  const publicKey = process.env.DISCORD_PUBLIC_KEY;
+  const signature =
+    req.headers["x-signature-ed25519"];
+
+  const timestamp =
+    req.headers["x-signature-timestamp"];
+
+  const publicKey =
+    process.env.DISCORD_PUBLIC_KEY;
 
   if (!signature || !timestamp || !publicKey) {
     console.error(
       "[INTERACTIONS DEBUG] Missing signature settings."
     );
 
-    return res.status(401).send("Missing signature information");
+    return res.status(401).send(
+      "Missing signature information"
+    );
   }
 
   if (
@@ -483,31 +593,54 @@ export default async function handler(req, res) {
       publicKey
     )
   ) {
-    console.error("[INTERACTIONS DEBUG] Invalid Discord signature.");
-    return res.status(401).send("Invalid signature");
+    console.error(
+      "[INTERACTIONS DEBUG] Invalid Discord signature."
+    );
+
+    return res.status(401).send(
+      "Invalid signature"
+    );
   }
 
   let interaction;
 
   try {
-    interaction = JSON.parse(body.toString("utf8"));
+    interaction = JSON.parse(
+      body.toString("utf8")
+    );
   } catch {
-    return res.status(400).send("Invalid JSON");
+    return res.status(400).send(
+      "Invalid JSON"
+    );
   }
 
-  console.log("[INTERACTIONS DEBUG] Interaction received:", {
-    type: interaction.type,
-    command: interaction.data?.name || null,
-    customId: interaction.data?.custom_id || null
-  });
+  console.log(
+    "[INTERACTIONS DEBUG] Interaction received:",
+    {
+      type: interaction.type,
+      command: interaction.data?.name || null,
+      customId: interaction.data?.custom_id || null
+    }
+  );
 
-  // Discord endpoint verification.
+  // ==================================================
+  // DISCORD ENDPOINT VERIFICATION
+  // ==================================================
+
   if (interaction.type === 1) {
-    console.log("[INTERACTIONS DEBUG] Discord PING verified.");
-    return res.status(200).json({ type: 1 });
+    console.log(
+      "[INTERACTIONS DEBUG] Discord PING verified."
+    );
+
+    return res.status(200).json({
+      type: 1
+    });
   }
 
-  // Slash commands are type 2.
+  // ==================================================
+  // SLASH COMMANDS
+  // ==================================================
+
   if (interaction.type === 2) {
     const commandName = interaction.data?.name;
 
@@ -518,6 +651,7 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         type: 4,
+
         data: {
           content:
             "This slash command is not configured on the Vercel endpoint.",
@@ -526,30 +660,47 @@ export default async function handler(req, res) {
       });
     }
 
-    console.log("[VOUCH DEBUG] Acknowledging /vouch.");
+    console.log(
+      "[VOUCH DEBUG] Acknowledging /vouch."
+    );
 
-    // Acknowledge immediately so Discord does not time out.
+    // Acknowledge immediately to avoid Discord timing out.
     res.status(200).json({
       type: 5,
+
       data: {
         flags: 64
       }
     });
 
-    waitUntil(processVouchInteraction(interaction));
+    // Process the vouch after acknowledging Discord.
+    waitUntil(
+      processVouchInteraction(interaction)
+    );
+
     return;
   }
 
-  // Select menus and other message components are type 3.
+  // ==================================================
+  // SELECT MENUS AND OTHER MESSAGE COMPONENTS
+  // ==================================================
+
   if (interaction.type === 3) {
-    const customId = interaction.data?.custom_id;
+    const customId =
+      interaction.data?.custom_id;
+
     const group = ROLE_GROUPS[customId];
 
-    if (!group || !Array.isArray(interaction.data?.values)) {
+    if (
+      !group ||
+      !Array.isArray(interaction.data?.values)
+    ) {
       return res.status(200).json({
         type: 4,
+
         data: {
-          content: "This role menu is not configured.",
+          content:
+            "This role menu is not configured.",
           flags: 64
         }
       });
@@ -562,24 +713,34 @@ export default async function handler(req, res) {
     ) {
       return res.status(200).json({
         type: 4,
+
         data: {
-          content: "Invalid role selection.",
+          content:
+            "Invalid role selection.",
           flags: 64
         }
       });
     }
 
-    // Acknowledge immediately; process role changes in the background.
+    // Acknowledge immediately and process role changes.
     res.status(200).json({
       type: 5,
+
       data: {
         flags: 64
       }
     });
 
-    waitUntil(processRoleInteraction(interaction, group));
+    waitUntil(
+      processRoleInteraction(interaction, group)
+    );
+
     return;
   }
+
+  // ==================================================
+  // UNSUPPORTED INTERACTION TYPES
+  // ==================================================
 
   console.log(
     `[INTERACTIONS DEBUG] Unsupported interaction type: ${interaction.type}`
@@ -587,8 +748,10 @@ export default async function handler(req, res) {
 
   return res.status(200).json({
     type: 4,
+
     data: {
-      content: "This interaction type is not supported.",
+      content:
+        "This interaction type is not supported.",
       flags: 64
     }
   });
