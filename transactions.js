@@ -3,13 +3,19 @@ const fs = require("fs");
 const path = require("path");
 const { EmbedBuilder } = require("discord.js");
 
-const STAFF_ROLE_ID = "1550322075208646766";
-const EMOJI = "<:chuppynewinv:1561398288593330326>";
-const THUMBNAIL =
-  "https://cdn.discordapp.com/emojis/1561398288593330326.png?size=128&quality=lossless";
+// ==========================================
+// CHUPPYS TRANSACTION SYSTEM
+// ==========================================
+
 const DATA_FILE = path.join(__dirname, "spending.json");
 
-const REWARD_TIERS = [
+const TRANSACTION_ALLOWED_ROLE_IDS = [
+  "1550322075208646766",
+  "1563003884656398406"
+];
+
+// Reward roles ordered from lowest to highest
+const REWARD_ROLES = [
   { amount: 5, roleId: "1550373612144304219" },
   { amount: 10, roleId: "1550373695204360252" },
   { amount: 25, roleId: "1550373843170889728" },
@@ -23,60 +29,105 @@ const REWARD_TIERS = [
   { amount: 1000, roleId: "1550374791217680485" }
 ];
 
+const CHUPPYS_EMOJI =
+  "https://cdn.discordapp.com/emojis/1561398288593330326.png?size=128&quality=lossless";
+
+// ==========================================
+// DATA STORAGE
+// ==========================================
+
 function loadData() {
   try {
     if (!fs.existsSync(DATA_FILE)) {
-      fs.writeFileSync(DATA_FILE, "{}", "utf8");
-    }
-
-    const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-
-    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      fs.writeFileSync(DATA_FILE, JSON.stringify({}, null, 2));
       return {};
     }
 
-    return data;
+    return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
   } catch (error) {
-    console.error("[Transactions] Failed to load data:", error);
+    console.error("Could not load spending.json:", error);
     return {};
   }
 }
 
-function saveData(data) {
-  try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), "utf8");
-    return true;
-  } catch (error) {
-    console.error("[Transactions] Failed to save data:", error);
-    return false;
-  }
+let spendingData = loadData();
+
+function saveData() {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(spendingData, null, 2));
 }
 
-function getAccount(data, guildId, userId) {
-  data[guildId] ??= {};
-  data[guildId][userId] ??= {
-    rewardTotal: 0,
-    transactions: []
-  };
-
-  const account = data[guildId][userId];
-
-  if (!Number.isFinite(account.rewardTotal)) {
-    account.rewardTotal = 0;
+function getClientData(userId) {
+  if (!spendingData[userId]) {
+    spendingData[userId] = {
+      total: 0,
+      transactions: [],
+      awardedRoleIds: []
+    };
   }
 
-  if (!Array.isArray(account.transactions)) {
-    account.transactions = [];
+  const data = spendingData[userId];
+
+  if (!Array.isArray(data.transactions)) {
+    data.transactions = [];
   }
 
-  return account;
+  if (!Array.isArray(data.awardedRoleIds)) {
+    data.awardedRoleIds = [];
+  }
+
+  // Both purchases and cash-outs count toward rewards.
+  // Each stored transaction amount is a positive number.
+  data.total = Number(
+    data.transactions
+      .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0)
+      .toFixed(2)
+  );
+
+  return data;
 }
 
-function money(amount) {
-  return `$${Number(amount).toFixed(2).replace(/\.00$/, "")}`;
+// ==========================================
+// HELPERS
+// ==========================================
+
+function hasTransactionPermission(member) {
+  return TRANSACTION_ALLOWED_ROLE_IDS.some(roleId =>
+    member.roles.cache.has(roleId)
+  );
 }
 
-function nyDate(timestamp) {
+function parseAmount(input) {
+  if (!input) return null;
+
+  const cleaned = input.replace(/[$,\s]/g, "");
+
+  if (!/^\d+(\.\d{1,2})?$/.test(cleaned)) {
+    return null;
+  }
+
+  const amount = Number(cleaned);
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return null;
+  }
+
+  return Number(amount.toFixed(2));
+}
+
+function formatMoney(amount) {
+  return `$${Number(amount).toFixed(2)}`;
+}
+
+function getTransactionLabel(type) {
+  return type === "purchase" ? "Purchase" : "Cash-out";
+}
+
+function getSignedAmount(transaction) {
+  const sign = transaction.type === "purchase" ? "−" : "+";
+  return `${sign}${formatMoney(transaction.amount)}`;
+}
+
+function formatTimestamp(timestamp) {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
     month: "short",
@@ -84,240 +135,426 @@ function nyDate(timestamp) {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    hour12: true,
     timeZoneName: "short"
   }).format(new Date(timestamp));
 }
 
-function parseAmount(content) {
-  const match = content.match(
-    /(?:^|\s)\$?(\d+(?:\.\d{1,2})?)(?:\s|$)/
-  );
-
-  if (!match) return null;
-
-  const amount = Number(match[1]);
-
-  if (!Number.isFinite(amount) || amount <= 0 || amount > 100000000) {
-    return null;
-  }
-
-  return Math.round(amount * 100) / 100;
-}
-
-async function findMember(message) {
-  const mentioned = message.mentions.members.first();
-
-  if (mentioned) return mentioned;
-
-  const match = message.content.match(/\b(\d{17,20})\b/);
-
-  if (!match) return null;
-
-  try {
-    return await message.guild.members.fetch(match[1]);
-  } catch {
-    return null;
-  }
-}
-
-async function awardRoles(member, total) {
-  const added = [];
-
-  for (const tier of REWARD_TIERS) {
-    if (total < tier.amount) continue;
-    if (member.roles.cache.has(tier.roleId)) continue;
-
-    const role = member.guild.roles.cache.get(tier.roleId);
-
-    if (!role) {
-      console.warn(`[Transactions] Missing reward role: ${tier.roleId}`);
-      continue;
-    }
-
-    try {
-      await member.roles.add(
-        role,
-        `Chuppys cumulative reward total: ${money(total)}`
-      );
-
-      added.push(role);
-    } catch (error) {
-      console.error(`[Transactions] Could not add role ${tier.roleId}:`, error);
-    }
-  }
-
-  return added;
-}
-
-function transactionEmbed(member, transaction, account, addedRoles) {
-  const purchase = transaction.type === "purchase";
-  const signedAmount = `${purchase ? "−" : "+"}${money(transaction.amount)}`;
-
-  const roleText = addedRoles.length
-    ? `\n\n**New reward role${addedRoles.length > 1 ? "s" : ""}:** ` +
-      addedRoles.map(role => `<@&${role.id}>`).join(", ")
-    : "";
-
+function createEmbed(title, description) {
   return new EmbedBuilder()
     .setColor(0xffffff)
-    .setTitle("Client Transactions History")
-    .setDescription(
-      `${EMOJI} Thank you for shopping with **.gg/chuppys**!\n\n` +
-      `**Client:** ${member}\n` +
-      `**Transaction:** ${purchase ? "Purchase" : "Cash-out"}\n` +
-      `**History amount:** ${signedAmount}\n` +
-      `**Cumulative reward total:** ${money(account.rewardTotal)}` +
-      roleText
-    )
-    .setThumbnail(THUMBNAIL)
-    .setFooter({ text: ".gg/chuppys" })
-    .setTimestamp(new Date(transaction.timestamp));
-}
-
-function historyEmbed(member, account) {
-  const recent = account.transactions.slice(-10).reverse();
-
-  const history = recent.length
-    ? recent.map((transaction, index) => {
-        const purchase = transaction.type === "purchase";
-        const sign = purchase ? "−" : "+";
-        const unix = Math.floor(
-          new Date(transaction.timestamp).getTime() / 1000
-        );
-
-        return (
-          `**${recent.length - index}. ${purchase ? "Purchase" : "Cash-out"} — ` +
-          `${sign}${money(transaction.amount)}**\n` +
-          `<t:${unix}:f> · ${nyDate(transaction.timestamp)}`
-        );
-      }).join("\n\n")
-    : "No transactions have been recorded yet.";
-
-  return new EmbedBuilder()
-    .setColor(0xffffff)
-    .setTitle("Client Transactions History")
-    .setDescription(
-      `${EMOJI} Thank you for shopping with **.gg/chuppys**!\n\n` +
-      `**Client:** ${member}\n` +
-      `**Cumulative reward total:** ${money(account.rewardTotal)}\n\n` +
-      `**Recent transactions (up to 10):**\n${history}`
-    )
-    .setThumbnail(THUMBNAIL)
+    .setTitle(title)
+    .setDescription(description)
+    .setThumbnail(CHUPPYS_EMOJI)
     .setFooter({ text: ".gg/chuppys" })
     .setTimestamp();
 }
 
-module.exports = function setupTransactions(client) {
-  if (!client || typeof client.on !== "function") {
-    throw new TypeError("[Transactions] A Discord client is required.");
+// ==========================================
+// REWARD ROLE SYNCHRONIZATION
+// ==========================================
+
+// Add qualifying reward roles and remove reward roles
+// whose thresholds are no longer met.
+async function syncRewardRoles(member, clientData) {
+  const newlyAddedRoles = [];
+  const removedRoles = [];
+  const failedChanges = [];
+
+  for (const reward of REWARD_ROLES) {
+    const role = member.guild.roles.cache.get(reward.roleId);
+
+    if (!role) {
+      console.error(`Reward role not found: ${reward.roleId}`);
+      failedChanges.push(reward);
+      continue;
+    }
+
+    const qualifies = clientData.total >= reward.amount;
+    const alreadyHasRole = member.roles.cache.has(reward.roleId);
+
+    if (qualifies && !alreadyHasRole) {
+      try {
+        await member.roles.add(
+          role,
+          `Chuppys cumulative rewards total reached ${formatMoney(reward.amount)}`
+        );
+
+        newlyAddedRoles.push({
+          amount: reward.amount,
+          roleId: reward.roleId,
+          name: role.name
+        });
+      } catch (error) {
+        console.error(`Could not add reward role ${role.name}:`, error);
+        failedChanges.push(reward);
+      }
+    } else if (!qualifies && alreadyHasRole) {
+      try {
+        await member.roles.remove(
+          role,
+          `Chuppys cumulative rewards total is below ${formatMoney(reward.amount)}`
+        );
+
+        removedRoles.push({
+          amount: reward.amount,
+          roleId: reward.roleId,
+          name: role.name
+        });
+      } catch (error) {
+        console.error(`Could not remove reward role ${role.name}:`, error);
+        failedChanges.push(reward);
+      }
+    }
   }
 
-  if (client.__chuppysTransactionsLoaded) {
-    console.warn("[Transactions] Already loaded.");
-    return;
+  // Track roles the system successfully assigned and that remain present.
+  // This list is informational; the actual role check is done against Discord.
+  clientData.awardedRoleIds = REWARD_ROLES
+    .filter(reward =>
+      member.roles.cache.has(reward.roleId) &&
+      clientData.total >= reward.amount
+    )
+    .map(reward => reward.roleId);
+
+  saveData();
+
+  // Notify the client of newly earned rewards.
+  if (newlyAddedRoles.length > 0) {
+    const roleList = newlyAddedRoles
+      .map(role => `<@&${role.roleId}>`)
+      .join("\n");
+
+    try {
+      await member.send({
+        embeds: [
+          createEmbed(
+            "You've Earned New Chuppys Rewards! 🤍",
+            [
+              "Congratulations! You've unlocked new rewards at **.gg/chuppys**!",
+              "",
+              "**New reward roles:**",
+              roleList,
+              "",
+              `**Cumulative Rewards Total:** ${formatMoney(clientData.total)}`,
+              "",
+              "Check your server profile to see your new roles! 🤍"
+            ].join("\n")
+          )
+        ],
+        allowedMentions: { parse: [] }
+      });
+    } catch {
+      // The client may have DMs disabled.
+    }
   }
 
-  client.__chuppysTransactionsLoaded = true;
-  loadData();
+  return { newlyAddedRoles, removedRoles, failedChanges };
+}
 
+// ==========================================
+// TRANSACTION HISTORY
+// ==========================================
+
+function createHistoryEmbed(user, clientData) {
+  const transactions = [...clientData.transactions]
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, 10);
+
+  const historyText = transactions.length
+    ? transactions.map((transaction, index) => {
+        return [
+          `**${index + 1}. ${getTransactionLabel(transaction.type)} — ${getSignedAmount(transaction)}**`,
+          `<t:${Math.floor(transaction.timestamp / 1000)}:f>`,
+          `Staff: <@${transaction.staffId}>`
+        ].join("\n");
+      }).join("\n\n")
+    : "No transactions recorded yet.";
+
+  return createEmbed(
+    "Client Transactions History",
+    [
+      `**Client:** ${user}`,
+      "",
+      historyText,
+      "",
+      "━━━━━━━━━━━━━━━━━━━━",
+      `**Cumulative Rewards Total:** ${formatMoney(clientData.total)}`,
+      "",
+      "Thank you for shopping with .gg/chuppys 🤍"
+    ].join("\n")
+  );
+}
+
+// ==========================================
+// COMMAND HANDLER
+// ==========================================
+
+module.exports = function (client) {
   client.on("messageCreate", async message => {
     try {
       if (!message.guild || message.author.bot) return;
 
-      const content = message.content.trim();
-      const lower = content.toLowerCase();
+      const parts = message.content.trim().split(/\s+/);
+      const command = parts[0].toLowerCase();
 
-      const isPurchase = lower.startsWith(",addp ");
-      const isCashout = lower.startsWith(",addc ");
-      const isHistory = lower.startsWith(",history ");
+      const validCommands = [
+        ",addp",
+        ",addc",
+        ",removep",
+        ",removec",
+        ",history"
+      ];
 
-      if (!isPurchase && !isCashout && !isHistory) return;
+      if (!validCommands.includes(command)) return;
 
-      if (!message.member.roles.cache.has(STAFF_ROLE_ID)) {
-        await message.reply({
-          content: "You don't have permission to use transaction commands.",
-          allowedMentions: { repliedUser: false }
-        });
-        return;
+      // Staff permission check
+      if (!hasTransactionPermission(message.member)) {
+        return message.reply(
+          "❌ You don't have permission to use transaction commands."
+        );
       }
 
-      const member = await findMember(message);
+      const user = message.mentions.users.first();
+
+      if (!user) {
+        return message.reply(
+          "❌ Please mention a client.\n" +
+          "Example: `,addp @client $25`"
+        );
+      }
+
+      if (user.bot) {
+        return message.reply("❌ You cannot record transactions for a bot.");
+      }
+
+      const member = await message.guild.members
+        .fetch(user.id)
+        .catch(() => null);
 
       if (!member) {
-        await message.reply({
-          content:
-            "Mention a client or provide their user ID.\n\n" +
-            "Examples: `,addp @client $25`, `,addc @client $65`, " +
-            "` ,history @client`",
-          allowedMentions: { repliedUser: false }
-        });
-        return;
+        return message.reply(
+          "❌ That client must be a member of this server."
+        );
       }
 
-      const data = loadData();
-      const account = getAccount(data, message.guild.id, member.id);
+      const clientData = getClientData(user.id);
 
-      if (isHistory) {
-        if (!saveData(data)) {
-          await message.reply("Could not access spending.json.");
-          return;
+      // ======================================
+      // ,history @client
+      // ======================================
+
+      if (command === ",history") {
+        saveData();
+
+        return message.channel.send({
+          embeds: [createHistoryEmbed(user, clientData)],
+          allowedMentions: { parse: [] }
+        });
+      }
+
+      // ======================================
+      // ,addp / ,addc
+      // ======================================
+
+      if (command === ",addp" || command === ",addc") {
+        const amount = parseAmount(parts[2]);
+
+        if (amount === null) {
+          return message.reply(
+            "❌ Enter a valid amount.\n" +
+            "Examples: `,addp @client $25` or `,addc @client $65`"
+          );
+        }
+
+        const type = command === ",addp" ? "purchase" : "cashout";
+
+        const transaction = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          type,
+          amount,
+          timestamp: Date.now(),
+          staffId: message.author.id
+        };
+
+        clientData.transactions.push(transaction);
+        clientData.total = Number(
+          (clientData.total + amount).toFixed(2)
+        );
+
+        saveData();
+
+        const roleChanges = await syncRewardRoles(member, clientData);
+
+        const description = [
+          `**Client:** ${user}`,
+          `**Transaction:** ${getTransactionLabel(type)}`,
+          `**Amount:** ${getSignedAmount(transaction)}`,
+          `**Recorded by:** ${message.author}`,
+          `**Time:** ${formatTimestamp(transaction.timestamp)}`,
+          "",
+          `**Cumulative Rewards Total:** ${formatMoney(clientData.total)}`,
+          "",
+          "Thank you for shopping with .gg/chuppys 🤍"
+        ];
+
+        if (roleChanges.newlyAddedRoles.length > 0) {
+          description.push(
+            "",
+            "**New reward roles:**",
+            roleChanges.newlyAddedRoles
+              .map(role => `<@&${role.roleId}>`)
+              .join("\n")
+          );
         }
 
         await message.channel.send({
-          embeds: [historyEmbed(member, account)]
+          embeds: [
+            createEmbed("Client Transactions History", description.join("\n"))
+          ],
+          allowedMentions: { parse: [] }
         });
+
+        if (roleChanges.newlyAddedRoles.length > 0) {
+          await message.channel.send({
+            content:
+              `🎉 ${user} unlocked new Chuppys reward roles!\n` +
+              roleChanges.newlyAddedRoles
+                .map(role => `<@&${role.roleId}>`)
+                .join(" "),
+            allowedMentions: { parse: [] }
+          });
+        }
+
+        if (roleChanges.failedChanges.length > 0) {
+          await message.channel.send(
+            "⚠️ Some reward roles could not be updated. Check the bot's permissions and role hierarchy."
+          );
+        }
+
         return;
       }
 
-      const amount = parseAmount(content);
+      // ======================================
+      // ,removep / ,removec
+      // ======================================
 
-      if (amount === null) {
-        await message.reply({
-          content:
-            "Enter an amount greater than $0.\n" +
-            "Example: `,addp @client $25` or `,addc @client $65`",
-          allowedMentions: { repliedUser: false }
-        });
-        return;
-      }
+      if (command === ",removep" || command === ",removec") {
+        const amount = parseAmount(parts[2]);
 
-      const transaction = {
-        type: isPurchase ? "purchase" : "cashout",
-        amount,
-        timestamp: new Date().toISOString(),
-        staffId: message.author.id
-      };
+        if (amount === null) {
+          return message.reply(
+            "❌ Enter a valid amount.\n" +
+            "Examples: `,removep @client $25` or `,removec @client $65`"
+          );
+        }
 
-      // Both transaction types increase the reward total.
-      // The +/- sign affects only how the transaction is displayed.
-      account.rewardTotal = Math.round(
-        (account.rewardTotal + amount) * 100
-      ) / 100;
+        const type = command === ",removep" ? "purchase" : "cashout";
 
-      account.transactions.push(transaction);
+        // Remove only the most recent transaction with the
+        // matching type and exact amount.
+        let transactionIndex = -1;
 
-      if (!saveData(data)) {
-        await message.reply(
-          "Could not save this transaction. Check file permissions."
+        for (let i = clientData.transactions.length - 1; i >= 0; i--) {
+          const transaction = clientData.transactions[i];
+
+          if (
+            transaction.type === type &&
+            Number(transaction.amount) === amount
+          ) {
+            transactionIndex = i;
+            break;
+          }
+        }
+
+        if (transactionIndex === -1) {
+          return message.reply(
+            `❌ No matching ${getTransactionLabel(type).toLowerCase()} ` +
+            `of ${formatMoney(amount)} was found for ${user}.`
+          );
+        }
+
+        const [removedTransaction] =
+          clientData.transactions.splice(transactionIndex, 1);
+
+        // Recalculate cumulative rewards from remaining transactions.
+        clientData.total = Number(
+          clientData.transactions
+            .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0)
+            .toFixed(2)
         );
+
+        saveData();
+
+        // Add or remove reward roles to match the new total.
+        const roleChanges = await syncRewardRoles(member, clientData);
+
+        const description = [
+          `**Client:** ${user}`,
+          `**Removed transaction:** ${getTransactionLabel(type)}`,
+          `**Amount removed:** ${getSignedAmount(removedTransaction)}`,
+          `**Originally recorded:** ${formatTimestamp(removedTransaction.timestamp)}`,
+          `**Removed by:** ${message.author}`,
+          "",
+          `**Updated Cumulative Rewards Total:** ${formatMoney(clientData.total)}`
+        ];
+
+        if (roleChanges.removedRoles.length > 0) {
+          description.push(
+            "",
+            "**Reward roles removed:**",
+            roleChanges.removedRoles
+              .map(role => `<@&${role.roleId}> — $${role.amount} tier`)
+              .join("\n")
+          );
+        } else {
+          description.push(
+            "",
+            "No reward roles needed to be removed."
+          );
+        }
+
+        if (roleChanges.newlyAddedRoles.length > 0) {
+          description.push(
+            "",
+            "**Reward roles added:**",
+            roleChanges.newlyAddedRoles
+              .map(role => `<@&${role.roleId}> — $${role.amount} tier`)
+              .join("\n")
+          );
+        }
+
+        description.push(
+          "",
+          "The transaction history and reward roles have been updated. 🤍"
+        );
+
+        await message.channel.send({
+          embeds: [
+            createEmbed("Transaction Removed", description.join("\n"))
+          ],
+          allowedMentions: { parse: [] }
+        });
+
+        if (roleChanges.failedChanges.length > 0) {
+          await message.channel.send(
+            "⚠️ Some reward roles could not be updated. Check the bot's permissions and role hierarchy."
+          );
+        }
+
         return;
       }
-
-      const addedRoles = await awardRoles(member, account.rewardTotal);
-
-      await message.channel.send({
-        embeds: [
-          transactionEmbed(member, transaction, account, addedRoles)
-        ]
-      });
     } catch (error) {
-      console.error("[Transactions] Command error:", error);
+      console.error("Chuppys transaction command error:", error);
 
-      await message.channel.send(
-        "Something went wrong processing this transaction."
-      ).catch(() => {});
+      try {
+        await message.reply(
+          "❌ Something went wrong while processing that transaction. " +
+          "Please check the bot logs."
+        );
+      } catch {
+        // The message or channel may no longer be available.
+      }
     }
   });
-
-  console.log("[Transactions] Commands loaded successfully.");
 };
