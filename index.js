@@ -125,7 +125,12 @@ const client = new Client({
   ]
 });
 
+// Existing vouch system
 require("./vouch")(client);
+
+// NEW: Transaction commands
+// Keep transactions.js in the same folder as index.js.
+require("./transactions")(client);
 
 // ==================================================
 // ROBUX CASH OUT EMBED
@@ -264,11 +269,9 @@ async function recountAllVouches() {
       const personalCount = await countChannelMessages(personalChannel);
       const regularCount = await countChannelMessages(regularChannel);
 
-      // Personal counter counts only the personal vouch channel.
       const chuppyName =
         `${CHUPPY_COUNT_PREFIX}${personalCount}${CHUPPY_COUNT_SUFFIX}`;
 
-      // Server counter counts both vouch source channels.
       const serverTotal = personalCount + regularCount;
       const serverName =
         `${SERVER_COUNT_PREFIX}${serverTotal}${SERVER_COUNT_SUFFIX}`;
@@ -628,9 +631,9 @@ function makeSellersEmbed() {
   const sellers = [
     ["1192248188409749684", "Services Seller", "No limit"],
     ["1079241163455873074", "seller", "no limit"],
-    ["1032693136163622993", "seller", "$30"],
+    ["1032693136163622993", "seller", "$25"],
     ["1320199904219496530", "seller", "$30"],
-    ["952566845939023892", "seller", "$50"],
+    ["952566845939023892", "seller", "$45"],
     ["1473335012769267807", "seller", "$100"],
     ["1472856287527309313", "seller", "$100"],
     ["1269188505935024141", "seller", "$250"]
