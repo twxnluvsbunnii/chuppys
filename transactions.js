@@ -14,7 +14,7 @@ const TRANSACTION_ALLOWED_ROLE_IDS = [
   "1563003884656398406"
 ];
 
-// Reward roles, ordered from lowest to highest
+// Reward tiers
 const REWARD_ROLES = [
   { amount: 5, roleId: "1550373612144304219" },
   { amount: 10, roleId: "1550373695204360252" },
@@ -56,7 +56,10 @@ function loadData() {
 let spendingData = loadData();
 
 function saveData() {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(spendingData, null, 2));
+  fs.writeFileSync(
+    DATA_FILE,
+    JSON.stringify(spendingData, null, 2)
+  );
 }
 
 function getClientData(userId) {
@@ -78,11 +81,13 @@ function getClientData(userId) {
     data.awardedRoleIds = [];
   }
 
-  // Purchases and cash-outs both count toward cumulative rewards.
+  // Purchases and cash-outs both contribute positively
+  // to the cumulative reward total.
   data.total = Number(
     data.transactions
       .reduce(
-        (sum, transaction) => sum + Number(transaction.amount || 0),
+        (sum, transaction) =>
+          sum + Number(transaction.amount || 0),
         0
       )
       .toFixed(2)
@@ -156,6 +161,31 @@ function createEmbed(title, description) {
 }
 
 // ==========================================
+// PRIVATE REWARD DM
+// No role names or role mentions in the DM.
+// ==========================================
+
+async function sendRewardDM(member) {
+  try {
+    await member.send({
+      embeds: [
+        createEmbed(
+          "New .gg/chuppys Rewards! 🤍",
+          [
+            `${REWARD_NOTIFICATION_EMOJI} You've unlocked new .gg/chuppys roles!`,
+            "",
+            `Please check your server profile ${REWARD_NOTIFICATION_EMOJI}`
+          ].join("\n")
+        )
+      ],
+      allowedMentions: { parse: [] }
+    });
+  } catch {
+    // The client may have DMs disabled.
+  }
+}
+
+// ==========================================
 // REWARD ROLE SYNCHRONIZATION
 // ==========================================
 
@@ -211,7 +241,8 @@ async function syncRewardRoles(member, clientData) {
     }
   }
 
-  // Keep a record of qualifying reward roles still held by the client.
+  // Record the reward roles the client currently qualifies for
+  // and still has.
   clientData.awardedRoleIds = REWARD_ROLES
     .filter(reward =>
       member.roles.cache.has(reward.roleId) &&
@@ -221,37 +252,17 @@ async function syncRewardRoles(member, clientData) {
 
   saveData();
 
-  // DM the client about newly earned roles.
+  // Send one short private DM if new reward roles were added.
+  // The DM deliberately does not list or mention any roles.
   if (newlyAddedRoles.length > 0) {
-    const roleList = newlyAddedRoles
-      .map(role => `<@&${role.roleId}>`)
-      .join("\n");
-
-    try {
-      await member.send({
-        embeds: [
-          createEmbed(
-            "You've Earned New Chuppys Rewards! 🤍",
-            [
-              "Congratulations! You've unlocked new rewards at **.gg/chuppys**!",
-              "",
-              "**New reward roles:**",
-              roleList,
-              "",
-              `**Cumulative Rewards Total:** ${formatMoney(clientData.total)}`,
-              "",
-              "Check your server profile to see your new roles! 🤍"
-            ].join("\n")
-          )
-        ],
-        allowedMentions: { parse: [] }
-      });
-    } catch {
-      // DMs may be disabled.
-    }
+    await sendRewardDM(member);
   }
 
-  return { newlyAddedRoles, removedRoles, failedChanges };
+  return {
+    newlyAddedRoles,
+    removedRoles,
+    failedChanges
+  };
 }
 
 // ==========================================
@@ -289,7 +300,7 @@ function createHistoryEmbed(user, clientData) {
 }
 
 // ==========================================
-// MAIN COMMAND HANDLER
+// COMMAND HANDLER
 // ==========================================
 
 module.exports = function (client) {
@@ -399,7 +410,7 @@ module.exports = function (client) {
           `**Cumulative Rewards Total:** ${formatMoney(clientData.total)}`
         ];
 
-        // Show new roles once, inside this embed only.
+        // List new reward roles only once, inside this public embed.
         if (roleChanges.newlyAddedRoles.length > 0) {
           description.push(
             "",
@@ -428,7 +439,7 @@ module.exports = function (client) {
           allowedMentions: { parse: [] }
         });
 
-        // No second public message listing roles.
+        // No separate public message repeats the reward roles.
 
         if (roleChanges.failedChanges.length > 0) {
           await message.channel.send(
@@ -455,7 +466,7 @@ module.exports = function (client) {
 
         const type = command === ",removep" ? "purchase" : "cashout";
 
-        // Remove the most recent matching transaction.
+        // Remove only the newest transaction matching type and amount.
         let transactionIndex = -1;
 
         for (let i = clientData.transactions.length - 1; i >= 0; i--) {
@@ -480,11 +491,12 @@ module.exports = function (client) {
         const [removedTransaction] =
           clientData.transactions.splice(transactionIndex, 1);
 
-        // Recalculate total from remaining transactions.
+        // Recalculate the total using the remaining transactions.
         clientData.total = Number(
           clientData.transactions
             .reduce(
-              (sum, transaction) => sum + Number(transaction.amount || 0),
+              (sum, transaction) =>
+                sum + Number(transaction.amount || 0),
               0
             )
             .toFixed(2)
@@ -492,8 +504,7 @@ module.exports = function (client) {
 
         saveData();
 
-        // Remove roles the client no longer qualifies for,
-        // and add any qualifying roles that are missing.
+        // Remove roles the client no longer qualifies for.
         const roleChanges = await syncRewardRoles(member, clientData);
 
         const description = [
