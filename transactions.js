@@ -14,7 +14,7 @@ const TRANSACTION_ALLOWED_ROLE_IDS = [
   "1563003884656398406"
 ];
 
-// Reward roles ordered from lowest to highest
+// Reward roles, ordered from lowest to highest
 const REWARD_ROLES = [
   { amount: 5, roleId: "1550373612144304219" },
   { amount: 10, roleId: "1550373695204360252" },
@@ -31,6 +31,9 @@ const REWARD_ROLES = [
 
 const CHUPPYS_EMOJI =
   "https://cdn.discordapp.com/emojis/1561398288593330326.png?size=128&quality=lossless";
+
+const REWARD_NOTIFICATION_EMOJI =
+  "<:chuppybye:1561103844832846014>";
 
 // ==========================================
 // DATA STORAGE
@@ -75,11 +78,13 @@ function getClientData(userId) {
     data.awardedRoleIds = [];
   }
 
-  // Both purchases and cash-outs count toward rewards.
-  // Each stored transaction amount is a positive number.
+  // Purchases and cash-outs both count toward cumulative rewards.
   data.total = Number(
     data.transactions
-      .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0)
+      .reduce(
+        (sum, transaction) => sum + Number(transaction.amount || 0),
+        0
+      )
       .toFixed(2)
   );
 
@@ -154,8 +159,6 @@ function createEmbed(title, description) {
 // REWARD ROLE SYNCHRONIZATION
 // ==========================================
 
-// Add qualifying reward roles and remove reward roles
-// whose thresholds are no longer met.
 async function syncRewardRoles(member, clientData) {
   const newlyAddedRoles = [];
   const removedRoles = [];
@@ -177,7 +180,7 @@ async function syncRewardRoles(member, clientData) {
       try {
         await member.roles.add(
           role,
-          `Chuppys cumulative rewards total reached ${formatMoney(reward.amount)}`
+          `Chuppys cumulative rewards reached ${formatMoney(reward.amount)}`
         );
 
         newlyAddedRoles.push({
@@ -193,7 +196,7 @@ async function syncRewardRoles(member, clientData) {
       try {
         await member.roles.remove(
           role,
-          `Chuppys cumulative rewards total is below ${formatMoney(reward.amount)}`
+          `Chuppys cumulative rewards fell below ${formatMoney(reward.amount)}`
         );
 
         removedRoles.push({
@@ -208,8 +211,7 @@ async function syncRewardRoles(member, clientData) {
     }
   }
 
-  // Track roles the system successfully assigned and that remain present.
-  // This list is informational; the actual role check is done against Discord.
+  // Keep a record of qualifying reward roles still held by the client.
   clientData.awardedRoleIds = REWARD_ROLES
     .filter(reward =>
       member.roles.cache.has(reward.roleId) &&
@@ -219,7 +221,7 @@ async function syncRewardRoles(member, clientData) {
 
   saveData();
 
-  // Notify the client of newly earned rewards.
+  // DM the client about newly earned roles.
   if (newlyAddedRoles.length > 0) {
     const roleList = newlyAddedRoles
       .map(role => `<@&${role.roleId}>`)
@@ -245,7 +247,7 @@ async function syncRewardRoles(member, clientData) {
         allowedMentions: { parse: [] }
       });
     } catch {
-      // The client may have DMs disabled.
+      // DMs may be disabled.
     }
   }
 
@@ -253,7 +255,7 @@ async function syncRewardRoles(member, clientData) {
 }
 
 // ==========================================
-// TRANSACTION HISTORY
+// TRANSACTION HISTORY EMBED
 // ==========================================
 
 function createHistoryEmbed(user, clientData) {
@@ -287,7 +289,7 @@ function createHistoryEmbed(user, clientData) {
 }
 
 // ==========================================
-// COMMAND HANDLER
+// MAIN COMMAND HANDLER
 // ==========================================
 
 module.exports = function (client) {
@@ -308,7 +310,6 @@ module.exports = function (client) {
 
       if (!validCommands.includes(command)) return;
 
-      // Staff permission check
       if (!hasTransactionPermission(message.member)) {
         return message.reply(
           "❌ You don't have permission to use transaction commands."
@@ -325,7 +326,9 @@ module.exports = function (client) {
       }
 
       if (user.bot) {
-        return message.reply("❌ You cannot record transactions for a bot.");
+        return message.reply(
+          "❌ You cannot record transactions for a bot."
+        );
       }
 
       const member = await message.guild.members
@@ -393,38 +396,39 @@ module.exports = function (client) {
           `**Recorded by:** ${message.author}`,
           `**Time:** ${formatTimestamp(transaction.timestamp)}`,
           "",
-          `**Cumulative Rewards Total:** ${formatMoney(clientData.total)}`,
-          "",
-          "Thank you for shopping with .gg/chuppys 🤍"
+          `**Cumulative Rewards Total:** ${formatMoney(clientData.total)}`
         ];
 
+        // Show new roles once, inside this embed only.
         if (roleChanges.newlyAddedRoles.length > 0) {
           description.push(
             "",
             "**New reward roles:**",
             roleChanges.newlyAddedRoles
               .map(role => `<@&${role.roleId}>`)
-              .join("\n")
+              .join("\n"),
+            "",
+            `${REWARD_NOTIFICATION_EMOJI} ${user} unlocked new .gg/chuppys roles!`,
+            `Please check your server profile ${REWARD_NOTIFICATION_EMOJI}`
           );
         }
 
+        description.push(
+          "",
+          "Thank you for shopping with .gg/chuppys 🤍"
+        );
+
         await message.channel.send({
           embeds: [
-            createEmbed("Client Transactions History", description.join("\n"))
+            createEmbed(
+              "Client Transactions History",
+              description.join("\n")
+            )
           ],
           allowedMentions: { parse: [] }
         });
 
-        if (roleChanges.newlyAddedRoles.length > 0) {
-          await message.channel.send({
-            content:
-              `🎉 ${user} unlocked new Chuppys reward roles!\n` +
-              roleChanges.newlyAddedRoles
-                .map(role => `<@&${role.roleId}>`)
-                .join(" "),
-            allowedMentions: { parse: [] }
-          });
-        }
+        // No second public message listing roles.
 
         if (roleChanges.failedChanges.length > 0) {
           await message.channel.send(
@@ -451,8 +455,7 @@ module.exports = function (client) {
 
         const type = command === ",removep" ? "purchase" : "cashout";
 
-        // Remove only the most recent transaction with the
-        // matching type and exact amount.
+        // Remove the most recent matching transaction.
         let transactionIndex = -1;
 
         for (let i = clientData.transactions.length - 1; i >= 0; i--) {
@@ -477,16 +480,20 @@ module.exports = function (client) {
         const [removedTransaction] =
           clientData.transactions.splice(transactionIndex, 1);
 
-        // Recalculate cumulative rewards from remaining transactions.
+        // Recalculate total from remaining transactions.
         clientData.total = Number(
           clientData.transactions
-            .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0)
+            .reduce(
+              (sum, transaction) => sum + Number(transaction.amount || 0),
+              0
+            )
             .toFixed(2)
         );
 
         saveData();
 
-        // Add or remove reward roles to match the new total.
+        // Remove roles the client no longer qualifies for,
+        // and add any qualifying roles that are missing.
         const roleChanges = await syncRewardRoles(member, clientData);
 
         const description = [
@@ -507,11 +514,6 @@ module.exports = function (client) {
               .map(role => `<@&${role.roleId}> — $${role.amount} tier`)
               .join("\n")
           );
-        } else {
-          description.push(
-            "",
-            "No reward roles needed to be removed."
-          );
         }
 
         if (roleChanges.newlyAddedRoles.length > 0) {
@@ -524,14 +526,19 @@ module.exports = function (client) {
           );
         }
 
-        description.push(
-          "",
-          "The transaction history and reward roles have been updated. 🤍"
-        );
+        if (
+          roleChanges.removedRoles.length === 0 &&
+          roleChanges.newlyAddedRoles.length === 0
+        ) {
+          description.push("", "No reward roles needed to be changed.");
+        }
 
         await message.channel.send({
           embeds: [
-            createEmbed("Transaction Removed", description.join("\n"))
+            createEmbed(
+              "Transaction Removed",
+              description.join("\n")
+            )
           ],
           allowedMentions: { parse: [] }
         });
