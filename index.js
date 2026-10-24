@@ -47,6 +47,19 @@ const ROBUX_CASHOUT_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1561094713153429746.png";
 
 // ==================================================
+// CHUPPYS ROLE COMMAND — ,r @user c
+// ==================================================
+
+const CHUPPYS_ROLE_ID = "1550230619127021568";
+const TICKET_SUPPORT_ROLE_ID = "1563003884656398406";
+
+const ROLES_CHANNEL_ID = "1530808091380285592";
+const RULES_CHANNEL_ID = "1551275482857865336";
+
+const CHUPPYS_WELCOME_EMOJI =
+  "<:chuppys:1560284517955141653>";
+
+// ==================================================
 // VOUCH COUNTER SETTINGS
 // ==================================================
 
@@ -128,8 +141,7 @@ const client = new Client({
 // Existing vouch system
 require("./vouch")(client);
 
-// NEW: Transaction commands
-// Keep transactions.js in the same folder as index.js.
+// Existing transaction commands
 require("./transactions")(client);
 
 // ==================================================
@@ -345,7 +357,7 @@ client.on(Events.MessageBulkDelete, messages => {
 });
 
 // ==================================================
-// WELCOME MESSAGE
+// AUTOMATIC WELCOME MESSAGE
 // ==================================================
 
 client.on(Events.GuildMemberAdd, async member => {
@@ -788,11 +800,98 @@ async function handleAFK(message) {
 client.on(Events.MessageCreate, async message => {
   if (!message.guild || message.author.bot) return;
 
-  const content = message.content.trim().toLowerCase();
+  const rawContent = message.content.trim();
+  const content = rawContent.toLowerCase();
 
   try {
     const wasAFKCommand = await handleAFK(message);
     if (wasAFKCommand) return;
+
+    // ==================================================
+    // CHUPPYS ROLE COMMAND — ,r @user c
+    // TICKET SUPPORT ONLY
+    // ==================================================
+
+    if (/^,r(?:\s|$)/i.test(rawContent)) {
+      // Verify Ticket Support role
+      if (!message.member.roles.cache.has(TICKET_SUPPORT_ROLE_ID)) {
+        await message.reply({
+          content: "Only Ticket Support can use this command.",
+          allowedMentions: { repliedUser: false }
+        });
+        return;
+      }
+
+      // Require exactly: ,r @user c
+      const commandMatch = rawContent.match(
+        /^,r\s+<@!?(\d+)>\s+c$/i
+      );
+
+      if (!commandMatch) {
+        await message.reply({
+          content: "Usage: `,r @user c`",
+          allowedMentions: { repliedUser: false }
+        });
+        return;
+      }
+
+      const targetId = commandMatch[1];
+
+      const target = await message.guild.members
+        .fetch(targetId)
+        .catch(() => null);
+
+      if (!target) {
+        await message.reply({
+          content: "I couldn't find that member in this server.",
+          allowedMentions: { repliedUser: false }
+        });
+        return;
+      }
+
+      if (target.roles.cache.has(CHUPPYS_ROLE_ID)) {
+        await message.reply({
+          content: `${target.user.username} already has the Chuppys role.`,
+          allowedMentions: { parse: [] }
+        });
+        return;
+      }
+
+      // Assign the Chuppys role
+      await target.roles.add(
+        CHUPPYS_ROLE_ID,
+        `Chuppys access granted by Ticket Support: ${message.author.tag}`
+      );
+
+      // Create the welcome embed
+      const embed = new EmbedBuilder()
+        .setDescription(
+          `Welcome to **.gg/chuppys**! Please check out ` +
+          `<#${ROLES_CHANNEL_ID}> and <#${RULES_CHANNEL_ID}>. ` +
+          `Enjoy shopping at Chuppy’s Market ${CHUPPYS_WELCOME_EMOJI}`
+        )
+        .setColor("#FFFFFF")
+        .setFooter({ text: ".gg/chuppys" });
+
+      // Send the welcome embed and mention the member
+      await message.channel.send({
+        content: `${target}`,
+        embeds: [embed],
+        allowedMentions: {
+          users: [target.id]
+        }
+      });
+
+      console.log(
+        `[CHUPPYS ROLE] ${message.author.tag} gave the Chuppys role to ${target.user.tag}`
+      );
+
+      return;
+    }
+
+    // ==================================================
+    // ROBUX CASHOUT COMMAND
+    // ==================================================
 
     if (content === "!robuxcashout") {
       if (!message.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
@@ -811,10 +910,18 @@ client.on(Events.MessageCreate, async message => {
       return;
     }
 
+    // ==================================================
+    // PAYMENT COMMAND
+    // ==================================================
+
     if (content === ",pay") {
       await sendPaymentEmbed(message.channel);
       return;
     }
+
+    // ==================================================
+    // ADMIN COMMAND PERMISSIONS
+    // ==================================================
 
     const adminCommands = [
       "!nitro", ",nitro",
@@ -833,12 +940,20 @@ client.on(Events.MessageCreate, async message => {
       }
     }
 
+    // ==================================================
+    // NITRO COMMAND
+    // ==================================================
+
     if (["!nitro", ",nitro"].includes(content)) {
       const channel = await client.channels.fetch(NITRO_CHANNEL_ID);
       await sendNitroServices(channel);
       await message.reply("Nitro message updated successfully.");
       return;
     }
+
+    // ==================================================
+    // DECOR COMMAND
+    // ==================================================
 
     if (["!decor", ",decor"].includes(content)) {
       const channel = await client.channels.fetch(DECOR_CHANNEL_ID);
@@ -847,12 +962,20 @@ client.on(Events.MessageCreate, async message => {
       return;
     }
 
+    // ==================================================
+    // BOOSTIES COMMAND
+    // ==================================================
+
     if (["!boosties", ",boosties"].includes(content)) {
       const channel = await client.channels.fetch(BOOSTIES_CHANNEL_ID);
       await sendBoostiesServices(channel);
       await message.reply("Boosties message updated successfully.");
       return;
     }
+
+    // ==================================================
+    // SELLERS COMMAND
+    // ==================================================
 
     if (["!sellers", ",sellers"].includes(content)) {
       await sendEmbedToChannel(
@@ -866,6 +989,10 @@ client.on(Events.MessageCreate, async message => {
       return;
     }
 
+    // ==================================================
+    // STAFF COMMAND
+    // ==================================================
+
     if (["!staff", ",staff"].includes(content)) {
       await sendEmbedToChannel(
         message.guild,
@@ -877,6 +1004,10 @@ client.on(Events.MessageCreate, async message => {
       await message.reply("The staff message was sent!");
       return;
     }
+
+    // ==================================================
+    // TEST WELCOME COMMAND
+    // ==================================================
 
     if (content === "!testwelcome") {
       const channel = await client.channels.fetch(WELCOME_CHANNEL_ID);
@@ -900,6 +1031,10 @@ client.on(Events.MessageCreate, async message => {
       await channel.send({ content: `${message.author}`, embeds: [embed] });
       return;
     }
+
+    // ==================================================
+    // TEST GOODBYE COMMAND
+    // ==================================================
 
     if (content === "!testgoodbye") {
       const channel = await client.channels.fetch(GOODBYE_CHANNEL_ID);
