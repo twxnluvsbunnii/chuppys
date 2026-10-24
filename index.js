@@ -335,12 +335,30 @@ client.once(Events.ClientReady, async readyClient => {
 });
 
 // ==================================================
-// VOUCH COUNTER MESSAGE / DELETION LISTENERS
+// VOUCH COUNTER + AUTO-REACTION LISTENERS
 // ==================================================
 
-client.on(Events.MessageCreate, message => {
+client.on(Events.MessageCreate, async message => {
   if (!VOUCH_SOURCE_CHANNEL_IDS.includes(message.channel.id)) return;
+
+  // Keep the vouch counters updated.
   scheduleVouchCounterUpdate();
+
+  // React to every new message in both vouch channels.
+  // This uses the existing Chuppys vouch emoji.
+  try {
+    await message.react(CHUPPY_TY_EMOJI);
+
+    console.log(
+      `[VOUCH REACTION] Reacted to message ${message.id} ` +
+      `in channel ${message.channel.id}`
+    );
+  } catch (error) {
+    console.error(
+      `[VOUCH REACTION] Could not react to message ${message.id}:`,
+      error.message
+    );
+  }
 });
 
 client.on(Events.MessageDelete, message => {
@@ -794,7 +812,7 @@ async function handleAFK(message) {
 }
 
 // ==================================================
-// MESSAGE COMMANDS
+// MESSAGE COMMANDS + AUTOMATIC GREETING
 // ==================================================
 
 client.on(Events.MessageCreate, async message => {
@@ -804,6 +822,19 @@ client.on(Events.MessageCreate, async message => {
   const content = rawContent.toLowerCase();
 
   try {
+    // ==================================================
+    // AUTOMATIC HI REPLY
+    // Handles hi, hiiii, hey, heyyyy, hello, etc.
+    // ==================================================
+
+    if (/^(hi+|hey+|hello+|heya+)[!.?,\s]*$/i.test(rawContent)) {
+      await message.reply({
+        content: `Hi ! ${AFK_RETURN_EMOJI}`,
+        allowedMentions: { repliedUser: false }
+      });
+      return;
+    }
+
     const wasAFKCommand = await handleAFK(message);
     if (wasAFKCommand) return;
 
@@ -813,7 +844,6 @@ client.on(Events.MessageCreate, async message => {
     // ==================================================
 
     if (/^,r(?:\s|$)/i.test(rawContent)) {
-      // Verify Ticket Support role
       if (!message.member.roles.cache.has(TICKET_SUPPORT_ROLE_ID)) {
         await message.reply({
           content: "Only Ticket Support can use this command.",
@@ -822,7 +852,6 @@ client.on(Events.MessageCreate, async message => {
         return;
       }
 
-      // Require exactly: ,r @user c
       const commandMatch = rawContent.match(
         /^,r\s+<@!?(\d+)>\s+c$/i
       );
@@ -857,13 +886,11 @@ client.on(Events.MessageCreate, async message => {
         return;
       }
 
-      // Assign the Chuppys role
       await target.roles.add(
         CHUPPYS_ROLE_ID,
         `Chuppys access granted by Ticket Support: ${message.author.tag}`
       );
 
-      // Create the welcome embed
       const embed = new EmbedBuilder()
         .setDescription(
           `Welcome to **.gg/chuppys**! Please check out ` +
@@ -873,7 +900,6 @@ client.on(Events.MessageCreate, async message => {
         .setColor("#FFFFFF")
         .setFooter({ text: ".gg/chuppys" });
 
-      // Send the welcome embed and mention the member
       await message.channel.send({
         content: `${target}`,
         embeds: [embed],
