@@ -659,7 +659,7 @@ async function sendBoostiesServices(channel) {
 
 function makeSellersEmbed() {
   const sellers = [
-    ["1192248188409749684", "Services Seller", "No limit"],
+    ["1192248188409749684", "services seller", "no limit"],
     ["1079241163455873074", "seller", "no limit"],
     ["1032693136163622993", "seller", "$25"],
     ["1320199904219496530", "seller", "$30"],
@@ -667,6 +667,7 @@ function makeSellersEmbed() {
     ["1473335012769267807", "seller", "$100"],
     ["1472856287527309313", "seller", "$100"],
     ["1269188505935024141", "seller", "$250"]
+    ["1427118849215692920", "seller", "$250"]
   ];
 
   const lines = ["# .gg/chuppys sellers", ""];
