@@ -8,7 +8,13 @@ const {
   ButtonBuilder,
   ButtonStyle,
   Events,
-  PermissionsBitField
+  PermissionsBitField,
+  SlashCommandBuilder,
+  REST,
+  Routes,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle
 } = require("discord.js");
 
 // ==================================================
@@ -44,6 +50,33 @@ const STAFF_CHANNEL_ID = "1561013244905132122";
 const ROBUX_CASHOUT_CHANNEL_ID = "1552385740405473513";
 const ROBUX_CASHOUT_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1561094713153429746.png";
+
+// ==================================================
+// QUESTION COMMAND
+// ==================================================
+
+const QUESTION_CHANNEL_ID = "1566490648549527602";
+const QUESTION_EMOJI_ID = "1561388594625511514";
+const QUESTION_EMOJI = "<:chuppypayment:1561388594625511514>";
+
+const QUESTION_TICKET_CHANNEL_ID = "1530811385678790716";
+
+const QUESTION_COMMAND = new SlashCommandBuilder()
+  .setName("question")
+  .setDescription("Submit a question to the Chuppys team.")
+  .addStringOption(option =>
+    option
+      .setName("question")
+      .setDescription("Type the question you want to ask.")
+      .setRequired(true)
+      .setMaxLength(2000)
+  )
+  .addAttachmentOption(option =>
+    option
+      .setName("picture")
+      .setDescription("Optionally attach a picture.")
+      .setRequired(false)
+  );
 
 // ==================================================
 // CHUPPYS ROLE COMMAND — ,r @user c
@@ -154,6 +187,89 @@ const client = new Client({
 
 require("./vouch")(client);
 require("./transactions")(client);
+
+// ==================================================
+// QUESTION COMMAND REGISTRATION
+// Registers /question without replacing /vouch or
+// other commands already registered by your bot.
+// ==================================================
+
+async function registerQuestionCommand() {
+  if (!TOKEN || !GUILD_ID || !client.user) {
+    console.error(
+      "[QUESTION] Missing token, guild ID, or logged-in bot."
+    );
+    return;
+  }
+
+  const rest = new REST({ version: "10" }).setToken(TOKEN);
+
+  try {
+    const route = Routes.applicationGuildCommands(
+      client.user.id,
+      GUILD_ID
+    );
+
+    const existingCommands = await rest.get(route);
+
+    const existingQuestion = existingCommands.find(
+      command => command.name === "question"
+    );
+
+    if (existingQuestion) {
+      await rest.patch(
+        Routes.applicationGuildCommand(
+          client.user.id,
+          GUILD_ID,
+          existingQuestion.id
+        ),
+        {
+          body: QUESTION_COMMAND.toJSON()
+        }
+      );
+
+      console.log("[QUESTION] Existing /question command updated.");
+    } else {
+      await rest.post(route, {
+        body: QUESTION_COMMAND.toJSON()
+      });
+
+      console.log("[QUESTION] /question command registered.");
+    }
+  } catch (error) {
+    console.error("[QUESTION] Command registration failed:", error);
+  }
+}
+
+// ==================================================
+// QUESTION PERMISSIONS
+// ==================================================
+
+function canReplyToQuestion(interaction) {
+  if (!interaction.guild || !interaction.member) return false;
+
+  const memberPermissions = interaction.memberPermissions;
+
+  if (
+    memberPermissions?.has(PermissionsBitField.Flags.Administrator) ||
+    memberPermissions?.has(PermissionsBitField.Flags.ManageGuild) ||
+    memberPermissions?.has(PermissionsBitField.Flags.ManageMessages)
+  ) {
+    return true;
+  }
+
+  const memberRoles = interaction.member.roles;
+
+  if (memberRoles?.cache?.has(TICKET_SUPPORT_ROLE_ID)) {
+    return true;
+  }
+
+  if (Array.isArray(memberRoles)) {
+    return memberRoles.includes(TICKET_SUPPORT_ROLE_ID);
+  }
+
+  return false;
+}
 
 // ==================================================
 // ROBUX CASH OUT EMBED
@@ -407,11 +523,273 @@ client.once(Events.ClientReady, async readyClient => {
 
   readyClient.user.setActivity(".gg/chuppys", { type: 3 });
 
+  await registerQuestionCommand();
   await recountAllVouches();
 
   setInterval(() => {
     if (client.isReady()) scheduleVouchCounterUpdate();
   }, 5 * 60 * 1000);
+});
+
+// ==================================================
+// QUESTION COMMAND + BUTTON INTERACTIONS
+// ==================================================
+
+client.on(Events.InteractionCreate, async interaction => {
+  try {
+    // --------------------------------------------------
+    // /question COMMAND
+    // --------------------------------------------------
+
+    if (
+      interaction.isChatInputCommand() &&
+      interaction.commandName === "question"
+    ) {
+      if (interaction.channelId !== QUESTION_CHANNEL_ID) {
+        await interaction.reply({
+          content:
+            `Please use \`/question\` in <#${QUESTION_CHANNEL_ID}>.`,
+          ephemeral: true
+        });
+        return;
+      }
+
+      const questionText = interaction.options.getString("question", true);
+      const picture = interaction.options.getAttachment("picture");
+
+      if (picture && !picture.contentType?.startsWith("image/")) {
+        await interaction.reply({
+          content: "The optional picture must be an image.",
+          ephemeral: true
+        });
+        return;
+      }
+
+      const questionEmbed = new EmbedBuilder()
+        .setTitle(`Question from ${interaction.user.username}`)
+        .setDescription(`**Question**\n${questionText}`)
+        .setColor("#FFFFFF")
+        .setThumbnail(QUESTION_EMOJI_URL)
+        .setFooter({
+          text: `.gg/chuppys • Question User ID: ${interaction.user.id}`
+        })
+        .setTimestamp();
+
+      if (picture) {
+        questionEmbed.setImage(picture.url);
+      }
+
+      const buttons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("question_ticket")
+          .setLabel("Make a Support Ticket")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("question_reply")
+          .setLabel("Reply to Question")
+          .setStyle(ButtonStyle.Primary)
+      );
+
+      await interaction.channel.send({
+        embeds: [questionEmbed],
+        components: [buttons],
+        allowedMentions: { parse: [] }
+      });
+
+      await interaction.reply({
+        content: "Your question has been submitted!",
+        ephemeral: true
+      });
+
+      return;
+    }
+
+    // --------------------------------------------------
+    // MAKE A SUPPORT TICKET BUTTON
+    // --------------------------------------------------
+
+    if (
+      interaction.isButton() &&
+      interaction.customId === "question_ticket"
+    ) {
+      const ticketEmbed = new EmbedBuilder()
+        .setDescription(
+          "This question requires a support ticket.\n\n" +
+          `Please make one in <#${QUESTION_TICKET_CHANNEL_ID}> and ` +
+          `@ <@&${TICKET_SUPPORT_ROLE_ID}> for assistance.\n\n` +
+          "Thank you! <:uppyty:1561094713153429746>"
+        )
+        .setColor("#FFFFFF")
+        .setThumbnail(QUESTION_EMOJI_URL)
+        .setFooter({ text: ".gg/chuppys" });
+
+      await interaction.reply({
+        embeds: [ticketEmbed],
+        ephemeral: true,
+        allowedMentions: { parse: [] }
+      });
+
+      return;
+    }
+
+    // --------------------------------------------------
+    // REPLY TO QUESTION BUTTON
+    // --------------------------------------------------
+
+    if (
+      interaction.isButton() &&
+      interaction.customId === "question_reply"
+    ) {
+      if (!canReplyToQuestion(interaction)) {
+        await interaction.reply({
+          content:
+            "Only Ticket Support, moderators, administrators, or the server owner can reply to questions.",
+          ephemeral: true
+        });
+        return;
+      }
+
+      const replyModal = new ModalBuilder()
+        .setCustomId(
+          `question_reply_modal:${interaction.message.id}`
+        )
+        .setTitle("Reply to Question");
+
+      const replyInput = new TextInputBuilder()
+        .setCustomId("question_reply_text")
+        .setLabel("Your response")
+        .setPlaceholder("Write your response to the user here...")
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setMaxLength(2000);
+
+      replyModal.addComponents(
+        new ActionRowBuilder().addComponents(replyInput)
+      );
+
+      await interaction.showModal(replyModal);
+      return;
+    }
+
+    // --------------------------------------------------
+    // REPLY MODAL SUBMISSION
+    // --------------------------------------------------
+
+    if (
+      interaction.isModalSubmit() &&
+      interaction.customId.startsWith("question_reply_modal:")
+    ) {
+      if (!canReplyToQuestion(interaction)) {
+        await interaction.reply({
+          content: "You are not allowed to reply to questions.",
+          ephemeral: true
+        });
+        return;
+      }
+
+      const questionMessageId =
+        interaction.customId.split(":")[1];
+
+      const answerText =
+        interaction.fields.getTextInputValue("question_reply_text");
+
+      const questionChannel = await client.channels.fetch(
+        QUESTION_CHANNEL_ID
+      );
+
+      if (!questionChannel || !questionChannel.isTextBased()) {
+        await interaction.reply({
+          content: "I couldn't find the question channel.",
+          ephemeral: true
+        });
+        return;
+      }
+
+      const questionMessage = await questionChannel.messages
+        .fetch(questionMessageId)
+        .catch(() => null);
+
+      if (!questionMessage) {
+        await interaction.reply({
+          content:
+            "I couldn't find the original question. It may have been deleted.",
+          ephemeral: true
+        });
+        return;
+      }
+
+      // Get the original question author from the embed footer.
+      const originalEmbed = questionMessage.embeds[0];
+      const footerText = originalEmbed?.footer?.text || "";
+      const userIdMatch = footerText.match(/Question User ID:\s*(\d+)/);
+
+      if (!userIdMatch) {
+        await interaction.reply({
+          content:
+            "I couldn't identify the person who submitted this question.",
+          ephemeral: true
+        });
+        return;
+      }
+
+      const questionUserId = userIdMatch[1];
+
+      const questionUser = await client.users
+        .fetch(questionUserId)
+        .catch(() => null);
+
+      if (!questionUser) {
+        await interaction.reply({
+          content: "I couldn't find that user's Discord account.",
+          ephemeral: true
+        });
+        return;
+      }
+
+      const responseEmbed = new EmbedBuilder()
+        .setTitle("Response to Your Question")
+        .setDescription(
+          `${QUESTION_EMOJI} **Replied by:** ${interaction.user.username}\n\n` +
+          `**Response:**\n${answerText}`
+        )
+        .setColor("#FFFFFF")
+        .setThumbnail(QUESTION_EMOJI_URL)
+        .setFooter({ text: ".gg/chuppys" })
+        .setTimestamp();
+
+      try {
+        await questionUser.send({
+          embeds: [responseEmbed],
+          allowedMentions: { parse: [] }
+        });
+      } catch (error) {
+        await interaction.reply({
+          content:
+            "I couldn't DM that user. They may have their direct messages disabled.",
+          ephemeral: true
+        });
+        return;
+      }
+
+      await interaction.reply({
+        content:
+          `Your response was sent privately to **${questionUser.username}**.`,
+        ephemeral: true
+      });
+
+      return;
+    }
+  } catch (error) {
+    console.error("[INTERACTION] Error:", error);
+
+    if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        content: "Something went wrong while processing that interaction.",
+        ephemeral: true
+      }).catch(() => {});
+    }
+  }
 });
 
 // ==================================================
@@ -752,403 +1130,4 @@ function makeStaffEmbed() {
     .setDescription([
       "# .gg/chuppys staff",
       "",
-      `${SELLER_EMOJI} **<@1530733554869473320>**`,
-      "Role: owner | seller",
-      "Limit: no limit",
-      "ID: 1530733554869473320",
-      "",
-      `${SELLER_EMOJI} **<@1490962480963260466>**`,
-      "Role: owner | seller",
-      "Limit: no limit",
-      "ID: 1490962480963260466",
-      "",
-      `${SELLER_EMOJI} **<@1381473377696350238>**`,
-      "Role: Mod | staff",
-      "ID: 1381473377696350238",
-      "",
-      `${SELLER_EMOJI} **<@727673410737668107>**`,
-      "Role: Mod | staff",
-      "ID: 727673410737668107"
-    ].join("\n"));
-}
-
-// ==================================================
-// SHARED EMBED SENDER
-// ==================================================
-
-async function sendEmbedToChannel(guild, channelId, embed, label) {
-  const channel = await guild.channels.fetch(channelId);
-
-  if (!channel || !channel.isTextBased()) {
-    throw new Error(`${label} channel not found or is not a text channel.`);
-  }
-
-  await channel.send({
-    embeds: [embed],
-    allowedMentions: { parse: [] }
-  });
-}
-
-// ==================================================
-// AFK HANDLER
-// ==================================================
-
-async function handleAFK(message) {
-  const guildId = message.guild.id;
-  const userId = message.author.id;
-  const afkKey = `${guildId}:${userId}`;
-  const rawContent = message.content.trim();
-
-  const afkMatch = rawContent.match(/^,afk(?:\s+([\s\S]*))?$/i);
-
-  if (afkMatch) {
-    const reason = (afkMatch[1] || "No reason provided.")
-      .trim()
-      .slice(0, 500) || "No reason provided.";
-
-    afkUsers.set(afkKey, {
-      reason,
-      since: Date.now(),
-      username: message.author.username
-    });
-
-    await message.reply({
-      content:
-        `${AFK_GOING_EMOJI} ${message.author}, you're now AFK!\n` +
-        `**Reason:** ${reason}`,
-      allowedMentions: { repliedUser: false }
-    });
-
-    return true;
-  }
-
-  if (afkUsers.has(afkKey)) {
-    const oldAFK = afkUsers.get(afkKey);
-    afkUsers.delete(afkKey);
-
-    await message.channel.send({
-      content:
-        `${AFK_RETURN_EMOJI} Welcome back, ${message.author}! ` +
-        "Your AFK status has been removed.",
-      allowedMentions: { parse: [] }
-    });
-
-    console.log(
-      `[AFK] ${message.author.tag} returned. Previous reason: ${oldAFK.reason}`
-    );
-  }
-
-  const notifiedUsers = new Set();
-
-  for (const [mentionedUserId, user] of message.mentions.users) {
-    if (mentionedUserId === userId || user.bot) continue;
-
-    const afkData = afkUsers.get(`${guildId}:${mentionedUserId}`);
-
-    if (!afkData || notifiedUsers.has(mentionedUserId)) continue;
-    notifiedUsers.add(mentionedUserId);
-
-    await message.channel.send({
-      content:
-        `${AFK_GOING_EMOJI} **${user.username} is currently AFK.**\n` +
-        `**Reason:** ${afkData.reason}`,
-      allowedMentions: { parse: [] }
-    });
-  }
-
-  return false;
-}
-
-// ==================================================
-// MESSAGE COMMANDS
-// ==================================================
-
-client.on(Events.MessageCreate, async message => {
-  if (!message.guild || message.author.bot) return;
-
-  const rawContent = message.content.trim();
-  const content = rawContent.toLowerCase();
-
-  try {
-    if (/^(hi+|hey+|hello+|heya+)[!.?,\s]*$/i.test(rawContent)) {
-      await message.reply({
-        content: `Hi ! ${AFK_RETURN_EMOJI}`,
-        allowedMentions: { repliedUser: false }
-      });
-      return;
-    }
-
-    const wasAFKCommand = await handleAFK(message);
-    if (wasAFKCommand) return;
-
-    // VOUCH TUTORIAL — Manage Server only
-    if (content === "!vouchtut") {
-      if (!message.member.permissions.has(
-        PermissionsBitField.Flags.ManageGuild
-      )) {
-        await message.reply({
-          content: "You need **Manage Server** permission to use this command.",
-          allowedMentions: { repliedUser: false }
-        });
-        return;
-      }
-
-      await sendVouchTutorial(message.guild);
-
-      await message.reply({
-        content: "The vouch tutorial has been posted!",
-        allowedMentions: { repliedUser: false }
-      });
-      return;
-    }
-
-    // CHUPPYS ROLE — ,r @user c
-    if (/^,r(?:\s|$)/i.test(rawContent)) {
-      if (!message.member.roles.cache.has(TICKET_SUPPORT_ROLE_ID)) {
-        await message.reply({
-          content: "Only Ticket Support can use this command.",
-          allowedMentions: { repliedUser: false }
-        });
-        return;
-      }
-
-      const commandMatch = rawContent.match(/^,r\s+<@!?(\d+)>\s+c$/i);
-
-      if (!commandMatch) {
-        await message.reply({
-          content: "Usage: `,r @user c`",
-          allowedMentions: { repliedUser: false }
-        });
-        return;
-      }
-
-      const target = await message.guild.members
-        .fetch(commandMatch[1])
-        .catch(() => null);
-
-      if (!target) {
-        await message.reply({
-          content: "I couldn't find that member in this server.",
-          allowedMentions: { repliedUser: false }
-        });
-        return;
-      }
-
-      if (target.roles.cache.has(CHUPPYS_ROLE_ID)) {
-        await message.reply({
-          content: `${target.user.username} already has the Chuppys role.`,
-          allowedMentions: { parse: [] }
-        });
-        return;
-      }
-
-      await target.roles.add(
-        CHUPPYS_ROLE_ID,
-        `Chuppys access granted by Ticket Support: ${message.author.tag}`
-      );
-
-      const embed = new EmbedBuilder()
-        .setDescription(
-          `Welcome to **.gg/chuppys**! Please check out ` +
-          `<#${ROLES_CHANNEL_ID}> and <#${RULES_CHANNEL_ID}>. ` +
-          `Enjoy shopping at Chuppy’s Market ${CHUPPYS_WELCOME_EMOJI}`
-        )
-        .setColor("#FFFFFF")
-        .setFooter({ text: ".gg/chuppys" });
-
-      await message.channel.send({
-        content: `${target}`,
-        embeds: [embed],
-        allowedMentions: { users: [target.id] }
-      });
-
-      return;
-    }
-
-    // ROBUX CASHOUT
-    if (content === "!robuxcashout") {
-      if (!message.member.permissions.has(
-        PermissionsBitField.Flags.ManageGuild
-      )) {
-        await message.reply(
-          "You need **Manage Server** permission to use this command."
-        );
-        return;
-      }
-
-      const channel = await client.channels.fetch(ROBUX_CASHOUT_CHANNEL_ID);
-      await sendRobuxCashoutEmbed(channel);
-      await message.reply("Robux Cash Out message sent or updated successfully!");
-      return;
-    }
-
-    // PAYMENT
-    if (content === ",pay") {
-      await sendPaymentEmbed(message.channel);
-      return;
-    }
-
-    const adminCommands = [
-      "!nitro", ",nitro",
-      "!decor", ",decor",
-      "!boosties", ",boosties",
-      "!sellers", ",sellers",
-      "!staff", ",staff"
-    ];
-
-    if (adminCommands.includes(content) &&
-        !message.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
-      await message.reply(
-        "You need **Manage Server** permission to use this command."
-      );
-      return;
-    }
-
-    if (["!nitro", ",nitro"].includes(content)) {
-      await sendNitroServices(
-        await client.channels.fetch(NITRO_CHANNEL_ID)
-      );
-      await message.reply("Nitro message updated successfully.");
-      return;
-    }
-
-    if (["!decor", ",decor"].includes(content)) {
-      await sendDecorServices(
-        await client.channels.fetch(DECOR_CHANNEL_ID)
-      );
-      await message.reply("Decor message updated successfully.");
-      return;
-    }
-
-    if (["!boosties", ",boosties"].includes(content)) {
-      await sendBoostiesServices(
-        await client.channels.fetch(BOOSTIES_CHANNEL_ID)
-      );
-      await message.reply("Boosties message updated successfully.");
-      return;
-    }
-
-    if (["!sellers", ",sellers"].includes(content)) {
-      await sendEmbedToChannel(
-        message.guild, SELLERS_CHANNEL_ID, makeSellersEmbed(), "Sellers"
-      );
-      await message.reply("The sellers message was sent!");
-      return;
-    }
-
-    if (["!staff", ",staff"].includes(content)) {
-      await sendEmbedToChannel(
-        message.guild, STAFF_CHANNEL_ID, makeStaffEmbed(), "Staff"
-      );
-      await message.reply("The staff message was sent!");
-      return;
-    }
-
-    if (content === "!testwelcome") {
-      const channel = await client.channels.fetch(WELCOME_CHANNEL_ID);
-
-      if (!channel || !channel.isTextBased()) {
-        await message.reply("Welcome channel not found.");
-        return;
-      }
-
-      const embed = new EmbedBuilder()
-        .setTitle(`Welcome to .gg/chuppys ${AFK_RETURN_EMOJI}`)
-        .setDescription(
-          `Welcome ${message.author}!\n\n` +
-          "We're happy to have you here. Make sure to read the rules " +
-          "and enjoy your time in the server!"
-        )
-        .setColor("#FFFFFF")
-        .setThumbnail(message.author.displayAvatarURL())
-        .setImage(WELCOME_IMAGE)
-        .setFooter({ text: message.guild.name });
-
-      await channel.send({ content: `${message.author}`, embeds: [embed] });
-      return;
-    }
-
-    if (content === "!testgoodbye") {
-      const channel = await client.channels.fetch(GOODBYE_CHANNEL_ID);
-
-      if (!channel || !channel.isTextBased()) {
-        await message.reply("Goodbye channel not found.");
-        return;
-      }
-
-      const embed = new EmbedBuilder()
-        .setTitle(`Goodbye ${AFK_GOING_EMOJI}`)
-        .setDescription(
-          `**${message.author.username}** has left ` +
-          `**${message.guild.name}**.\n\nWe hope to see you again!`
-        )
-        .setColor("#FFFFFF")
-        .setThumbnail(message.author.displayAvatarURL())
-        .setFooter({ text: message.guild.name });
-
-      await channel.send({ embeds: [embed] });
-      return;
-    }
-  } catch (error) {
-    console.error("[MESSAGE COMMAND] Error:", error);
-
-    await message.reply(
-      `Something went wrong: ${error.message}`
-    ).catch(() => {});
-  }
-});
-
-// ==================================================
-// INVITE BOT REACTION
-// ==================================================
-
-client.on(Events.MessageCreate, async message => {
-  if (!message.guild) return;
-  if (message.channel.id !== INVITE_CHANNEL_ID) return;
-  if (message.author.id !== INVITE_BOT_ID) return;
-
-  try {
-    await message.react(INVITE_REACTION_EMOJI);
-  } catch (error) {
-    console.error("[INVITE REACTION] Could not react to invite message:", error);
-  }
-});
-
-// ==================================================
-// ERROR HANDLING
-// ==================================================
-
-client.on("error", error => {
-  console.error("[DISCORD CLIENT] Error:", error);
-});
-
-process.on("unhandledRejection", error => {
-  console.error("[PROCESS] Unhandled promise rejection:", error);
-});
-
-process.on("uncaughtException", error => {
-  console.error("[PROCESS] Uncaught exception:", error);
-});
-
-// ==================================================
-// START BOT
-// ==================================================
-
-if (!TOKEN) {
-  console.error(
-    "[STARTUP] DISCORD_BOT_TOKEN is missing from Render environment variables."
-  );
-  process.exit(1);
-}
-
-if (!GUILD_ID) {
-  console.error(
-    "[STARTUP] DISCORD_GUILD_ID is missing from Render environment variables."
-  );
-  process.exit(1);
-}
-
-client.login(TOKEN).catch(error => {
-  console.error("[STARTUP] Discord login failed:", error);
-});
-      
+      `${SELLER_EMOJI} **<@153
