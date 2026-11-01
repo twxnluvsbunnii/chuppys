@@ -1,4 +1,3 @@
-
 import crypto from "crypto";
 import { waitUntil } from "@vercel/functions";
 
@@ -22,6 +21,25 @@ const PERSONAL_SELLER_IDS = [
 
 const VOUCH_EMOJI_URL =
   "https://cdn.discordapp.com/emojis/1561197586554036318.png";
+
+// ==================================================
+// QUESTION SETTINGS
+// ==================================================
+
+const QUESTION_CHANNEL_ID = "1566490648549527602";
+const TICKET_CHANNEL_ID = "1530811385678790716";
+const TICKET_SUPPORT_ROLE_ID = "1563003884656398406";
+const QUESTION_EMOJI_ID = "1561388594625511514";
+
+const QUESTION_EMOJI_URL =
+  `https://cdn.discordapp.com/emojis/${QUESTION_EMOJI_ID}.png?size=128&quality=lossless`;
+
+const QUESTION_EMOJI =
+  "<:chuppypayment:1561388594625511514>";
+
+const QUESTION_TICKET_CUSTOM_ID = "question_ticket:";
+const QUESTION_REPLY_CUSTOM_ID = "question_reply:";
+const QUESTION_MODAL_CUSTOM_ID = "question_reply_modal:";
 
 // ==================================================
 // SELECT THE CORRECT VOUCH CHANNEL
@@ -225,6 +243,38 @@ async function updateOriginalResponse(interaction, content) {
 }
 
 // ==================================================
+// CHECK STAFF PERMISSIONS
+// ==================================================
+
+function hasStaffPermission(interaction) {
+  const member = interaction.member;
+
+  if (!member) {
+    return false;
+  }
+
+  // Ticket Support role.
+  const roles = member.roles || [];
+
+  if (roles.includes(TICKET_SUPPORT_ROLE_ID)) {
+    return true;
+  }
+
+  // Discord permissions are represented as a bitfield string.
+  const permissions = BigInt(member.permissions || "0");
+
+  const ADMINISTRATOR = 8n;
+  const MANAGE_GUILD = 32n;
+  const MANAGE_MESSAGES = 8192n;
+
+  return (
+    (permissions & ADMINISTRATOR) === ADMINISTRATOR ||
+    (permissions & MANAGE_GUILD) === MANAGE_GUILD ||
+    (permissions & MANAGE_MESSAGES) === MANAGE_MESSAGES
+  );
+}
+
+// ==================================================
 // ROLE MENU HANDLER
 // ==================================================
 
@@ -332,7 +382,6 @@ async function processVouchInteraction(interaction) {
       );
     }
 
-    // Read slash-command options.
     const options = Object.fromEntries(
       (interaction.data.options || []).map(option => [
         option.name,
@@ -362,7 +411,6 @@ async function processVouchInteraction(interaction) {
       hasProof: Boolean(proof)
     });
 
-    // Validate buyer and seller.
     if (!sellerId || !buyerId) {
       throw new Error(
         "Could not identify the buyer or seller."
@@ -381,7 +429,6 @@ async function processVouchInteraction(interaction) {
       );
     }
 
-    // Validate rating.
     if (
       !Number.isInteger(rating) ||
       rating < 1 ||
@@ -392,7 +439,6 @@ async function processVouchInteraction(interaction) {
       );
     }
 
-    // Validate order description.
     if (!order) {
       throw new Error(
         "Please enter what you purchased."
@@ -405,7 +451,6 @@ async function processVouchInteraction(interaction) {
       );
     }
 
-    // Validate proof attachment.
     if (!proof) {
       throw new Error(
         "Please attach proof of your purchase."
@@ -427,7 +472,6 @@ async function processVouchInteraction(interaction) {
       );
     }
 
-    // Create the same vouch embed.
     const embed = {
       color: 0xffffff,
       title: "NEW VOUCH",
@@ -451,10 +495,7 @@ async function processVouchInteraction(interaction) {
       timestamp: new Date().toISOString()
     };
 
-    // ==================================================
-    // ROUTE BASED ON THE SELECTED SELLER'S USER ID
-    // ==================================================
-
+    // Route based on seller ID.
     const targetChannelId = getVouchChannelId(sellerId);
 
     const isPersonalVouch =
@@ -470,7 +511,6 @@ async function processVouchInteraction(interaction) {
       } channel (${targetChannelId})`
     );
 
-    // Send the vouch to exactly one selected channel.
     const result = await discordFetch(
       `https://discord.com/api/v10/channels/${targetChannelId}/messages`,
       {
@@ -505,7 +545,6 @@ async function processVouchInteraction(interaction) {
       `Channel: ${targetChannelId}`
     );
 
-    // Confirm privately to the person who submitted the vouch.
     await updateOriginalResponse(
       interaction,
       "Your vouch was submitted successfully! ♡"
@@ -528,6 +567,464 @@ async function processVouchInteraction(interaction) {
     } catch (updateError) {
       console.error(
         "[VOUCH DEBUG] Could not update Discord response:",
+        updateError.message
+      );
+    }
+  }
+}
+
+// ==================================================
+// QUESTION SLASH COMMAND HANDLER
+// ==================================================
+
+async function processQuestionInteraction(interaction) {
+  try {
+    const botToken = process.env.DISCORD_BOT_TOKEN;
+
+    if (!botToken) {
+      throw new Error("DISCORD_BOT_TOKEN is missing.");
+    }
+
+    if (!interaction.guild_id) {
+      throw new Error("Use /question inside your Discord server.");
+    }
+
+    if (interaction.channel_id !== QUESTION_CHANNEL_ID) {
+      await updateOriginalResponse(
+        interaction,
+        `Please use /question in <#${QUESTION_CHANNEL_ID}>.`
+      );
+
+      return;
+    }
+
+    const options = Object.fromEntries(
+      (interaction.data.options || []).map(option => [
+        option.name,
+        option
+      ])
+    );
+
+    const questionText = options.question?.value?.trim();
+
+    const pictureId = options.picture?.value;
+    const picture = pictureId
+      ? interaction.data.resolved?.attachments?.[pictureId]
+      : null;
+
+    if (!questionText) {
+      throw new Error("Please enter your question.");
+    }
+
+    if (picture) {
+      const isImage =
+        (
+          picture.content_type &&
+          picture.content_type.startsWith("image/")
+        ) ||
+        /\.(png|jpe?g|gif|webp)$/i.test(
+          picture.filename || ""
+        );
+
+      if (!isImage) {
+        await updateOriginalResponse(
+          interaction,
+          "Please attach an image file for the picture option."
+        );
+
+        return;
+      }
+    }
+
+    const askerId =
+      interaction.member?.user?.id ||
+      interaction.user?.id;
+
+    if (!askerId) {
+      throw new Error("Could not identify the member.");
+    }
+
+    const embed = {
+      title: `Question from @${interaction.member?.user?.username || interaction.user?.username || "Member"}`,
+      color: 0xffffff,
+
+      description:
+        `**Question**\n${questionText}`,
+
+      thumbnail: {
+        url: QUESTION_EMOJI_URL
+      },
+
+      footer: {
+        text: `.gg/chuppys • Question User ID: ${askerId}`
+      },
+
+      timestamp: new Date().toISOString()
+    };
+
+    if (picture?.url) {
+      embed.image = {
+        url: picture.url
+      };
+    }
+
+    // No emojis on either button.
+    const components = [
+      {
+        type: 1,
+        components: [
+          {
+            type: 2,
+            style: 2,
+            label: "Make a Support Ticket",
+            custom_id: `${QUESTION_TICKET_CUSTOM_ID}${askerId}`
+          },
+          {
+            type: 2,
+            style: 1,
+            label: "Reply to Question",
+            custom_id: `${QUESTION_REPLY_CUSTOM_ID}${askerId}`
+          }
+        ]
+      }
+    ];
+
+    const result = await discordFetch(
+      `https://discord.com/api/v10/channels/${QUESTION_CHANNEL_ID}/messages`,
+      {
+        method: "POST",
+
+        headers: {
+          Authorization: `Bot ${botToken}`,
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+          embeds: [embed],
+          components,
+
+          allowed_mentions: {
+            parse: []
+          }
+        })
+      }
+    );
+
+    if (!result.ok) {
+      throw new Error(
+        `Could not send question: HTTP ${result.status} ` +
+        JSON.stringify(result.data)
+      );
+    }
+
+    await updateOriginalResponse(
+      interaction,
+      "Your question was sent to Chuppys staff! ♡"
+    );
+
+    console.log(
+      `[QUESTION DEBUG] Posted question from ${askerId}.`
+    );
+  } catch (error) {
+    console.error("[QUESTION DEBUG] Failed:", error);
+
+    try {
+      await updateOriginalResponse(
+        interaction,
+        `Your question could not be sent: ${error.message}`
+      );
+    } catch (updateError) {
+      console.error(
+        "[QUESTION DEBUG] Could not update response:",
+        updateError.message
+      );
+    }
+  }
+}
+
+// ==================================================
+// MAKE A SUPPORT TICKET BUTTON
+// ==================================================
+
+function handleQuestionTicketButton(interaction) {
+  const embed = {
+    color: 0xffffff,
+
+    description:
+      "This question requires a support ticket.\n\n" +
+      `Please make one in <#${TICKET_CHANNEL_ID}> and @ Ticket Support for assistance.\n\n` +
+      "Thank you! <:uppyty:1561094713153429746>",
+
+    thumbnail: {
+      url: QUESTION_EMOJI_URL
+    },
+
+    footer: {
+      text: ".gg/chuppys"
+    }
+  };
+
+  return {
+    type: 4,
+
+    data: {
+      flags: 64,
+      embeds: [embed],
+
+      allowed_mentions: {
+        parse: []
+      }
+    }
+  };
+}
+
+// ==================================================
+// REPLY TO QUESTION BUTTON — OPEN STAFF MODAL
+// ==================================================
+
+function handleQuestionReplyButton(interaction) {
+  if (!hasStaffPermission(interaction)) {
+    return {
+      type: 4,
+
+      data: {
+        content:
+          "Only the owner, administrators, moderators, or Ticket Support can reply to questions.",
+
+        flags: 64
+      }
+    };
+  }
+
+  const customId = interaction.data.custom_id;
+  const askerId = customId.slice(
+    QUESTION_REPLY_CUSTOM_ID.length
+  );
+
+  if (!/^\d{17,20}$/.test(askerId)) {
+    return {
+      type: 4,
+
+      data: {
+        content: "This question button is invalid.",
+        flags: 64
+      }
+    };
+  }
+
+  return {
+    type: 9,
+
+    data: {
+      custom_id:
+        `${QUESTION_MODAL_CUSTOM_ID}${askerId}:${interaction.message.id}`,
+
+      title: "Reply to Question",
+
+      components: [
+        {
+          type: 1,
+
+          components: [
+            {
+              type: 4,
+              custom_id: "question_reply_text",
+              label: "Your response",
+              style: 2,
+              min_length: 1,
+              max_length: 2000,
+              placeholder: "Type your answer to the member...",
+              required: true
+            }
+          ]
+        }
+      ]
+    }
+  };
+}
+
+// ==================================================
+// SEND QUESTION RESPONSE PRIVATELY
+// ==================================================
+
+async function processQuestionReply(interaction) {
+  try {
+    const botToken = process.env.DISCORD_BOT_TOKEN;
+
+    if (!botToken) {
+      throw new Error("DISCORD_BOT_TOKEN is missing.");
+    }
+
+    if (!hasStaffPermission(interaction)) {
+      throw new Error(
+        "Only authorized staff can answer questions."
+      );
+    }
+
+    const customId = interaction.data.custom_id;
+
+    const match = customId.match(
+      /^question_reply_modal:(\d{17,20}):(\d{17,20})$/
+    );
+
+    if (!match) {
+      throw new Error("Invalid question reply form.");
+    }
+
+    const askerId = match[1];
+    const originalMessageId = match[2];
+
+    const actionRow = interaction.data.components?.find(
+      component => component.type === 1
+    );
+
+    const answerInput = actionRow?.components?.find(
+      component => component.custom_id === "question_reply_text"
+    );
+
+    const answerText = answerInput?.value?.trim();
+
+    if (!answerText) {
+      throw new Error("Please enter a response.");
+    }
+
+    const staffId =
+      interaction.member?.user?.id ||
+      interaction.user?.id;
+
+    if (!staffId) {
+      throw new Error("Could not identify the staff member.");
+    }
+
+    // Create a DM channel with the member who asked.
+    const dmResult = await discordFetch(
+      "https://discord.com/api/v10/users/@me/channels",
+      {
+        method: "POST",
+
+        headers: {
+          Authorization: `Bot ${botToken}`,
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+          recipient_id: askerId
+        })
+      }
+    );
+
+    if (!dmResult.ok || !dmResult.data?.id) {
+      throw new Error(
+        "I couldn't open a DM with the member. They may have direct messages disabled."
+      );
+    }
+
+    const dmChannelId = dmResult.data.id;
+
+    const replyEmbed = {
+      title: "Response to Your Question",
+      color: 0xffffff,
+
+      description:
+        `${QUESTION_EMOJI} **Replied by:** <@${staffId}>\n\n` +
+        `**Response:**\n${answerText}`,
+
+      thumbnail: {
+        url: QUESTION_EMOJI_URL
+      },
+
+      footer: {
+        text: ".gg/chuppys"
+      },
+
+      timestamp: new Date().toISOString()
+    };
+
+    // Send the staff response privately.
+    const dmMessage = await discordFetch(
+      `https://discord.com/api/v10/channels/${dmChannelId}/messages`,
+      {
+        method: "POST",
+
+        headers: {
+          Authorization: `Bot ${botToken}`,
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+          embeds: [replyEmbed],
+
+          allowed_mentions: {
+            parse: []
+          }
+        })
+      }
+    );
+
+    if (!dmMessage.ok) {
+      throw new Error(
+        "The response could not be delivered by DM."
+      );
+    }
+
+    // Notify the question channel that staff replied privately.
+    const notice = await discordFetch(
+      `https://discord.com/api/v10/channels/${QUESTION_CHANNEL_ID}/messages`,
+      {
+        method: "POST",
+
+        headers: {
+          Authorization: `Bot ${botToken}`,
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+          content:
+            `A response was sent privately by <@${staffId}>.`,
+
+          message_reference: {
+            message_id: originalMessageId,
+            fail_if_not_exists: false
+          },
+
+          allowed_mentions: {
+            parse: [],
+            users: [staffId]
+          }
+        })
+      }
+    );
+
+    if (!notice.ok) {
+      console.warn(
+        "[QUESTION DEBUG] Could not post staff reply notice:",
+        notice.status,
+        notice.data
+      );
+    }
+
+    await updateOriginalResponse(
+      interaction,
+      "Your response was sent to the member privately."
+    );
+
+    console.log(
+      `[QUESTION DEBUG] Staff ${staffId} replied to ${askerId}.`
+    );
+  } catch (error) {
+    console.error(
+      "[QUESTION DEBUG] Could not send staff response:",
+      error
+    );
+
+    try {
+      await updateOriginalResponse(
+        interaction,
+        `Could not send the response: ${error.message}`
+      );
+    } catch (updateError) {
+      console.error(
+        "[QUESTION DEBUG] Could not update modal response:",
         updateError.message
       );
     }
@@ -644,51 +1141,79 @@ export default async function handler(req, res) {
   if (interaction.type === 2) {
     const commandName = interaction.data?.name;
 
-    if (commandName !== "vouch") {
-      console.log(
-        `[INTERACTIONS DEBUG] Unhandled slash command: ${commandName}`
-      );
-
-      return res.status(200).json({
-        type: 4,
-
+    // VOUCH COMMAND
+    if (commandName === "vouch") {
+      res.status(200).json({
+        type: 5,
         data: {
-          content:
-            "This slash command is not configured on the Vercel endpoint.",
           flags: 64
         }
       });
+
+      waitUntil(
+        processVouchInteraction(interaction)
+      );
+
+      return;
     }
 
-    console.log(
-      "[VOUCH DEBUG] Acknowledging /vouch."
-    );
+    // QUESTION COMMAND
+    if (commandName === "question") {
+      res.status(200).json({
+        type: 5,
 
-    // Acknowledge immediately to avoid Discord timing out.
-    res.status(200).json({
-      type: 5,
+        data: {
+          flags: 64
+        }
+      });
+
+      waitUntil(
+        processQuestionInteraction(interaction)
+      );
+
+      return;
+    }
+
+    return res.status(200).json({
+      type: 4,
 
       data: {
+        content:
+          "This slash command is not configured on the Vercel endpoint.",
         flags: 64
       }
     });
-
-    // Process the vouch after acknowledging Discord.
-    waitUntil(
-      processVouchInteraction(interaction)
-    );
-
-    return;
   }
 
   // ==================================================
-  // SELECT MENUS AND OTHER MESSAGE COMPONENTS
+  // BUTTONS AND SELECT MENUS
   // ==================================================
 
   if (interaction.type === 3) {
     const customId =
       interaction.data?.custom_id;
 
+    // MAKE A SUPPORT TICKET
+    if (
+      typeof customId === "string" &&
+      customId.startsWith(QUESTION_TICKET_CUSTOM_ID)
+    ) {
+      return res.status(200).json(
+        handleQuestionTicketButton(interaction)
+      );
+    }
+
+    // REPLY TO QUESTION
+    if (
+      typeof customId === "string" &&
+      customId.startsWith(QUESTION_REPLY_CUSTOM_ID)
+    ) {
+      return res.status(200).json(
+        handleQuestionReplyButton(interaction)
+      );
+    }
+
+    // EXISTING ROLE SELECT MENUS
     const group = ROLE_GROUPS[customId];
 
     if (
@@ -700,7 +1225,7 @@ export default async function handler(req, res) {
 
         data: {
           content:
-            "This role menu is not configured.",
+            "This interaction is not configured.",
           flags: 64
         }
       });
@@ -722,7 +1247,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Acknowledge immediately and process role changes.
     res.status(200).json({
       type: 5,
 
@@ -736,6 +1260,55 @@ export default async function handler(req, res) {
     );
 
     return;
+  }
+
+  // ==================================================
+  // MODAL SUBMISSIONS
+  // ==================================================
+
+  if (interaction.type === 5) {
+    const customId =
+      interaction.data?.custom_id || "";
+
+    if (
+      customId.startsWith(QUESTION_MODAL_CUSTOM_ID)
+    ) {
+      if (!hasStaffPermission(interaction)) {
+        return res.status(200).json({
+          type: 4,
+
+          data: {
+            content:
+              "Only the owner, administrators, moderators, or Ticket Support can reply to questions.",
+
+            flags: 64
+          }
+        });
+      }
+
+      res.status(200).json({
+        type: 5,
+
+        data: {
+          flags: 64
+        }
+      });
+
+      waitUntil(
+        processQuestionReply(interaction)
+      );
+
+      return;
+    }
+
+    return res.status(200).json({
+      type: 4,
+
+      data: {
+        content: "This form is not configured.",
+        flags: 64
+      }
+    });
   }
 
   // ==================================================
