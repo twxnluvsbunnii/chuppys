@@ -1,5 +1,6 @@
-
 const http = require("http");
+const path = require("path");
+const fs = require("fs");
 
 const {
   Client,
@@ -8,6 +9,7 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  AttachmentBuilder,
   Events,
   PermissionsBitField
 } = require("discord.js");
@@ -43,8 +45,37 @@ const SELLERS_CHANNEL_ID = "1551713598181605496";
 const STAFF_CHANNEL_ID = "1561013244905132122";
 
 const ROBUX_CASHOUT_CHANNEL_ID = "1552385740405473513";
+
 const ROBUX_CASHOUT_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1561094713153429746.png";
+
+// ==================================================
+// VOUCH TUTORIAL
+// ==================================================
+
+const VOUCH_TUTORIAL_CHANNEL_ID = "1562958688896028802";
+
+// These images must be in the same folder as index.js.
+const VOUCH_TUTORIAL_IMAGES = [
+  {
+    name: "IMG_5265.jpeg",
+    title: "STEP 1 — OPEN /VOUCH",
+    description:
+      "Open the `/vouch` command and begin filling out the required information."
+  },
+  {
+    name: "IMG_5266.jpeg",
+    title: "STEP 2 — CONFIRM YOUR VOUCH",
+    description:
+      "Follow the command prompts and submit your vouch when everything is complete."
+  },
+  {
+    name: "IMG_5267.jpeg",
+    title: "STEP 3 — YOUR COMPLETED VOUCH",
+    description:
+      "Your completed vouch will appear in the appropriate vouch channel."
+  }
+];
 
 // ==================================================
 // CHUPPYS ROLE COMMAND — ,r @user c
@@ -84,24 +115,31 @@ const WELCOME_ROLE_ID = "1531039846871728248";
 
 const CHUPPY_TY_EMOJI = "<:uppyty:1561094713153429746>";
 
+// ==================================================
+// INVITE REACTION
+// ==================================================
+
 const INVITE_CHANNEL_ID = "1560249120667734016";
 const INVITE_BOT_ID = "499595256270946326";
+
 const INVITE_REACTION_EMOJI =
   "<:chuppynewinv:1561398288593330326>";
+
+// ==================================================
+// AFK EMOJIS
+// ==================================================
 
 const AFK_GOING_EMOJI = "<:chuppybye:1561103844832846014>";
 const AFK_RETURN_EMOJI = "<:chuppyhi:1561103471325745242>";
 
+// ==================================================
+// PAYMENT SETTINGS
+// ==================================================
+
 const PAYMENT_EMOJI_ID = "1561388594625511514";
+
 const PAYMENT_EMOJI_URL =
   `https://cdn.discordapp.com/emojis/${PAYMENT_EMOJI_ID}.png`;
-
-const SERVICE_EMOJI = "<a:aBouncyDiscord:1557138733717782599>";
-const BOOST_EMOJI = "<:white_nitro_boost:1557165507600326756>";
-const SELLER_EMOJI = "<:chuppyseller:1560283615445778503>";
-
-const WELCOME_IMAGE =
-  "https://cdn.discordapp.com/attachments/1531043582348230767/1551448584656916530/BCA71D48-B1AD-46BA-BAAA-CC87D8C81E62.png";
 
 const CASHAPP_USERNAME = "$yysluvv";
 const CASHAPP_URL = "https://cash.app/$yysluvv";
@@ -114,6 +152,25 @@ const ZELLE = "631-401-8951";
 
 const PAYMENT_METHODS_TEXT =
   "**Payment Methods**\n> Apple Pay\n> Venmo\n> Cash App";
+
+// ==================================================
+// SERVICE EMOJIS
+// ==================================================
+
+const SERVICE_EMOJI = "<a:aBouncyDiscord:1557138733717782599>";
+const BOOST_EMOJI = "<:white_nitro_boost:1557165507600326756>";
+const SELLER_EMOJI = "<:chuppyseller:1560283615445778503>";
+
+// ==================================================
+// WELCOME IMAGE
+// ==================================================
+
+const WELCOME_IMAGE =
+  "https://cdn.discordapp.com/attachments/1531043582348230767/1551448584656916530/BCA71D48-B1AD-46BA-BAAA-CC87D8C81E62.png";
+
+// ==================================================
+// AFK STORAGE
+// ==================================================
 
 const afkUsers = new Map();
 
@@ -138,11 +195,137 @@ const client = new Client({
   ]
 });
 
-// Existing vouch system
+// ==================================================
+// EXISTING VOUCH SYSTEM
+// ==================================================
+
 require("./vouch")(client);
 
-// Existing transaction commands
+// ==================================================
+// EXISTING TRANSACTION COMMANDS
+// ==================================================
+
 require("./transactions")(client);
+
+// ==================================================
+// VOUCH TUTORIAL FUNCTION — !vouchtut
+// ==================================================
+
+async function sendVouchTutorial(guild) {
+  const channel = await guild.channels.fetch(
+    VOUCH_TUTORIAL_CHANNEL_ID
+  );
+
+  if (!channel || !channel.isTextBased() || !channel.send) {
+    throw new Error(
+      "The vouch tutorial channel could not be found."
+    );
+  }
+
+  // Check that all three screenshots exist before sending.
+  const imagePaths = VOUCH_TUTORIAL_IMAGES.map(image =>
+    path.join(__dirname, image.name)
+  );
+
+  const missingImages = imagePaths.filter(imagePath =>
+    !fs.existsSync(imagePath)
+  );
+
+  if (missingImages.length > 0) {
+    throw new Error(
+      "Missing tutorial images: " +
+      missingImages.map(file => path.basename(file)).join(", ") +
+      ". Upload all three images to the same folder as index.js."
+    );
+  }
+
+  // Main HOW TO VOUCH embed.
+  const mainEmbed = new EmbedBuilder()
+    .setTitle("HOW TO VOUCH")
+    .setDescription(
+      "Welcome to **.gg/chuppys**!\n\n" +
+      "Please follow this tutorial to leave a vouch for your order.\n\n" +
+
+      "**01. OPEN A TICKET**\n" +
+      "Open a ticket and complete your purchase with the seller.\n\n" +
+
+      "**02. USE `/vouch`**\n" +
+      "Run the `/vouch` command and fill out every required question.\n\n" +
+
+      "**03. SELECT YOUR SELLER**\n" +
+      "Choose the seller who completed your order.\n\n" +
+
+      "**04. RATE YOUR ORDER**\n" +
+      "Select a rating from 1 to 5 stars.\n\n" +
+
+      "**05. DESCRIBE YOUR ORDER**\n" +
+      "Enter a description of what you purchased.\n\n" +
+
+      "**06. ATTACH PROOF**\n" +
+      "Upload the required proof image and submit your vouch.\n\n" +
+
+      "**07. CHECK YOUR VOUCH**\n" +
+      "Once submitted, your vouch will appear in the appropriate channel.\n\n" +
+
+      "Please make sure you select the correct seller and attach your proof."
+    )
+    .setColor("#FFFFFF")
+    .setFooter({
+      text: ".gg/chuppys • Vouch Tutorial"
+    })
+    .setTimestamp();
+
+  await channel.send({
+    embeds: [mainEmbed],
+    allowedMentions: { parse: [] }
+  });
+
+  // Send the three screenshots in the requested order.
+  for (let i = 0; i < VOUCH_TUTORIAL_IMAGES.length; i++) {
+    const tutorialImage = VOUCH_TUTORIAL_IMAGES[i];
+    const imagePath = imagePaths[i];
+
+    const attachment = new AttachmentBuilder(imagePath, {
+      name: tutorialImage.name
+    });
+
+    const embed = new EmbedBuilder()
+      .setTitle(tutorialImage.title)
+      .setDescription(tutorialImage.description)
+      .setColor("#FFFFFF")
+      .setImage(`attachment://${tutorialImage.name}`)
+      .setFooter({
+        text: `.gg/chuppys • Step ${i + 1} of 3`
+      });
+
+    await channel.send({
+      embeds: [embed],
+      files: [attachment],
+      allowedMentions: { parse: [] }
+    });
+  }
+
+  // Final reminder after the screenshots.
+  const finalEmbed = new EmbedBuilder()
+    .setDescription(
+      "⬇️ **EXAMPLE OF A COMPLETED VOUCH ABOVE** ⬆️\n\n" +
+      "Thank you for shopping at **.gg/chuppys**!\n" +
+      "Please leave an honest vouch after your purchase."
+    )
+    .setColor("#FFFFFF")
+    .setFooter({
+      text: ".gg/chuppys"
+    });
+
+  await channel.send({
+    embeds: [finalEmbed],
+    allowedMentions: { parse: [] }
+  });
+
+  console.log(
+    `[VOUCH TUTORIAL] Tutorial posted in ${channel.id}`
+  );
+}
 
 // ==================================================
 // ROBUX CASH OUT EMBED
@@ -178,6 +361,7 @@ async function sendRobuxCashoutEmbed(channel) {
     message.author.id === client.user.id &&
     message.embeds.some(existingEmbed => {
       const title = existingEmbed.title || "";
+
       return (
         title.startsWith("Cashing Out Robux") ||
         title.startsWith("Robux Cash out")
@@ -206,7 +390,9 @@ async function sendRobuxCashoutEmbed(channel) {
   }
 
   const sent = await channel.send(payload);
+
   console.log("[ROBUX CASHOUT] New embed created.");
+
   return sent;
 }
 
@@ -226,7 +412,10 @@ async function countChannelMessages(channel) {
 
   while (true) {
     const options = { limit: 100 };
-    if (before) options.before = before;
+
+    if (before) {
+      options.before = before;
+    }
 
     const messages = await channel.messages.fetch(options);
 
@@ -252,6 +441,7 @@ async function renameCounterChannel(channelId, name) {
 
   if (channel.name !== name) {
     await channel.setName(name);
+
     console.log(`[VOUCH COUNTER] Updated channel name: ${name}`);
   }
 }
@@ -285,6 +475,7 @@ async function recountAllVouches() {
         `${CHUPPY_COUNT_PREFIX}${personalCount}${CHUPPY_COUNT_SUFFIX}`;
 
       const serverTotal = personalCount + regularCount;
+
       const serverName =
         `${SERVER_COUNT_PREFIX}${serverTotal}${SERVER_COUNT_SUFFIX}`;
 
@@ -330,7 +521,9 @@ client.once(Events.ClientReady, async readyClient => {
   await recountAllVouches();
 
   setInterval(() => {
-    if (client.isReady()) scheduleVouchCounterUpdate();
+    if (client.isReady()) {
+      scheduleVouchCounterUpdate();
+    }
   }, 5 * 60 * 1000);
 });
 
@@ -339,13 +532,12 @@ client.once(Events.ClientReady, async readyClient => {
 // ==================================================
 
 client.on(Events.MessageCreate, async message => {
-  if (!VOUCH_SOURCE_CHANNEL_IDS.includes(message.channel.id)) return;
+  if (!VOUCH_SOURCE_CHANNEL_IDS.includes(message.channel.id)) {
+    return;
+  }
 
-  // Keep the vouch counters updated.
   scheduleVouchCounterUpdate();
 
-  // React to every new message in both vouch channels.
-  // This uses the existing Chuppys vouch emoji.
   try {
     await message.react(CHUPPY_TY_EMOJI);
 
@@ -362,7 +554,10 @@ client.on(Events.MessageCreate, async message => {
 });
 
 client.on(Events.MessageDelete, message => {
-  if (!VOUCH_SOURCE_CHANNEL_IDS.includes(message.channel.id)) return;
+  if (!VOUCH_SOURCE_CHANNEL_IDS.includes(message.channel.id)) {
+    return;
+  }
+
   scheduleVouchCounterUpdate();
 });
 
@@ -371,7 +566,9 @@ client.on(Events.MessageBulkDelete, messages => {
     VOUCH_SOURCE_CHANNEL_IDS.includes(message.channel.id)
   );
 
-  if (affectsVouchChannel) scheduleVouchCounterUpdate();
+  if (affectsVouchChannel) {
+    scheduleVouchCounterUpdate();
+  }
 });
 
 // ==================================================
@@ -380,7 +577,10 @@ client.on(Events.MessageBulkDelete, messages => {
 
 client.on(Events.GuildMemberAdd, async member => {
   try {
-    const channel = await member.guild.channels.fetch(WELCOME_CHANNEL_ID);
+    const channel = await member.guild.channels.fetch(
+      WELCOME_CHANNEL_ID
+    );
+
     if (!channel || !channel.isTextBased()) return;
 
     await member.roles.add(WELCOME_ROLE_ID).catch(error => {
@@ -398,7 +598,11 @@ client.on(Events.GuildMemberAdd, async member => {
       .setImage(WELCOME_IMAGE)
       .setFooter({ text: member.guild.name });
 
-    await channel.send({ content: `${member}`, embeds: [embed] });
+    await channel.send({
+      content: `${member}`,
+      embeds: [embed]
+    });
+
     console.log(`[WELCOME] Sent for ${member.user.tag}`);
   } catch (error) {
     console.error("[WELCOME] Error:", error);
@@ -411,7 +615,10 @@ client.on(Events.GuildMemberAdd, async member => {
 
 client.on(Events.GuildMemberRemove, async member => {
   try {
-    const channel = await member.guild.channels.fetch(GOODBYE_CHANNEL_ID);
+    const channel = await member.guild.channels.fetch(
+      GOODBYE_CHANNEL_ID
+    );
+
     if (!channel || !channel.isTextBased()) return;
 
     const embed = new EmbedBuilder()
@@ -425,6 +632,7 @@ client.on(Events.GuildMemberRemove, async member => {
       .setFooter({ text: member.guild.name });
 
     await channel.send({ embeds: [embed] });
+
     console.log(`[GOODBYE] Sent for ${member.user.tag}`);
   } catch (error) {
     console.error("[GOODBYE] Error:", error);
@@ -461,13 +669,18 @@ async function sendPaymentEmbed(channel) {
       .setLabel("Cash App")
       .setStyle(ButtonStyle.Link)
       .setURL(CASHAPP_URL),
+
     new ButtonBuilder()
       .setLabel("PayPal")
       .setStyle(ButtonStyle.Link)
       .setURL(PAYPAL_URL)
   );
 
-  const payload = { embeds: [embed], components: [row] };
+  const payload = {
+    embeds: [embed],
+    components: [row]
+  };
+
   const messages = await channel.messages.fetch({ limit: 100 });
 
   const matches = messages.filter(msg =>
@@ -483,17 +696,23 @@ async function sendPaymentEmbed(channel) {
     for (const duplicate of matches.values()) {
       if (duplicate.id !== existing.id) {
         await duplicate.delete().catch(error => {
-          console.error("[PAYMENT] Could not delete duplicate:", error);
+          console.error(
+            "[PAYMENT] Could not delete duplicate:",
+            error
+          );
         });
       }
     }
 
     console.log("[PAYMENT] Existing message updated.");
+
     return existing;
   }
 
   const sent = await channel.send(payload);
+
   console.log("[PAYMENT] New message created.");
+
   return sent;
 }
 
@@ -516,8 +735,13 @@ async function updateServiceMessage(channel, embed, serviceName) {
 
       const description = msg.embeds[0].description || "";
 
-      if (serviceName === "DECOR") return description.includes("# DECOR");
-      if (serviceName === "NITRO") return description.includes("# NITRO");
+      if (serviceName === "DECOR") {
+        return description.includes("# DECOR");
+      }
+
+      if (serviceName === "NITRO") {
+        return description.includes("# NITRO");
+      }
 
       if (serviceName === "BOOSTIES") {
         return (
@@ -532,7 +756,11 @@ async function updateServiceMessage(channel, embed, serviceName) {
     const existing = matching.first();
 
     if (existing) {
-      await existing.edit({ content: "", embeds: [embed], components: [] });
+      await existing.edit({
+        content: "",
+        embeds: [embed],
+        components: []
+      });
 
       for (const duplicate of matching.values()) {
         if (duplicate.id !== existing.id) {
@@ -541,11 +769,14 @@ async function updateServiceMessage(channel, embed, serviceName) {
       }
 
       console.log(`[${serviceName}] Message updated.`);
+
       return existing;
     }
 
     const sent = await channel.send({ embeds: [embed] });
+
     console.log(`[${serviceName}] Message created.`);
+
     return sent;
   } catch (error) {
     console.error(`[${serviceName}] Update error:`, error);
@@ -771,11 +1002,13 @@ async function handleAFK(message) {
     });
 
     console.log(`[AFK] ${message.author.tag}: ${reason}`);
+
     return true;
   }
 
   if (afkUsers.has(afkKey)) {
     const oldAFK = afkUsers.get(afkKey);
+
     afkUsers.delete(afkKey);
 
     await message.channel.send({
@@ -786,7 +1019,8 @@ async function handleAFK(message) {
     });
 
     console.log(
-      `[AFK] ${message.author.tag} returned. Previous reason: ${oldAFK.reason}`
+      `[AFK] ${message.author.tag} returned. ` +
+      `Previous reason: ${oldAFK.reason}`
     );
   }
 
@@ -799,6 +1033,7 @@ async function handleAFK(message) {
     const afkData = afkUsers.get(mentionedAFKKey);
 
     if (!afkData || notifiedUsers.has(mentionedUserId)) continue;
+
     notifiedUsers.add(mentionedUserId);
 
     await message.channel.send({
@@ -825,7 +1060,6 @@ client.on(Events.MessageCreate, async message => {
   try {
     // ==================================================
     // AUTOMATIC HI REPLY
-    // Handles hi, hiiii, hey, heyyyy, hello, etc.
     // ==================================================
 
     if (/^(hi+|hey+|hello+|heya+)[!.?,\s]*$/i.test(rawContent)) {
@@ -833,11 +1067,50 @@ client.on(Events.MessageCreate, async message => {
         content: `Hi ! ${AFK_RETURN_EMOJI}`,
         allowedMentions: { repliedUser: false }
       });
+
       return;
     }
 
+    // ==================================================
+    // AFK COMMANDS
+    // ==================================================
+
     const wasAFKCommand = await handleAFK(message);
+
     if (wasAFKCommand) return;
+
+    // ==================================================
+    // VOUCH TUTORIAL COMMAND — !vouchtut
+    // Posts the tutorial in the designated channel.
+    // ==================================================
+
+    if (content === "!vouchtut") {
+      // Restrict the command to Manage Server members.
+      if (
+        !message.member.permissions.has(
+          PermissionsBitField.Flags.ManageGuild
+        )
+      ) {
+        await message.reply({
+          content:
+            "You need **Manage Server** permission to post the vouch tutorial.",
+          allowedMentions: { repliedUser: false }
+        });
+
+        return;
+      }
+
+      await sendVouchTutorial(message.guild);
+
+      await message.reply({
+        content:
+          "The vouch tutorial was posted successfully in " +
+          `<#${VOUCH_TUTORIAL_CHANNEL_ID}>!`,
+        allowedMentions: { repliedUser: false }
+      });
+
+      return;
+    }
 
     // ==================================================
     // CHUPPYS ROLE COMMAND — ,r @user c
@@ -850,6 +1123,7 @@ client.on(Events.MessageCreate, async message => {
           content: "Only Ticket Support can use this command.",
           allowedMentions: { repliedUser: false }
         });
+
         return;
       }
 
@@ -862,6 +1136,7 @@ client.on(Events.MessageCreate, async message => {
           content: "Usage: `,r @user c`",
           allowedMentions: { repliedUser: false }
         });
+
         return;
       }
 
@@ -876,14 +1151,17 @@ client.on(Events.MessageCreate, async message => {
           content: "I couldn't find that member in this server.",
           allowedMentions: { repliedUser: false }
         });
+
         return;
       }
 
       if (target.roles.cache.has(CHUPPYS_ROLE_ID)) {
         await message.reply({
-          content: `${target.user.username} already has the Chuppys role.`,
+          content:
+            `${target.user.username} already has the Chuppys role.`,
           allowedMentions: { parse: [] }
         });
+
         return;
       }
 
@@ -910,7 +1188,8 @@ client.on(Events.MessageCreate, async message => {
       });
 
       console.log(
-        `[CHUPPYS ROLE] ${message.author.tag} gave the Chuppys role to ${target.user.tag}`
+        `[CHUPPYS ROLE] ${message.author.tag} gave the Chuppys role ` +
+        `to ${target.user.tag}`
       );
 
       return;
@@ -921,19 +1200,28 @@ client.on(Events.MessageCreate, async message => {
     // ==================================================
 
     if (content === "!robuxcashout") {
-      if (!message.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+      if (
+        !message.member.permissions.has(
+          PermissionsBitField.Flags.ManageGuild
+        )
+      ) {
         await message.reply(
           "You need **Manage Server** permission to use this command."
         );
+
         return;
       }
 
-      const channel = await client.channels.fetch(ROBUX_CASHOUT_CHANNEL_ID);
+      const channel = await client.channels.fetch(
+        ROBUX_CASHOUT_CHANNEL_ID
+      );
+
       await sendRobuxCashoutEmbed(channel);
 
       await message.reply(
         "Robux Cash Out message sent or updated successfully!"
       );
+
       return;
     }
 
@@ -959,10 +1247,15 @@ client.on(Events.MessageCreate, async message => {
     ];
 
     if (adminCommands.includes(content)) {
-      if (!message.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+      if (
+        !message.member.permissions.has(
+          PermissionsBitField.Flags.ManageGuild
+        )
+      ) {
         await message.reply(
           "You need **Manage Server** permission to use this command."
         );
+
         return;
       }
     }
@@ -972,9 +1265,14 @@ client.on(Events.MessageCreate, async message => {
     // ==================================================
 
     if (["!nitro", ",nitro"].includes(content)) {
-      const channel = await client.channels.fetch(NITRO_CHANNEL_ID);
+      const channel = await client.channels.fetch(
+        NITRO_CHANNEL_ID
+      );
+
       await sendNitroServices(channel);
+
       await message.reply("Nitro message updated successfully.");
+
       return;
     }
 
@@ -983,9 +1281,14 @@ client.on(Events.MessageCreate, async message => {
     // ==================================================
 
     if (["!decor", ",decor"].includes(content)) {
-      const channel = await client.channels.fetch(DECOR_CHANNEL_ID);
+      const channel = await client.channels.fetch(
+        DECOR_CHANNEL_ID
+      );
+
       await sendDecorServices(channel);
+
       await message.reply("Decor message updated successfully.");
+
       return;
     }
 
@@ -994,9 +1297,14 @@ client.on(Events.MessageCreate, async message => {
     // ==================================================
 
     if (["!boosties", ",boosties"].includes(content)) {
-      const channel = await client.channels.fetch(BOOSTIES_CHANNEL_ID);
+      const channel = await client.channels.fetch(
+        BOOSTIES_CHANNEL_ID
+      );
+
       await sendBoostiesServices(channel);
+
       await message.reply("Boosties message updated successfully.");
+
       return;
     }
 
@@ -1013,6 +1321,7 @@ client.on(Events.MessageCreate, async message => {
       );
 
       await message.reply("The sellers message was sent!");
+
       return;
     }
 
@@ -1029,6 +1338,7 @@ client.on(Events.MessageCreate, async message => {
       );
 
       await message.reply("The staff message was sent!");
+
       return;
     }
 
@@ -1037,7 +1347,9 @@ client.on(Events.MessageCreate, async message => {
     // ==================================================
 
     if (content === "!testwelcome") {
-      const channel = await client.channels.fetch(WELCOME_CHANNEL_ID);
+      const channel = await client.channels.fetch(
+        WELCOME_CHANNEL_ID
+      );
 
       if (!channel || !channel.isTextBased()) {
         await message.reply("Welcome channel not found.");
@@ -1055,7 +1367,11 @@ client.on(Events.MessageCreate, async message => {
         .setImage(WELCOME_IMAGE)
         .setFooter({ text: message.guild.name });
 
-      await channel.send({ content: `${message.author}`, embeds: [embed] });
+      await channel.send({
+        content: `${message.author}`,
+        embeds: [embed]
+      });
+
       return;
     }
 
@@ -1064,7 +1380,9 @@ client.on(Events.MessageCreate, async message => {
     // ==================================================
 
     if (content === "!testgoodbye") {
-      const channel = await client.channels.fetch(GOODBYE_CHANNEL_ID);
+      const channel = await client.channels.fetch(
+        GOODBYE_CHANNEL_ID
+      );
 
       if (!channel || !channel.isTextBased()) {
         await message.reply("Goodbye channel not found.");
@@ -1074,7 +1392,8 @@ client.on(Events.MessageCreate, async message => {
       const embed = new EmbedBuilder()
         .setTitle(`Goodbye ${AFK_GOING_EMOJI}`)
         .setDescription(
-          `**${message.author.username}** has left **${message.guild.name}**.\n\n` +
+          `**${message.author.username}** has left ` +
+          `**${message.guild.name}**.\n\n` +
           "We hope to see you again!"
         )
         .setColor("#FFFFFF")
@@ -1082,14 +1401,16 @@ client.on(Events.MessageCreate, async message => {
         .setFooter({ text: message.guild.name });
 
       await channel.send({ embeds: [embed] });
+
       return;
     }
   } catch (error) {
     console.error("[MESSAGE COMMAND] Error:", error);
 
-    await message.reply(
-      `Something went wrong: ${error.message}`
-    ).catch(() => {});
+    await message.reply({
+      content: `Something went wrong: ${error.message}`,
+      allowedMentions: { repliedUser: false }
+    }).catch(() => {});
   }
 });
 
@@ -1099,6 +1420,7 @@ client.on(Events.MessageCreate, async message => {
 
 client.on(Events.MessageCreate, async message => {
   if (!message.guild) return;
+
   if (message.channel.id !== INVITE_CHANNEL_ID) return;
   if (message.author.id !== INVITE_BOT_ID) return;
 
@@ -1140,6 +1462,7 @@ if (!TOKEN) {
   console.error(
     "[STARTUP] DISCORD_BOT_TOKEN is missing from Render environment variables."
   );
+
   process.exit(1);
 }
 
@@ -1147,6 +1470,7 @@ if (!GUILD_ID) {
   console.error(
     "[STARTUP] DISCORD_GUILD_ID is missing from Render environment variables."
   );
+
   process.exit(1);
 }
 
