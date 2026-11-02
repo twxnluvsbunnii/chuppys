@@ -67,6 +67,11 @@ const SELLERS = [
     id: "1269188505935024141",
     name: "﹕𐔌・maya 〃・꒱",
     personal: false
+  },
+  {
+    id: "1328450205774909441",
+    name: "﹕𐔌・alex 〃・꒱",
+    personal: false
   }
 ];
 
@@ -178,7 +183,7 @@ async function submitVouch(interaction) {
       });
     }
 
-    // This is now the selected seller's actual ID.
+    // Get the selected seller's actual ID.
     const sellerId = interaction.options.getString("seller");
     const rating = interaction.options.getInteger("rating");
     const order = interaction.options.getString("order");
@@ -292,6 +297,7 @@ async function submitVouch(interaction) {
       `to channel ${channelId}`
     );
 
+    // Add the thank-you reaction.
     try {
       await vouchMessage.react(THANK_YOU_EMOJI);
     } catch (error) {
