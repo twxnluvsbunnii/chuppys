@@ -1,2 +1,2 @@
 # chuppys
-.gg/chuppys
+I love my twxn
