@@ -1,3 +1,4 @@
+
 const http = require("http");
 
 const {
@@ -50,6 +51,29 @@ const STAFF_CHANNEL_ID = "1561013244905132122";
 const ROBUX_CASHOUT_CHANNEL_ID = "1552385740405473513";
 const ROBUX_CASHOUT_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1561094713153429746.png";
+
+// ==================================================
+// RANKED ROLES SETTINGS
+// ==================================================
+
+const RANKED_ROLES_CHANNEL_ID = "1567178497917718568";
+
+const RANKED_ROLES_THUMBNAIL_URL =
+  "https://cdn.discordapp.com/emojis/1568404337154068618.png?size=128&quality=lossless";
+
+const RANKED_ROLE_IDS = [
+  "1550374791217680485",
+  "1562961485091573902",
+  "1550374678449754163",
+  "1561439464327483583",
+  "1550374524640436235",
+  "1550374377130827856",
+  "1550374079385575454",
+  "1550373983336144936",
+  "1550373843170889728",
+  "1550373695204360252",
+  "1550373612144304219"
+];
 
 // ==================================================
 // QUESTION COMMAND
@@ -147,6 +171,9 @@ const PAYMENT_EMOJI_ID = "1561388594625511514";
 const PAYMENT_EMOJI_URL =
   `https://cdn.discordapp.com/emojis/${PAYMENT_EMOJI_ID}.png`;
 
+// Used by the question embeds too.
+const QUESTION_EMOJI_URL = PAYMENT_EMOJI_URL;
+
 const SERVICE_EMOJI = "<a:aBouncyDiscord:1557138733717782599>";
 const BOOST_EMOJI = "<:white_nitro_boost:1557165507600326756>";
 const SELLER_EMOJI = "<:chuppyseller:1560283615445778503>";
@@ -190,8 +217,6 @@ require("./transactions")(client);
 
 // ==================================================
 // QUESTION COMMAND REGISTRATION
-// Registers /question without replacing /vouch or
-// other commands already registered by your bot.
 // ==================================================
 
 async function registerQuestionCommand() {
@@ -331,6 +356,51 @@ async function sendRobuxCashoutEmbed(channel) {
 
   const sent = await channel.send(payload);
   console.log("[ROBUX CASHOUT] New embed created.");
+  return sent;
+}
+
+// ==================================================
+// RANKED ROLES EMBED — !ranked
+// ==================================================
+
+function makeRankedRolesEmbed() {
+  const roleList = RANKED_ROLE_IDS
+    .map((roleId, index) => `**${index + 1}.** <@&${roleId}>`)
+    .join("\n\n");
+
+  return new EmbedBuilder()
+    .setTitle(".gg/chuppys ranked roles")
+    .setDescription(
+      roleList +
+      "\n\n-# .gg/chuppys"
+    )
+    .setColor("#FFFFFF")
+    .setThumbnail(RANKED_ROLES_THUMBNAIL_URL)
+    .setFooter({ text: ".gg/chuppys" });
+}
+
+async function sendRankedRoles(guild) {
+  const channel = await guild.channels.fetch(
+    RANKED_ROLES_CHANNEL_ID
+  );
+
+  if (!channel || !channel.isTextBased() || !channel.send) {
+    throw new Error("Ranked roles channel not found or invalid.");
+  }
+
+  const embed = makeRankedRolesEmbed();
+
+  const sent = await channel.send({
+    embeds: [embed],
+    allowedMentions: {
+      parse: []
+    }
+  });
+
+  console.log(
+    `[RANKED ROLES] Embed sent in ${channel.id}. Message: ${sent.id}`
+  );
+
   return sent;
 }
 
@@ -721,7 +791,6 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // Get the original question author from the embed footer.
       const originalEmbed = questionMessage.embeds[0];
       const footerText = originalEmbed?.footer?.text || "";
       const userIdMatch = footerText.match(/Question User ID:\s*(\d+)/);
@@ -1277,6 +1346,27 @@ client.on(Events.MessageCreate, async message => {
 
       await message.reply({
         content: "The vouch tutorial has been posted!",
+        allowedMentions: { repliedUser: false }
+      });
+      return;
+    }
+
+    // RANKED ROLES — Manage Server only
+    if (content === "!ranked") {
+      if (!message.member.permissions.has(
+        PermissionsBitField.Flags.ManageGuild
+      )) {
+        await message.reply({
+          content: "You need **Manage Server** permission to use this command.",
+          allowedMentions: { repliedUser: false }
+        });
+        return;
+      }
+
+      await sendRankedRoles(message.guild);
+
+      await message.reply({
+        content: "The ranked roles embed has been sent!",
         allowedMentions: { repliedUser: false }
       });
       return;
