@@ -1,4 +1,3 @@
-
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({
@@ -70,6 +69,10 @@ export default async function handler(req, res) {
       `please choose your roles below ♡`,
 
     color: 0xffffff,
+
+    thumbnail: {
+      url: "https://cdn.discordapp.com/emojis/1561034658311966761.png?size=128&quality=lossless"
+    },
 
     footer: {
       text: ".gg/chuppys"
@@ -206,4 +209,3 @@ export default async function handler(req, res) {
     });
   }
 }
-
