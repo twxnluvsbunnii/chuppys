@@ -40,7 +40,12 @@ export default async function handler(req, res) {
     giveaway: "1531104886630907925",
     stock: "1531105107586973696",
     cashout: "1551276593425682543",
-    flashsale: "1558913216602706011"
+    flashsale: "1558913216602706011",
+
+    partnership: "1568240267344093254",
+    adoptme: "1568240367076122634",
+    robux: "1568283533879939123",
+    mm2: "1568240484206514248"
   };
 
   // ==========================================
@@ -58,6 +63,10 @@ export default async function handler(req, res) {
       `<@&${roles.stock}>\n\n` +
       `<@&${roles.cashout}>\n\n` +
       `<@&${roles.flashsale}>\n\n` +
+      `<@&${roles.partnership}>\n\n` +
+      `<@&${roles.adoptme}>\n\n` +
+      `<@&${roles.robux}>\n\n` +
+      `<@&${roles.mm2}>\n\n` +
       `please choose your roles below ♡`,
 
     color: 0xffffff,
@@ -87,7 +96,7 @@ export default async function handler(req, res) {
             placeholder: "♡ choose your roles",
 
             min_values: 0,
-            max_values: 7,
+            max_values: 11,
 
             options: [
               {
@@ -117,6 +126,22 @@ export default async function handler(req, res) {
               {
                 label: "Flash Sale Ping",
                 value: roles.flashsale
+              },
+              {
+                label: "Partnership Ping",
+                value: roles.partnership
+              },
+              {
+                label: "Adopt Me Ping",
+                value: roles.adoptme
+              },
+              {
+                label: "Robux Ping",
+                value: roles.robux
+              },
+              {
+                label: "MM2 Ping",
+                value: roles.mm2
               }
             ]
           }
@@ -181,3 +206,4 @@ export default async function handler(req, res) {
     });
   }
 }
+
