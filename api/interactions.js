@@ -1,3 +1,4 @@
+
 import crypto from "crypto";
 import { waitUntil } from "@vercel/functions";
 
@@ -306,17 +307,46 @@ async function changeRoles(interaction, group) {
     );
   }
 
-  const values = interaction.data.values;
+  const values = interaction.data.values || [];
   const selectedRoles = new Set(values);
 
+  // Validate selected roles
   for (const roleId of selectedRoles) {
     if (!group.roles.includes(roleId)) {
       throw new Error(`Unexpected role ID: ${roleId}`);
     }
   }
 
+  // GET THE MEMBER'S CURRENT ROLES
+  const memberResult = await discordFetch(
+    `https://discord.com/api/v10/guilds/${guildId}/members/${userId}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bot ${botToken}`
+      }
+    }
+  );
+
+  if (!memberResult.ok) {
+    throw new Error(
+      `Could not retrieve member roles: HTTP ${memberResult.status} ` +
+      JSON.stringify(memberResult.data)
+    );
+  }
+
+  const currentRoles = new Set(
+    memberResult.data.roles || []
+  );
+
+  // ONLY CHANGE ROLES THAT NEED UPDATING
   for (const roleId of group.roles) {
     const shouldHaveRole = selectedRoles.has(roleId);
+    const currentlyHasRole = currentRoles.has(roleId);
+
+    if (shouldHaveRole === currentlyHasRole) {
+      continue;
+    }
 
     const url =
       `https://discord.com/api/v10/guilds/${guildId}` +
@@ -343,6 +373,10 @@ async function changeRoles(interaction, group) {
 
     console.log(`[ROLE DEBUG] Role ${roleId} updated.`);
   }
+
+  console.log(
+    `[ROLE DEBUG] Successfully synchronized ${interaction.data.custom_id}.`
+  );
 }
 
 async function processRoleInteraction(interaction, group) {
