@@ -58,6 +58,8 @@ function getVouchChannelId(sellerId) {
 // ==================================================
 
 const ROLE_GROUPS = {
+
+  // PINGS AND SELF ROLES
   chuppys_self_roles: {
     roles: [
       "1531039846871728248",
@@ -66,27 +68,41 @@ const ROLE_GROUPS = {
       "1531104886630907925",
       "1531105107586973696",
       "1551276593425682543",
-      "1558913216602706011"
+      "1558913216602706011",
+
+      // NEW PING ROLES
+      "1568240267344093254", // Partnership Ping
+      "1568240367076122634", // Adopt Me Ping
+      "1568283533879939123", // Robux Ping
+      "1568240484206514248"  // MM2 Ping
     ],
-    success: "﹕𐔌・your roles have been updated〃・꒱ 🤍"
+
+    success:
+      "﹕𐔌・your roles have been updated〃・꒱ 🤍"
   },
 
+  // AGE ROLES
   chuppys_second_roles: {
     roles: [
       "1531084465126772877",
       "1531084550849954003",
       "1531084611399188640"
     ],
-    success: "﹕𐔌・your age roles have been updated〃・꒱ 🤍"
+
+    success:
+      "﹕𐔌・your age roles have been updated〃・꒱ 🤍"
   },
 
+  // PRONOUN ROLES
   chuppys_pronoun_roles: {
     roles: [
       "1531084942241697854",
       "1531086100867842190",
       "1531101006451048448"
     ],
-    success: "﹕𐔌・your pronouns have been updated〃・꒱ 🤍"
+
+    success:
+      "﹕𐔌・your pronouns have been updated〃・꒱ 🤍"
   }
 };
 
@@ -253,14 +269,12 @@ function hasStaffPermission(interaction) {
     return false;
   }
 
-  // Ticket Support role.
   const roles = member.roles || [];
 
   if (roles.includes(TICKET_SUPPORT_ROLE_ID)) {
     return true;
   }
 
-  // Discord permissions are represented as a bitfield string.
   const permissions = BigInt(member.permissions || "0");
 
   const ADMINISTRATOR = 8n;
@@ -495,7 +509,6 @@ async function processVouchInteraction(interaction) {
       timestamp: new Date().toISOString()
     };
 
-    // Route based on seller ID.
     const targetChannelId = getVouchChannelId(sellerId);
 
     const isPersonalVouch =
@@ -668,7 +681,6 @@ async function processQuestionInteraction(interaction) {
       };
     }
 
-    // No emojis on either button.
     const components = [
       {
         type: 1,
@@ -896,7 +908,6 @@ async function processQuestionReply(interaction) {
       throw new Error("Could not identify the staff member.");
     }
 
-    // Create a DM channel with the member who asked.
     const dmResult = await discordFetch(
       "https://discord.com/api/v10/users/@me/channels",
       {
@@ -940,7 +951,6 @@ async function processQuestionReply(interaction) {
       timestamp: new Date().toISOString()
     };
 
-    // Send the staff response privately.
     const dmMessage = await discordFetch(
       `https://discord.com/api/v10/channels/${dmChannelId}/messages`,
       {
@@ -967,7 +977,6 @@ async function processQuestionReply(interaction) {
       );
     }
 
-    // Notify the question channel that staff replied privately.
     const notice = await discordFetch(
       `https://discord.com/api/v10/channels/${QUESTION_CHANNEL_ID}/messages`,
       {
