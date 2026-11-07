@@ -200,7 +200,7 @@ let vouchCounterTimer = null;
 let vouchCounterUpdateRunning = false;
 let vouchCounterRecountRequested = false;
 
-// Prevent overlapping ,seller commands in the same channel.
+// Prevent simultaneous ,seller executions in the same channel.
 const sellerCommandLocks = new Set();
 
 // ==================================================
@@ -1408,6 +1408,8 @@ client.on(Events.MessageCreate, async message => {
         return;
       }
 
+      // ,r @user c — GIVE CHUPPYS ROLE
+
       if (action === "c") {
         if (target.roles.cache.has(CHUPPYS_ROLE_ID)) {
           await message.reply({
@@ -1439,6 +1441,8 @@ client.on(Events.MessageCreate, async message => {
 
         return;
       }
+
+      // ,r @user r — VOUCH REMINDER
 
       if (action === "r") {
         const embed = new EmbedBuilder()
@@ -1509,8 +1513,7 @@ client.on(Events.MessageCreate, async message => {
         )
       );
 
-      // Keep the oldest/top partnership message.
-      const existing = matching.last();
+      const existing = matching.first();
 
       const payload = {
         embeds: [partnerEmbed],
@@ -1536,14 +1539,17 @@ client.on(Events.MessageCreate, async message => {
 
     // ==================================================
     // ,seller — SELLER APPLICATION
-    // KEEP ONLY THE FIRST/TOP MESSAGE
+    // ONE MESSAGE ONLY — LOCKED PER CHANNEL
     // ==================================================
 
     if (content === ",seller") {
       const channelId = message.channel.id;
 
-      // Ignore another ,seller request while this channel is processing one.
+      // Ignore another ,seller execution while this one is processing.
       if (sellerCommandLocks.has(channelId)) {
+        console.log(
+          `[SELLER] Ignored simultaneous command in channel ${channelId}.`
+        );
         return;
       }
 
@@ -1570,6 +1576,7 @@ client.on(Events.MessageCreate, async message => {
           .setColor("#FFFFFF")
           .setFooter({ text: ".gg/chuppys" });
 
+        // Fetch recent messages and look for the existing seller embed.
         const messages = await message.channel.messages.fetch({
           limit: 100
         });
@@ -1583,10 +1590,7 @@ client.on(Events.MessageCreate, async message => {
           )
         );
 
-        // IMPORTANT:
-        // Discord returns messages newest-first.
-        // .last() selects the oldest message, which is the top/first one.
-        const existing = matching.last();
+        const existing = matching.first();
 
         const payload = {
           embeds: [sellerEmbed],
@@ -1598,33 +1602,34 @@ client.on(Events.MessageCreate, async message => {
         };
 
         if (existing) {
-          // Edit the original top message instead of sending another.
+          // Edit the existing embed instead of sending a new one.
           await existing.edit(payload);
 
-          // Remove every other seller embed found in the channel.
+          // Delete any additional seller embeds found.
           for (const duplicate of matching.values()) {
             if (duplicate.id !== existing.id) {
               await duplicate.delete().catch(error => {
                 console.error(
                   "[SELLER] Could not delete duplicate:",
-                  error.message
+                  error
                 );
               });
             }
           }
 
           console.log(
-            `[SELLER] Updated original seller message ${existing.id}.`
+            `[SELLER] Updated existing seller embed in ${channelId}.`
           );
         } else {
-          // Only send a new message if there isn't already one.
-          const sent = await message.channel.send(payload);
+          // Only send a new embed if none already exists.
+          await message.channel.send(payload);
 
           console.log(
-            `[SELLER] Created seller message ${sent.id}.`
+            `[SELLER] Created seller embed in ${channelId}.`
           );
         }
       } finally {
+        // Always release the lock, including when an error occurs.
         sellerCommandLocks.delete(channelId);
       }
 
