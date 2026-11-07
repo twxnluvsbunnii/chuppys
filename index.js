@@ -115,7 +115,6 @@ const VOUCH_TUTORIAL_CHANNEL_ID = "1562958688896028802";
 const QUICK_VOUCH_CHANNEL_ID = "1552903786077360269";
 
 const PARTNER_AD_CHANNEL_ID = "1552387259276329110";
-const PARTNER_POST_CHANNEL_ID = "1552387314049618041";
 
 const CHUPPYS_WELCOME_EMOJI =
   "<:chuppys:1560284517955141653>";
@@ -676,6 +675,8 @@ client.on(Events.InteractionCreate, async interaction => {
       return;
     }
 
+    // MAKE A SUPPORT TICKET BUTTON
+
     if (
       interaction.isButton() &&
       interaction.customId === "question_ticket"
@@ -699,6 +700,8 @@ client.on(Events.InteractionCreate, async interaction => {
 
       return;
     }
+
+    // REPLY TO QUESTION BUTTON
 
     if (
       interaction.isButton() &&
@@ -734,6 +737,8 @@ client.on(Events.InteractionCreate, async interaction => {
       await interaction.showModal(replyModal);
       return;
     }
+
+    // REPLY MODAL SUBMISSION
 
     if (
       interaction.isModalSubmit() &&
@@ -1183,31 +1188,6 @@ function makeSellersEmbed() {
 }
 
 // ==================================================
-// NEW SELLER INFORMATION — ,seller
-// ==================================================
-
-function makeSellerInfoEmbed() {
-  return new EmbedBuilder()
-    .setTitle("Interested in selling at .gg/chuppys")
-    .setDescription(
-      "**Permanent fees**\n\n" +
-      "$10 - permanent fee with no personal commands\n\n" +
-      "$15 - permanent fee with personal commands\n\n" +
-      "Personal commands are ones we can create for you or insert your code " +
-      "that allows you to use your personal payment command, ps command, etc.\n\n" +
-      "Your limit is defined primarily based on how many personal vouches " +
-      "you have. If you have a server with multiple sellers, the vouches " +
-      "they received in your server do not increase your limit. However, " +
-      "after your limit is determined, every 2 vouches gained in " +
-      ".gg/chuppys increases your limit by $5.\n\n" +
-      "If you agree and understand all of this, please ping " +
-      `<@&${TICKET_SUPPORT_ROLE_ID}> to assist you further. Thank you!`
-    )
-    .setColor("#FFFFFF")
-    .setFooter({ text: ".gg/chuppys" });
-}
-
-// ==================================================
 // STAFF
 // ==================================================
 
@@ -1475,10 +1455,10 @@ client.on(Events.MessageCreate, async message => {
             `${CHUPPYS_WELCOME_EMOJI}\n\n` +
             `Please check out <#${VOUCH_TUTORIAL_CHANNEL_ID}> to learn ` +
             `how to leave a vouch using the **/vouch** command.\n\n` +
-            `Please also stop by <#${QUICK_VOUCH_CHANNEL_ID}> ` +
-            `to leave your quick vouch!\n\n` +
-            "**Please note not vouching sellers within the 2 day grace period will " +
-            "result in you being black listed in this server.**"
+            `And don't forget to stop by <#${QUICK_VOUCH_CHANNEL_ID}> ` +
+            `for a quick vouch as well!\n\n` +
+            `Not vouching sellers within the 2 day grace period will ` +
+            `result in you being black listed in this server.`
           )
           .setColor("#FFFFFF")
           .setFooter({ text: ".gg/chuppys" });
@@ -1497,7 +1477,7 @@ client.on(Events.MessageCreate, async message => {
 
     // ==================================================
     // ,partner — PARTNERSHIP INSTRUCTIONS
-    // TICKET SUPPORT ONLY
+    // TICKET SUPPORT ONLY — ONE MESSAGE ONLY
     // ==================================================
 
     if (content === ",partner") {
@@ -1511,41 +1491,114 @@ client.on(Events.MessageCreate, async message => {
 
       const partnerEmbed = new EmbedBuilder()
         .setDescription(
-          "**.gg/chuppys partnership**\n\n" +
-          "Please make sure all questions from the .gg/chuppys ticket bot " +
-          "are answered !! If not please answer them now !!\n\n" +
-          "**1. How many vouches ? Please show us proof !**\n\n" +
-          "**2. How many server members ?**\n\n" +
-          `After these questions are answered, please copy and paste your ` +
-          `server ad in this partnership ticket. Staff will post it shortly ` +
-          `in <#${PARTNER_POST_CHANNEL_ID}>.\n\n` +
-          `Go to <#${PARTNER_AD_CHANNEL_ID}> to copy and paste Chuppys' ad. ` +
-          `Once this is done, send a screenshot for proof.\n\n` +
-          `Thank you for partnering with **.gg/chuppys**! ` +
+          `**.gg/chuppys partnership**\n\n` +
+          `Please make sure all questions from the .gg/chuppys ` +
+          `ticket bot are answered !! If not please answer them now !!\n\n` +
+          `1.  **How many vouches ? Please show us proof !**\n\n\n` +
+          `2.  **How many server members ?**\n\n\n` +
+          `After these questions are answered, please copy and paste ` +
+          `your server ad in this partnership ticket. Staff will post ` +
+          `it shortly in <#1552387314049618041>.\n\n` +
+          `Go to <#${PARTNER_AD_CHANNEL_ID}> to copy and paste ` +
+          `Chuppys' ad. Once this is done, send a screenshot for proof.\n\n` +
+          `Thank you for partnering with **.gg/chuppys!** ` +
           `${CHUPPYS_WELCOME_EMOJI}`
         )
         .setColor("#FFFFFF")
         .setFooter({ text: ".gg/chuppys" });
 
-      await message.channel.send({
+      const messages = await message.channel.messages.fetch({ limit: 100 });
+
+      const matching = messages.filter(msg =>
+        msg.author.id === client.user.id &&
+        msg.embeds.some(embed =>
+          (embed.description || "").includes(".gg/chuppys partnership")
+        )
+      );
+
+      const existing = matching.first();
+
+      const payload = {
         embeds: [partnerEmbed],
+        content: "",
+        components: [],
         allowedMentions: { parse: [] }
-      });
+      };
+
+      if (existing) {
+        await existing.edit(payload);
+
+        for (const duplicate of matching.values()) {
+          if (duplicate.id !== existing.id) {
+            await duplicate.delete().catch(() => {});
+          }
+        }
+      } else {
+        await message.channel.send(payload);
+      }
 
       return;
     }
 
     // ==================================================
-    // ,seller — SELLER APPLICATION INFORMATION
+    // ,seller — SELLER APPLICATION
+    // ONE MESSAGE ONLY
     // ==================================================
 
     if (content === ",seller") {
-      await message.channel.send({
-        embeds: [makeSellerInfoEmbed()],
+      const sellerEmbed = new EmbedBuilder()
+        .setDescription(
+          `**Interested in selling at .gg/chuppys**\n\n` +
+          `**Permanent fees**\n\n` +
+          `$10 - permanent fee with no personal commands\n\n` +
+          `$15 - permanent fee with personal commands\n\n` +
+          `Personal commands are ones we can create for you or insert ` +
+          `your code that allows you to use your personal payment command, ` +
+          `ps command, etc.\n\n` +
+          `Your limit is defined primarily based on how many personal ` +
+          `vouches you have. If you have a server with multiple sellers, ` +
+          `the vouches they received in your server do not increase your ` +
+          `limit. However, after your limit is determined, every 2 vouches ` +
+          `gained in .gg/chuppys increases your limit by $5.\n\n` +
+          `If you agree and understand all of this, please ping ` +
+          `<@&${TICKET_SUPPORT_ROLE_ID}> to assist you further. Thank you!`
+        )
+        .setColor("#FFFFFF")
+        .setFooter({ text: ".gg/chuppys" });
+
+      const messages = await message.channel.messages.fetch({ limit: 100 });
+
+      const matching = messages.filter(msg =>
+        msg.author.id === client.user.id &&
+        msg.embeds.some(embed =>
+          (embed.description || "").includes(
+            "Interested in selling at .gg/chuppys"
+          )
+        )
+      );
+
+      const existing = matching.first();
+
+      const payload = {
+        embeds: [sellerEmbed],
+        content: "",
+        components: [],
         allowedMentions: {
           roles: [TICKET_SUPPORT_ROLE_ID]
         }
-      });
+      };
+
+      if (existing) {
+        await existing.edit(payload);
+
+        for (const duplicate of matching.values()) {
+          if (duplicate.id !== existing.id) {
+            await duplicate.delete().catch(() => {});
+          }
+        }
+      } else {
+        await message.channel.send(payload);
+      }
 
       return;
     }
