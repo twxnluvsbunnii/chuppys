@@ -200,6 +200,9 @@ let vouchCounterTimer = null;
 let vouchCounterUpdateRunning = false;
 let vouchCounterRecountRequested = false;
 
+// Prevent overlapping ,seller commands in the same channel.
+const sellerCommandLocks = new Set();
+
 // ==================================================
 // DISCORD CLIENT
 // ==================================================
@@ -675,8 +678,6 @@ client.on(Events.InteractionCreate, async interaction => {
       return;
     }
 
-    // MAKE A SUPPORT TICKET BUTTON
-
     if (
       interaction.isButton() &&
       interaction.customId === "question_ticket"
@@ -700,8 +701,6 @@ client.on(Events.InteractionCreate, async interaction => {
 
       return;
     }
-
-    // REPLY TO QUESTION BUTTON
 
     if (
       interaction.isButton() &&
@@ -737,8 +736,6 @@ client.on(Events.InteractionCreate, async interaction => {
       await interaction.showModal(replyModal);
       return;
     }
-
-    // REPLY MODAL SUBMISSION
 
     if (
       interaction.isModalSubmit() &&
@@ -1411,8 +1408,6 @@ client.on(Events.MessageCreate, async message => {
         return;
       }
 
-      // ,r @user c — GIVE CHUPPYS ROLE
-
       if (action === "c") {
         if (target.roles.cache.has(CHUPPYS_ROLE_ID)) {
           await message.reply({
@@ -1444,8 +1439,6 @@ client.on(Events.MessageCreate, async message => {
 
         return;
       }
-
-      // ,r @user r — VOUCH REMINDER
 
       if (action === "r") {
         const embed = new EmbedBuilder()
@@ -1516,7 +1509,8 @@ client.on(Events.MessageCreate, async message => {
         )
       );
 
-      const existing = matching.first();
+      // Keep the oldest/top partnership message.
+      const existing = matching.last();
 
       const payload = {
         embeds: [partnerEmbed],
@@ -1542,62 +1536,96 @@ client.on(Events.MessageCreate, async message => {
 
     // ==================================================
     // ,seller — SELLER APPLICATION
-    // ONE MESSAGE ONLY
+    // KEEP ONLY THE FIRST/TOP MESSAGE
     // ==================================================
 
     if (content === ",seller") {
-      const sellerEmbed = new EmbedBuilder()
-        .setDescription(
-          `**Interested in selling at .gg/chuppys**\n\n` +
-          `**Permanent fees**\n\n` +
-          `$10 - permanent fee with no personal commands\n\n` +
-          `$15 - permanent fee with personal commands\n\n` +
-          `Personal commands are ones we can create for you or insert ` +
-          `your code that allows you to use your personal payment command, ` +
-          `ps command, etc.\n\n` +
-          `Your limit is defined primarily based on how many personal ` +
-          `vouches you have. If you have a server with multiple sellers, ` +
-          `the vouches they received in your server do not increase your ` +
-          `limit. However, after your limit is determined, every 2 vouches ` +
-          `gained in .gg/chuppys increases your limit by $5.\n\n` +
-          `If you agree and understand all of this, please ping ` +
-          `<@&${TICKET_SUPPORT_ROLE_ID}> to assist you further. Thank you!`
-        )
-        .setColor("#FFFFFF")
-        .setFooter({ text: ".gg/chuppys" });
+      const channelId = message.channel.id;
 
-      const messages = await message.channel.messages.fetch({ limit: 100 });
+      // Ignore another ,seller request while this channel is processing one.
+      if (sellerCommandLocks.has(channelId)) {
+        return;
+      }
 
-      const matching = messages.filter(msg =>
-        msg.author.id === client.user.id &&
-        msg.embeds.some(embed =>
-          (embed.description || "").includes(
-            "Interested in selling at .gg/chuppys"
+      sellerCommandLocks.add(channelId);
+
+      try {
+        const sellerEmbed = new EmbedBuilder()
+          .setDescription(
+            `**Interested in selling at .gg/chuppys**\n\n` +
+            `**Permanent fees**\n\n` +
+            `$10 - permanent fee with no personal commands\n\n` +
+            `$15 - permanent fee with personal commands\n\n` +
+            `Personal commands are ones we can create for you or insert ` +
+            `your code that allows you to use your personal payment command, ` +
+            `ps command, etc.\n\n` +
+            `Your limit is defined primarily based on how many personal ` +
+            `vouches you have. If you have a server with multiple sellers, ` +
+            `the vouches they received in your server do not increase your ` +
+            `limit. However, after your limit is determined, every 2 vouches ` +
+            `gained in .gg/chuppys increases your limit by $5.\n\n` +
+            `If you agree and understand all of this, please ping ` +
+            `<@&${TICKET_SUPPORT_ROLE_ID}> to assist you further. Thank you!`
           )
-        )
-      );
+          .setColor("#FFFFFF")
+          .setFooter({ text: ".gg/chuppys" });
 
-      const existing = matching.first();
+        const messages = await message.channel.messages.fetch({
+          limit: 100
+        });
 
-      const payload = {
-        embeds: [sellerEmbed],
-        content: "",
-        components: [],
-        allowedMentions: {
-          roles: [TICKET_SUPPORT_ROLE_ID]
-        }
-      };
+        const matching = messages.filter(msg =>
+          msg.author.id === client.user.id &&
+          msg.embeds.some(embed =>
+            (embed.description || "").includes(
+              "Interested in selling at .gg/chuppys"
+            )
+          )
+        );
 
-      if (existing) {
-        await existing.edit(payload);
+        // IMPORTANT:
+        // Discord returns messages newest-first.
+        // .last() selects the oldest message, which is the top/first one.
+        const existing = matching.last();
 
-        for (const duplicate of matching.values()) {
-          if (duplicate.id !== existing.id) {
-            await duplicate.delete().catch(() => {});
+        const payload = {
+          embeds: [sellerEmbed],
+          content: "",
+          components: [],
+          allowedMentions: {
+            roles: [TICKET_SUPPORT_ROLE_ID]
           }
+        };
+
+        if (existing) {
+          // Edit the original top message instead of sending another.
+          await existing.edit(payload);
+
+          // Remove every other seller embed found in the channel.
+          for (const duplicate of matching.values()) {
+            if (duplicate.id !== existing.id) {
+              await duplicate.delete().catch(error => {
+                console.error(
+                  "[SELLER] Could not delete duplicate:",
+                  error.message
+                );
+              });
+            }
+          }
+
+          console.log(
+            `[SELLER] Updated original seller message ${existing.id}.`
+          );
+        } else {
+          // Only send a new message if there isn't already one.
+          const sent = await message.channel.send(payload);
+
+          console.log(
+            `[SELLER] Created seller message ${sent.id}.`
+          );
         }
-      } else {
-        await message.channel.send(payload);
+      } finally {
+        sellerCommandLocks.delete(channelId);
       }
 
       return;
