@@ -1477,7 +1477,7 @@ client.on(Events.MessageCreate, async message => {
             `how to leave a vouch using the **/vouch** command.\n\n` +
             `Please also stop by <#${QUICK_VOUCH_CHANNEL_ID}> ` +
             `to leave your quick vouch!\n\n` +
-            "**Not vouching sellers within the 2 day grace period will " +
+            "**Please note not vouching sellers within the 2 day grace period will " +
             "result in you being black listed in this server.**"
           )
           .setColor("#FFFFFF")
@@ -1512,7 +1512,7 @@ client.on(Events.MessageCreate, async message => {
       const partnerEmbed = new EmbedBuilder()
         .setDescription(
           "**.gg/chuppys partnership**\n\n" +
-          "Please make sure all question from the .gg/chuppys ticket bot " +
+          "Please make sure all questions from the .gg/chuppys ticket bot " +
           "are answered !! If not please answer them now !!\n\n" +
           "**1. How many vouches ? Please show us proof !**\n\n" +
           "**2. How many server members ?**\n\n" +
