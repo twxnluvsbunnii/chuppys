@@ -63,27 +63,22 @@ const VERIFY_THUMBNAIL_URL =
 
 const VERIFY_BUTTON_EMOJI_ID = "1561103471325745242";
 
-// Role granted after successful verification
 const CHUPPYS_ROLE_ID = "1550230619127021568";
 
-// Roles channel
 const ROLES_CHANNEL_ID = "1530808091380285592";
 
-// Required age roles — at least one
 const AGE_ROLE_IDS = [
   "1531084465126772877",
   "1531084550849954003",
   "1531084611399188640"
 ];
 
-// Required pronoun roles — at least one
 const PRONOUN_ROLE_IDS = [
   "1531084942241697854",
   "1531086100867842190",
   "1531101006451048448"
 ];
 
-// Required ping roles — at least two
 const PING_ROLE_IDS = [
   "1531039846871728248",
   "1568240267344093254",
@@ -97,6 +92,15 @@ const PING_ROLE_IDS = [
   "1568283533879939123",
   "1568240484206514248"
 ];
+
+// ==================================================
+// CLIENT ROLE SETTINGS
+// ==================================================
+
+const CLIENT_ROLE_ID = "1550373434301878282";
+const CLIENT_BUTTON_ID = "chuppys_client";
+const CLIENT_EMOJI_ID = "1569091548468219985";
+const CLIENT_EMOJI = "<:unis:1569091548468219985>";
 
 // ==================================================
 // RANKED ROLES SETTINGS
@@ -245,7 +249,6 @@ let vouchCounterTimer = null;
 let vouchCounterUpdateRunning = false;
 let vouchCounterRecountRequested = false;
 
-// Prevent simultaneous ,seller executions in the same channel.
 const sellerCommandLocks = new Set();
 
 // ==================================================
@@ -281,15 +284,13 @@ function makeVerificationEmbed() {
 }
 
 function makeVerificationButton() {
-  const row = new ActionRowBuilder().addComponents(
+  return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(VERIFY_BUTTON_ID)
       .setLabel("Verify")
       .setEmoji({ id: VERIFY_BUTTON_EMOJI_ID })
       .setStyle(ButtonStyle.Primary)
   );
-
-  return row;
 }
 
 async function sendOrUpdateVerificationMessage() {
@@ -323,10 +324,7 @@ async function sendOrUpdateVerificationMessage() {
       for (const duplicate of matching.values()) {
         if (duplicate.id !== existing.id) {
           await duplicate.delete().catch(error => {
-            console.error(
-              "[VERIFY] Could not delete duplicate:",
-              error
-            );
+            console.error("[VERIFY] Could not delete duplicate:", error);
           });
         }
       }
@@ -381,9 +379,7 @@ function checkVerificationRequirements(member) {
 
 async function registerQuestionCommand() {
   if (!TOKEN || !GUILD_ID || !client.user) {
-    console.error(
-      "[QUESTION] Missing token, guild ID, or logged-in bot."
-    );
+    console.error("[QUESTION] Missing token, guild ID, or logged-in bot.");
     return;
   }
 
@@ -462,6 +458,34 @@ function canReplyToQuestion(interaction) {
 
 function isTicketSupport(member) {
   return member.roles.cache.has(TICKET_SUPPORT_ROLE_ID);
+}
+
+// ==================================================
+// CLIENT ROLE EMBED + BUTTON
+// ==================================================
+
+function makeClientEmbed() {
+  return new EmbedBuilder()
+    .setDescription(
+      "Thank you for shopping at **.gg/chuppys**!\n\n" +
+      "Please click the button below for the client role " +
+      "to be able to successfully submit a vouch."
+    )
+    .setColor("#FFFFFF")
+    .setThumbnail(
+      `https://cdn.discordapp.com/emojis/${CLIENT_EMOJI_ID}.png`
+    )
+    .setFooter({ text: ".gg/chuppys" });
+}
+
+function makeClientButton() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(CLIENT_BUTTON_ID)
+      .setLabel("client")
+      .setEmoji({ id: CLIENT_EMOJI_ID })
+      .setStyle(ButtonStyle.Secondary)
+  );
 }
 
 // ==================================================
@@ -545,9 +569,7 @@ function makeRankedRolesEmbed() {
 }
 
 async function sendRankedRoles(guild) {
-  const channel = await guild.channels.fetch(
-    RANKED_ROLES_CHANNEL_ID
-  );
+  const channel = await guild.channels.fetch(RANKED_ROLES_CHANNEL_ID);
 
   if (!channel || !channel.isTextBased() || !channel.send) {
     throw new Error("Ranked roles channel not found or invalid.");
@@ -706,7 +728,7 @@ async function sendVouchTutorial(guild) {
     new EmbedBuilder()
       .setTitle("WHAT TO FILL IN")
       .setDescription(
-        "**Seller:** Select the seller who helped you.\n\n" +
+        "**Seller:** Select the seller you purchased from.\n\n" +
         "**Rating:** Give your honest rating of the transaction.\n\n" +
         "**Order:** Describe what you purchased or the service you received.\n\n" +
         "**Proof:** Provide the requested proof or screenshot if prompted.\n\n" +
@@ -745,7 +767,7 @@ async function sendVouchTutorial(guild) {
 }
 
 // ==================================================
-// BOT READY
+// CLIENT READY
 // ==================================================
 
 client.once(Events.ClientReady, async readyClient => {
@@ -764,7 +786,7 @@ client.once(Events.ClientReady, async readyClient => {
 });
 
 // ==================================================
-// QUESTION + VERIFICATION BUTTON INTERACTIONS
+// QUESTION + VERIFICATION + CLIENT INTERACTIONS
 // ==================================================
 
 client.on(Events.InteractionCreate, async interaction => {
@@ -830,6 +852,58 @@ client.on(Events.InteractionCreate, async interaction => {
       });
 
       console.log(`[VERIFY] ${member.user.tag} verified successfully.`);
+      return;
+    }
+
+    // ==================================================
+    // CLIENT ROLE BUTTON
+    // ==================================================
+
+    if (
+      interaction.isButton() &&
+      interaction.customId === CLIENT_BUTTON_ID
+    ) {
+      if (!interaction.guild) {
+        await interaction.reply({
+          content: "This button can only be used inside the server.",
+          ephemeral: true
+        });
+        return;
+      }
+
+      const member = await interaction.guild.members
+        .fetch(interaction.user.id)
+        .catch(() => null);
+
+      if (!member) {
+        await interaction.reply({
+          content: "I couldn't find your server membership.",
+          ephemeral: true
+        });
+        return;
+      }
+
+      if (member.roles.cache.has(CLIENT_ROLE_ID)) {
+        await interaction.reply({
+          content: "You already have the client role!",
+          ephemeral: true
+        });
+        return;
+      }
+
+      await member.roles.add(
+        CLIENT_ROLE_ID,
+        "Member claimed the Chuppys client role."
+      );
+
+      await interaction.reply({
+        content:
+          `${CLIENT_EMOJI} You've received the client role! ` +
+          "You can now submit your vouch.",
+        ephemeral: true
+      });
+
+      console.log(`[CLIENT] ${member.user.tag} received the client role.`);
       return;
     }
 
@@ -1612,6 +1686,51 @@ client.on(Events.MessageCreate, async message => {
     const wasAFKCommand = await handleAFK(message);
     if (wasAFKCommand) return;
 
+    // ==================================================
+    // CLIENT — SEND CLIENT ROLE MESSAGE
+    // ==================================================
+
+    if (content === ",client") {
+      const messages = await message.channel.messages.fetch({
+        limit: 100
+      });
+
+      const matching = messages.filter(msg =>
+        msg.author.id === client.user.id &&
+        msg.embeds.some(embed =>
+          (embed.description || "").includes(
+            "Please click the button below for the client role"
+          )
+        )
+      );
+
+      const existing = matching.first();
+
+      const payload = {
+        embeds: [makeClientEmbed()],
+        components: [makeClientButton()],
+        allowedMentions: { parse: [] }
+      };
+
+      if (existing) {
+        await existing.edit(payload);
+
+        for (const duplicate of matching.values()) {
+          if (duplicate.id !== existing.id) {
+            await duplicate.delete().catch(() => {});
+          }
+        }
+
+        console.log(`[CLIENT] Updated client role message in ${message.channel.id}.`);
+      } else {
+        await message.channel.send(payload);
+
+        console.log(`[CLIENT] Created client role message in ${message.channel.id}.`);
+      }
+
+      return;
+    }
+
     // VOUCH TUTORIAL — Manage Server only
 
     if (content === "!vouchtut") {
@@ -1697,8 +1816,6 @@ client.on(Events.MessageCreate, async message => {
         return;
       }
 
-      // ,r @user c — GIVE CHUPPYS ROLE
-
       if (action === "c") {
         if (target.roles.cache.has(CHUPPYS_ROLE_ID)) {
           await message.reply({
@@ -1731,8 +1848,6 @@ client.on(Events.MessageCreate, async message => {
         return;
       }
 
-      // ,r @user r — VOUCH REMINDER
-
       if (action === "r") {
         const embed = new EmbedBuilder()
           .setTitle("Reminder to Vouch!")
@@ -1752,9 +1867,7 @@ client.on(Events.MessageCreate, async message => {
         await message.channel.send({
           content: `${target}`,
           embeds: [embed],
-          allowedMentions: {
-            users: [target.id]
-          }
+          allowedMentions: { users: [target.id] }
         });
 
         return;
@@ -1866,10 +1979,7 @@ client.on(Events.MessageCreate, async message => {
         for (const duplicate of matching.values()) {
           if (duplicate.id !== existing.id) {
             await duplicate.delete().catch(error => {
-              console.error(
-                "[MOD] Could not delete duplicate:",
-                error
-              );
+              console.error("[MOD] Could not delete duplicate:", error);
             });
           }
         }
@@ -1956,10 +2066,7 @@ client.on(Events.MessageCreate, async message => {
           for (const duplicate of matching.values()) {
             if (duplicate.id !== existing.id) {
               await duplicate.delete().catch(error => {
-                console.error(
-                  "[SELLER] Could not delete duplicate:",
-                  error
-                );
+                console.error("[SELLER] Could not delete duplicate:", error);
               });
             }
           }
