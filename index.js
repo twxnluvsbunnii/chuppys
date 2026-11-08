@@ -153,6 +153,14 @@ const QUESTION_COMMAND = new SlashCommandBuilder()
   );
 
 // ==================================================
+// HELP COMMAND
+// ==================================================
+
+const HELP_COMMAND = new SlashCommandBuilder()
+  .setName("help")
+  .setDescription("View all Chuppys bot commands.");
+
+// ==================================================
 // CHUPPYS ROLE COMMANDS
 // ==================================================
 
@@ -375,16 +383,23 @@ function checkVerificationRequirements(member) {
 }
 
 // ==================================================
-// QUESTION COMMAND REGISTRATION
+// SLASH COMMAND REGISTRATION
+// REGISTERS /QUESTION AND /HELP
+// PRESERVES OTHER COMMANDS
 // ==================================================
 
 async function registerQuestionCommand() {
   if (!TOKEN || !GUILD_ID || !client.user) {
-    console.error("[QUESTION] Missing token, guild ID, or logged-in bot.");
+    console.error("[COMMANDS] Missing token, guild ID, or logged-in bot.");
     return;
   }
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
+
+  const commandsToRegister = [
+    QUESTION_COMMAND,
+    HELP_COMMAND
+  ];
 
   try {
     const route = Routes.applicationGuildCommands(
@@ -394,32 +409,34 @@ async function registerQuestionCommand() {
 
     const existingCommands = await rest.get(route);
 
-    const existingQuestion = existingCommands.find(
-      command => command.name === "question"
-    );
-
-    if (existingQuestion) {
-      await rest.patch(
-        Routes.applicationGuildCommand(
-          client.user.id,
-          GUILD_ID,
-          existingQuestion.id
-        ),
-        {
-          body: QUESTION_COMMAND.toJSON()
-        }
+    for (const command of commandsToRegister) {
+      const existing = existingCommands.find(
+        registered => registered.name === command.name
       );
 
-      console.log("[QUESTION] Existing /question command updated.");
-    } else {
-      await rest.post(route, {
-        body: QUESTION_COMMAND.toJSON()
-      });
+      if (existing) {
+        await rest.patch(
+          Routes.applicationGuildCommand(
+            client.user.id,
+            GUILD_ID,
+            existing.id
+          ),
+          {
+            body: command.toJSON()
+          }
+        );
 
-      console.log("[QUESTION] /question command registered.");
+        console.log(`[COMMANDS] Updated /${command.name}.`);
+      } else {
+        await rest.post(route, {
+          body: command.toJSON()
+        });
+
+        console.log(`[COMMANDS] Registered /${command.name}.`);
+      }
     }
   } catch (error) {
-    console.error("[QUESTION] Command registration failed:", error);
+    console.error("[COMMANDS] Registration failed:", error);
   }
 }
 
@@ -577,9 +594,7 @@ async function sendRobuxCashoutEmbed(channel) {
 
     for (const duplicate of matches.values()) {
       if (duplicate.id !== existing.id) {
-        await duplicate.delete().catch(error => {
-          console.error("[ROBUX CASHOUT] Could not delete duplicate:", error);
-        });
+        await duplicate.delete().catch(() => {});
       }
     }
 
@@ -808,6 +823,63 @@ async function sendVouchTutorial(guild) {
 }
 
 // ==================================================
+// HELP EMBED — /help
+// ==================================================
+
+function makeHelpEmbed() {
+  return new EmbedBuilder()
+    .setTitle(".gg/chuppys Bot Commands")
+    .setDescription(
+      "Here is a list of available commands and what they do.\n\n" +
+      "Use the commands below to access the bot's features."
+    )
+    .addFields(
+      {
+        name: "General Commands",
+        value:
+          "`/help` — Displays this command menu.\n" +
+          "`/question` — Submit a question to the Chuppys team.\n" +
+          "`/vouch` — Submit a vouch for a completed transaction.\n" +
+          "`,afk [reason]` — Set your AFK status.\n" +
+          "`,pay` — Displays available payment methods.\n" +
+          "`,client` — Posts or updates the client-role message."
+      },
+      {
+        name: "Support Commands",
+        value:
+          "`,r @user c` — Gives a member the Chuppys role.\n" +
+          "`,r @user r` — Sends a member a vouch reminder.\n" +
+          "`,partner` — Displays partnership instructions.\n" +
+          "`,mod` — Displays moderator responsibilities.\n" +
+          "`,seller` — Displays seller application information."
+      },
+      {
+        name: "Service Commands",
+        value:
+          "`,nitro` / `!nitro` — Updates the Nitro price list.\n" +
+          "`,decor` / `!decor` — Updates the Decor price list.\n" +
+          "`,boosties` / `!boosties` — Updates the Boosties price list.\n" +
+          "`,sellers` / `!sellers` — Posts the seller list.\n" +
+          "`,staff` / `!staff` — Posts the staff list."
+      },
+      {
+        name: "Additional Commands",
+        value:
+          "`!vouchtut` — Posts the vouch tutorial.\n" +
+          "`!ranked` — Posts the ranked roles list.\n" +
+          "`!robuxcashout` — Posts Robux cashout rates.\n" +
+          "`!testwelcome` — Tests the welcome embed.\n" +
+          "`!testgoodbye` — Tests the goodbye embed."
+      }
+    )
+    .setColor("#FFFFFF")
+    .setThumbnail(
+      "https://cdn.discordapp.com/emojis/1569039366880235560.png"
+    )
+    .setFooter({ text: ".gg/chuppys" });
+}
+
+// ==================================================
 // CLIENT READY
 // ==================================================
 
@@ -832,6 +904,22 @@ client.once(Events.ClientReady, async readyClient => {
 
 client.on(Events.InteractionCreate, async interaction => {
   try {
+
+    // ==================================================
+    // /HELP COMMAND
+    // ==================================================
+
+    if (
+      interaction.isChatInputCommand() &&
+      interaction.commandName === "help"
+    ) {
+      await interaction.reply({
+        embeds: [makeHelpEmbed()],
+        ephemeral: true
+      });
+
+      return;
+    }
 
     // ==================================================
     // VERIFY BUTTON
