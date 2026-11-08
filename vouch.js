@@ -14,6 +14,12 @@ const VOUCH_CHANNEL_ID = "1530811494168657980";
 const THANK_YOU_EMOJI = "<:uppyty:1561094713153429746>";
 
 // ==================================================
+// CLIENT ROLE REQUIREMENT
+// ==================================================
+
+const CLIENT_ROLE_ID = "1550373434301878282";
+
+// ==================================================
 // SELLER ID MAPPING
 // ==================================================
 
@@ -165,9 +171,57 @@ async function registerVouch(client) {
 
     console.log("[VOUCH] /vouch registered successfully.");
     console.log("[VOUCH] Seller choices:", SELLERS.length);
+    console.log("[VOUCH] Client role requirement enabled.");
   } catch (error) {
     console.error("[VOUCH] Registration failed:", error);
   }
+}
+
+// ==================================================
+// CLIENT ROLE CHECK
+// ==================================================
+
+async function hasClientRole(interaction) {
+  if (!interaction.inGuild()) return false;
+
+  const member = await interaction.guild.members
+    .fetch(interaction.user.id)
+    .catch(error => {
+      console.error("[VOUCH] Could not fetch member:", error);
+      return null;
+    });
+
+  if (!member) return false;
+
+  return member.roles.cache.has(CLIENT_ROLE_ID);
+}
+
+// ==================================================
+// CLIENT ROLE DENIAL MESSAGE
+// ==================================================
+
+async function denyNonClient(interaction) {
+  const embed = new EmbedBuilder()
+    .setColor("#FFFFFF")
+    .setDescription(
+      "You need the **client** role to submit a vouch!\n\n" +
+      "Thank you for shopping at **.gg/chuppys**.\n\n" +
+      "Please visit the client verification message and click the " +
+      "client button to receive your role.\n\n" +
+      "Once you have the role, you can use `/vouch` successfully."
+    )
+    .setFooter({ text: ".gg/chuppys" });
+
+  const reply = {
+    embeds: [embed],
+    ephemeral: true
+  };
+
+  if (interaction.replied || interaction.deferred) {
+    return interaction.followUp(reply);
+  }
+
+  return interaction.reply(reply);
 }
 
 // ==================================================
@@ -183,7 +237,37 @@ async function submitVouch(interaction) {
       });
     }
 
-    // Get the selected seller's actual ID.
+    // ==================================================
+    // REQUIRE CLIENT ROLE
+    // ==================================================
+
+    const member = await interaction.guild.members
+      .fetch(interaction.user.id)
+      .catch(error => {
+        console.error("[VOUCH] Member fetch failed:", error);
+        return null;
+      });
+
+    if (!member) {
+      return interaction.reply({
+        content:
+          "I couldn't verify your server membership. Please try again.",
+        ephemeral: true
+      });
+    }
+
+    if (!member.roles.cache.has(CLIENT_ROLE_ID)) {
+      console.log(
+        `[VOUCH] Blocked non-client: ${interaction.user.tag}`
+      );
+
+      return denyNonClient(interaction);
+    }
+
+    // ==================================================
+    // GET VOUCH INFORMATION
+    // ==================================================
+
     const sellerId = interaction.options.getString("seller");
     const rating = interaction.options.getInteger("rating");
     const order = interaction.options.getString("order");
@@ -222,7 +306,10 @@ async function submitVouch(interaction) {
       });
     }
 
-    // Resolve the destination from the selected seller ID.
+    // ==================================================
+    // RESOLVE DESTINATION CHANNEL
+    // ==================================================
+
     const channelId = getVouchChannelId(sellerId);
 
     console.log(`[VOUCH] Destination channel: ${channelId}`);
@@ -242,6 +329,10 @@ async function submitVouch(interaction) {
         ephemeral: true
       });
     }
+
+    // ==================================================
+    // CHECK BOT PERMISSIONS
+    // ==================================================
 
     const botMember = await interaction.guild.members.fetchMe();
     const permissions = channel.permissionsFor(botMember);
@@ -263,9 +354,16 @@ async function submitVouch(interaction) {
       });
     }
 
-    // Fetch the seller for the embed mention.
+    // ==================================================
+    // FETCH SELLER
+    // ==================================================
+
     const sellerUser =
       await interaction.client.users.fetch(sellerId);
+
+    // ==================================================
+    // CREATE VOUCH EMBED
+    // ==================================================
 
     const embed = new EmbedBuilder()
       .setColor(0xffb6d9)
@@ -283,7 +381,10 @@ async function submitVouch(interaction) {
       })
       .setTimestamp();
 
-    // Send the embed ONLY to the selected destination.
+    // ==================================================
+    // SEND VOUCH
+    // ==================================================
+
     const vouchMessage = await channel.send({
       embeds: [embed],
       allowedMentions: {
@@ -297,12 +398,19 @@ async function submitVouch(interaction) {
       `to channel ${channelId}`
     );
 
-    // Add the thank-you reaction.
+    // ==================================================
+    // ADD THANK-YOU REACTION
+    // ==================================================
+
     try {
       await vouchMessage.react(THANK_YOU_EMOJI);
     } catch (error) {
       console.error("[VOUCH] Reaction failed:", error.message);
     }
+
+    // ==================================================
+    // SUCCESS RESPONSE
+    // ==================================================
 
     return interaction.reply({
       content:
@@ -341,6 +449,14 @@ module.exports = function (client) {
     if (interaction.commandName !== "vouch") return;
 
     console.log("[VOUCH] /vouch interaction received.");
+
+    // Check client role before processing the vouch.
+    const allowed = await hasClientRole(interaction);
+
+    if (!allowed) {
+      await denyNonClient(interaction);
+      return;
+    }
 
     await submitVouch(interaction);
   });
