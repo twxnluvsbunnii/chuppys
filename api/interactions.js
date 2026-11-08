@@ -1,3 +1,4 @@
+
 import crypto from "crypto";
 import { waitUntil } from "@vercel/functions";
 
@@ -21,6 +22,13 @@ const PERSONAL_SELLER_IDS = [
 
 const VOUCH_EMOJI_URL =
   "https://cdn.discordapp.com/emojis/1561197586554036318.png";
+
+// ==================================================
+// CLIENT ROLE SETTINGS
+// ==================================================
+
+const CLIENT_ROLE_BUTTON_ID = "chuppys_client";
+const CLIENT_ROLE_ID = "1550373434301878282";
 
 // ==================================================
 // QUESTION SETTINGS
@@ -266,6 +274,31 @@ async function discordFetch(url, options = {}) {
 }
 
 // ==================================================
+// GET MEMBER ROLES
+// ==================================================
+
+async function getMemberRoles(guildId, userId, botToken) {
+  const result = await discordFetch(
+    `https://discord.com/api/v10/guilds/${guildId}/members/${userId}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bot ${botToken}`
+      }
+    }
+  );
+
+  if (!result.ok) {
+    throw new Error(
+      `Could not retrieve member roles: HTTP ${result.status} ` +
+      JSON.stringify(result.data)
+    );
+  }
+
+  return result.data.roles || [];
+}
+
+// ==================================================
 // UPDATE ORIGINAL INTERACTION RESPONSE
 // ==================================================
 
@@ -438,6 +471,83 @@ async function processRoleInteraction(interaction, group) {
 }
 
 // ==================================================
+// CLIENT ROLE BUTTON HANDLER
+// ==================================================
+
+async function processClientRole(interaction) {
+  try {
+    const botToken = process.env.DISCORD_BOT_TOKEN;
+    const guildId = interaction.guild_id;
+
+    const userId =
+      interaction.member?.user?.id ||
+      interaction.user?.id;
+
+    if (!botToken || !guildId || !userId) {
+      throw new Error(
+        "Missing bot token, server ID, or member ID."
+      );
+    }
+
+    const currentRoles = await getMemberRoles(
+      guildId,
+      userId,
+      botToken
+    );
+
+    if (currentRoles.includes(CLIENT_ROLE_ID)) {
+      await updateOriginalResponse(
+        interaction,
+        "﹕𐔌・you already have the client role! you're ready to vouch. 🤍"
+      );
+
+      return;
+    }
+
+    const result = await discordFetch(
+      `https://discord.com/api/v10/guilds/${guildId}/members/${userId}/roles/${CLIENT_ROLE_ID}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bot ${botToken}`
+        }
+      }
+    );
+
+    if (!result.ok) {
+      throw new Error(
+        `Could not grant client role: HTTP ${result.status} ` +
+        JSON.stringify(result.data)
+      );
+    }
+
+    console.log(
+      `[CLIENT DEBUG] Granted client role to ${userId}.`
+    );
+
+    await updateOriginalResponse(
+      interaction,
+      "﹕𐔌・you now have the client role! you can successfully submit a vouch. thank you for shopping at .gg/chuppys! 🤍"
+    );
+
+  } catch (error) {
+    console.error("[CLIENT DEBUG] Failed:", error);
+
+    try {
+      await updateOriginalResponse(
+        interaction,
+        "Your client role could not be added. Please contact staff."
+      );
+    } catch (updateError) {
+      console.error(
+        "[CLIENT DEBUG] Could not update response:",
+        updateError.message
+      );
+    }
+  }
+}
+
+// ==================================================
 // VERIFICATION BUTTON HANDLER
 // ==================================================
 
@@ -460,7 +570,6 @@ async function processVerification(interaction) {
       `[VERIFY DEBUG] Verification started for ${userId}.`
     );
 
-    // Retrieve the member's current roles
     const memberResult = await discordFetch(
       `https://discord.com/api/v10/guilds/${guildId}/members/${userId}`,
       {
@@ -481,7 +590,6 @@ async function processVerification(interaction) {
       memberResult.data.roles || []
     );
 
-    // Already verified?
     if (currentRoles.has(CHUPPYS_ROLE_ID)) {
       await updateOriginalResponse(
         interaction,
@@ -491,17 +599,14 @@ async function processVerification(interaction) {
       return;
     }
 
-    // Check age selection
     const hasAgeRole = AGE_ROLE_IDS.some(
       roleId => currentRoles.has(roleId)
     );
 
-    // Check pronoun selection
     const hasPronounRole = PRONOUN_ROLE_IDS.some(
       roleId => currentRoles.has(roleId)
     );
 
-    // Check at least two ping roles
     const pingRoleCount = PING_ROLE_IDS.filter(
       roleId => currentRoles.has(roleId)
     ).length;
@@ -515,7 +620,6 @@ async function processVerification(interaction) {
       return;
     }
 
-    // Grant the Chuppys role
     const addRoleResult = await discordFetch(
       `https://discord.com/api/v10/guilds/${guildId}/members/${userId}/roles/${CHUPPYS_ROLE_ID}`,
       {
@@ -584,6 +688,31 @@ async function processVouchInteraction(interaction) {
       );
     }
 
+    // CLIENT ROLE REQUIREMENT
+
+    const buyerId =
+      interaction.member?.user?.id ||
+      interaction.user?.id;
+
+    if (!buyerId) {
+      throw new Error("Could not identify the buyer.");
+    }
+
+    const buyerRoles = await getMemberRoles(
+      interaction.guild_id,
+      buyerId,
+      botToken
+    );
+
+    if (!buyerRoles.includes(CLIENT_ROLE_ID)) {
+      await updateOriginalResponse(
+        interaction,
+        "You need the client role before submitting a vouch! Please click the **client** button in the client-role message in .gg/chuppys. 🤍"
+      );
+
+      return;
+    }
+
     const options = Object.fromEntries(
       (interaction.data.options || []).map(option => [
         option.name,
@@ -594,10 +723,6 @@ async function processVouchInteraction(interaction) {
     const resolved = interaction.data.resolved || {};
 
     const sellerId = options.seller;
-
-    const buyerId =
-      interaction.member?.user?.id ||
-      interaction.user?.id;
 
     const rating = options.rating;
     const order = options.order?.trim();
@@ -1387,7 +1512,38 @@ export default async function handler(req, res) {
     const customId =
       interaction.data?.custom_id;
 
+    // CLIENT ROLE BUTTON
+
+    if (customId === CLIENT_ROLE_BUTTON_ID) {
+      if (!interaction.guild_id) {
+        return res.status(200).json({
+          type: 4,
+
+          data: {
+            content:
+              "You must use this button inside Chuppys.",
+            flags: 64
+          }
+        });
+      }
+
+      res.status(200).json({
+        type: 5,
+
+        data: {
+          flags: 64
+        }
+      });
+
+      waitUntil(
+        processClientRole(interaction)
+      );
+
+      return;
+    }
+
     // VERIFY BUTTON
+
     if (customId === VERIFY_CUSTOM_ID) {
       if (!interaction.guild_id) {
         return res.status(200).json({
@@ -1417,6 +1573,7 @@ export default async function handler(req, res) {
     }
 
     // MAKE A SUPPORT TICKET
+
     if (
       typeof customId === "string" &&
       customId.startsWith(QUESTION_TICKET_CUSTOM_ID)
@@ -1427,6 +1584,7 @@ export default async function handler(req, res) {
     }
 
     // REPLY TO QUESTION
+
     if (
       typeof customId === "string" &&
       customId.startsWith(QUESTION_REPLY_CUSTOM_ID)
@@ -1437,6 +1595,7 @@ export default async function handler(req, res) {
     }
 
     // EXISTING ROLE SELECT MENUS
+
     const group = ROLE_GROUPS[customId];
 
     if (
