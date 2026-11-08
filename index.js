@@ -1453,6 +1453,57 @@ function makeStaffEmbed() {
 }
 
 // ==================================================
+// MODERATOR RESPONSIBILITIES — ,mod
+// ==================================================
+
+function makeModEmbed() {
+  return new EmbedBuilder()
+    .setTitle(".gg/chuppys moderator responsibilities")
+    .setDescription(
+      "**Server Moderation**\n\n" +
+      "• Keep the server organized, safe, and welcoming.\n" +
+      "• Monitor chats and make sure members follow the server rules.\n" +
+      "• Address rule violations fairly and professionally.\n" +
+      "• Help prevent spam, harassment, scams, and inappropriate behavior.\n\n" +
+
+      "**Ticket Assistance**\n\n" +
+      "• Help members who need assistance with their tickets.\n" +
+      "• Respond to questions and concerns in a timely manner.\n" +
+      "• Make sure tickets are handled respectfully and correctly.\n" +
+      "• Escalate situations to an owner when necessary.\n\n" +
+
+      "**Member Assistance**\n\n" +
+      "• Help members understand how the server works.\n" +
+      "• Direct members to the correct channels and resources.\n" +
+      "• Assist with verification and server access when needed.\n" +
+      "• Treat every member with patience and respect.\n\n" +
+
+      "**Seller & Transaction Safety**\n\n" +
+      "• Help members understand the vouch process.\n" +
+      "• Remind members to use the appropriate support channels.\n" +
+      "• Take reports about suspicious behavior seriously.\n" +
+      "• Never ignore reports involving potential scams or seller misconduct.\n\n" +
+
+      "**Staff Expectations**\n\n" +
+      "• Remain active and professional.\n" +
+      "• Do not abuse moderator permissions.\n" +
+      "• Do not share private staff discussions or information.\n" +
+      "• Avoid unnecessary arguments with members.\n" +
+      "• Be fair and consistent when handling situations.\n\n" +
+
+      "**Important Rules**\n\n" +
+      "• Do not use your staff position for personal benefits.\n" +
+      "• Do not threaten members with staff permissions.\n" +
+      "• Contact an owner if you are unsure how to handle a situation.\n" +
+      "• Remember that being staff means representing **.gg/chuppys**.\n\n" +
+
+      "-# Thank you for helping keep .gg/chuppys a safe and welcoming community."
+    )
+    .setColor("#FFFFFF")
+    .setFooter({ text: ".gg/chuppys" });
+}
+
+// ==================================================
 // SHARED EMBED SENDER
 // ==================================================
 
@@ -1770,6 +1821,68 @@ client.on(Events.MessageCreate, async message => {
         }
       } else {
         await message.channel.send(payload);
+      }
+
+      return;
+    }
+
+    // ==================================================
+    // ,mod — MODERATOR RESPONSIBILITIES
+    // TICKET SUPPORT ONLY — ONE MESSAGE ONLY
+    // ==================================================
+
+    if (content === ",mod") {
+      if (!isTicketSupport(message.member)) {
+        await message.reply({
+          content: "Only Ticket Support can use this command.",
+          allowedMentions: { repliedUser: false }
+        });
+        return;
+      }
+
+      const messages = await message.channel.messages.fetch({
+        limit: 100
+      });
+
+      const matching = messages.filter(msg =>
+        msg.author.id === client.user.id &&
+        msg.embeds.some(embed =>
+          embed.title === ".gg/chuppys moderator responsibilities"
+        )
+      );
+
+      const existing = matching.first();
+
+      const payload = {
+        embeds: [makeModEmbed()],
+        content: "",
+        components: [],
+        allowedMentions: { parse: [] }
+      };
+
+      if (existing) {
+        await existing.edit(payload);
+
+        for (const duplicate of matching.values()) {
+          if (duplicate.id !== existing.id) {
+            await duplicate.delete().catch(error => {
+              console.error(
+                "[MOD] Could not delete duplicate:",
+                error
+              );
+            });
+          }
+        }
+
+        console.log(
+          `[MOD] Updated moderator responsibilities in ${message.channel.id}.`
+        );
+      } else {
+        await message.channel.send(payload);
+
+        console.log(
+          `[MOD] Created moderator responsibilities in ${message.channel.id}.`
+        );
       }
 
       return;
