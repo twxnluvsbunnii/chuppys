@@ -1,4 +1,3 @@
-
 import crypto from "crypto";
 import { waitUntil } from "@vercel/functions";
 
@@ -16,8 +15,8 @@ const PERSONAL_VOUCH_CHANNEL_ID = "1562227276051910676";
 const VOUCH_CHANNEL_ID = "1530811494168657980";
 
 const PERSONAL_SELLER_IDS = [
-  "1530733554869473320", // Bunnii
-  "1490962480963260466"  // Twxn
+  "1530733554869473320",
+  "1490962480963260466"
 ];
 
 const VOUCH_EMOJI_URL =
@@ -43,6 +42,45 @@ const QUESTION_REPLY_CUSTOM_ID = "question_reply:";
 const QUESTION_MODAL_CUSTOM_ID = "question_reply_modal:";
 
 // ==================================================
+// VERIFICATION SETTINGS
+// ==================================================
+
+const VERIFY_CUSTOM_ID = "chuppys_verify";
+
+const CHUPPYS_ROLE_ID = "1550230619127021568";
+
+const ROLES_CHANNEL_ID = "1530808091380285592";
+
+// Age roles
+const AGE_ROLE_IDS = [
+  "1531084465126772877",
+  "1531084550849954003",
+  "1531084611399188640"
+];
+
+// Pronoun roles
+const PRONOUN_ROLE_IDS = [
+  "1531084942241697854",
+  "1531086100867842190",
+  "1531101006451048448"
+];
+
+// Ping roles
+const PING_ROLE_IDS = [
+  "1531039846871728248",
+  "1531084435716571137",
+  "1531104789075853472",
+  "1531104886630907925",
+  "1531105107586973696",
+  "1551276593425682543",
+  "1558913216602706011",
+  "1568240267344093254",
+  "1568240367076122634",
+  "1568283533879939123",
+  "1568240484206514248"
+];
+
+// ==================================================
 // SELECT THE CORRECT VOUCH CHANNEL
 // ==================================================
 
@@ -59,8 +97,6 @@ function getVouchChannelId(sellerId) {
 // ==================================================
 
 const ROLE_GROUPS = {
-
-  // PINGS AND SELF ROLES
   chuppys_self_roles: {
     roles: [
       "1531039846871728248",
@@ -70,19 +106,16 @@ const ROLE_GROUPS = {
       "1531105107586973696",
       "1551276593425682543",
       "1558913216602706011",
-
-      // NEW PING ROLES
-      "1568240267344093254", // Partnership Ping
-      "1568240367076122634", // Adopt Me Ping
-      "1568283533879939123", // Robux Ping
-      "1568240484206514248"  // MM2 Ping
+      "1568240267344093254",
+      "1568240367076122634",
+      "1568283533879939123",
+      "1568240484206514248"
     ],
 
     success:
       "﹕𐔌・your roles have been updated〃・꒱ 🤍"
   },
 
-  // AGE ROLES
   chuppys_second_roles: {
     roles: [
       "1531084465126772877",
@@ -94,7 +127,6 @@ const ROLE_GROUPS = {
       "﹕𐔌・your age roles have been updated〃・꒱ 🤍"
   },
 
-  // PRONOUN ROLES
   chuppys_pronoun_roles: {
     roles: [
       "1531084942241697854",
@@ -310,14 +342,12 @@ async function changeRoles(interaction, group) {
   const values = interaction.data.values || [];
   const selectedRoles = new Set(values);
 
-  // Validate selected roles
   for (const roleId of selectedRoles) {
     if (!group.roles.includes(roleId)) {
       throw new Error(`Unexpected role ID: ${roleId}`);
     }
   }
 
-  // GET THE MEMBER'S CURRENT ROLES
   const memberResult = await discordFetch(
     `https://discord.com/api/v10/guilds/${guildId}/members/${userId}`,
     {
@@ -339,7 +369,6 @@ async function changeRoles(interaction, group) {
     memberResult.data.roles || []
   );
 
-  // ONLY CHANGE ROLES THAT NEED UPDATING
   for (const roleId of group.roles) {
     const shouldHaveRole = selectedRoles.has(roleId);
     const currentlyHasRole = currentRoles.has(roleId);
@@ -402,6 +431,131 @@ async function processRoleInteraction(interaction, group) {
     } catch (updateError) {
       console.error(
         "[ROLE DEBUG] Could not show error:",
+        updateError.message
+      );
+    }
+  }
+}
+
+// ==================================================
+// VERIFICATION BUTTON HANDLER
+// ==================================================
+
+async function processVerification(interaction) {
+  try {
+    const botToken = process.env.DISCORD_BOT_TOKEN;
+    const guildId = interaction.guild_id;
+
+    const userId =
+      interaction.member?.user?.id ||
+      interaction.user?.id;
+
+    if (!botToken || !guildId || !userId) {
+      throw new Error(
+        "Missing bot token, server ID, or member ID."
+      );
+    }
+
+    console.log(
+      `[VERIFY DEBUG] Verification started for ${userId}.`
+    );
+
+    // Retrieve the member's current roles
+    const memberResult = await discordFetch(
+      `https://discord.com/api/v10/guilds/${guildId}/members/${userId}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bot ${botToken}`
+        }
+      }
+    );
+
+    if (!memberResult.ok) {
+      throw new Error(
+        `Could not retrieve member: HTTP ${memberResult.status}`
+      );
+    }
+
+    const currentRoles = new Set(
+      memberResult.data.roles || []
+    );
+
+    // Already verified?
+    if (currentRoles.has(CHUPPYS_ROLE_ID)) {
+      await updateOriginalResponse(
+        interaction,
+        "﹕𐔌・you are already verified! welcome to .gg/chuppys 🤍"
+      );
+
+      return;
+    }
+
+    // Check age selection
+    const hasAgeRole = AGE_ROLE_IDS.some(
+      roleId => currentRoles.has(roleId)
+    );
+
+    // Check pronoun selection
+    const hasPronounRole = PRONOUN_ROLE_IDS.some(
+      roleId => currentRoles.has(roleId)
+    );
+
+    // Check at least two ping roles
+    const pingRoleCount = PING_ROLE_IDS.filter(
+      roleId => currentRoles.has(roleId)
+    ).length;
+
+    if (!hasAgeRole || !hasPronounRole || pingRoleCount < 2) {
+      await updateOriginalResponse(
+        interaction,
+        `Please select your roles in <#${ROLES_CHANNEL_ID}> before verifying to gain full access to .gg/chuppys. 🤍`
+      );
+
+      return;
+    }
+
+    // Grant the Chuppys role
+    const addRoleResult = await discordFetch(
+      `https://discord.com/api/v10/guilds/${guildId}/members/${userId}/roles/${CHUPPYS_ROLE_ID}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bot ${botToken}`
+        }
+      }
+    );
+
+    if (!addRoleResult.ok) {
+      throw new Error(
+        `Could not grant Chuppys role: HTTP ${addRoleResult.status} ` +
+        JSON.stringify(addRoleResult.data)
+      );
+    }
+
+    console.log(
+      `[VERIFY DEBUG] Successfully granted ${CHUPPYS_ROLE_ID} to ${userId}.`
+    );
+
+    await updateOriginalResponse(
+      interaction,
+      "﹕𐔌・you are now verified! welcome to .gg/chuppys 🤍"
+    );
+
+  } catch (error) {
+    console.error(
+      "[VERIFY DEBUG] Verification failed:",
+      error
+    );
+
+    try {
+      await updateOriginalResponse(
+        interaction,
+        "Verification failed. Please contact staff for help."
+      );
+    } catch (updateError) {
+      console.error(
+        "[VERIFY DEBUG] Could not update response:",
         updateError.message
       );
     }
@@ -1184,7 +1338,6 @@ export default async function handler(req, res) {
   if (interaction.type === 2) {
     const commandName = interaction.data?.name;
 
-    // VOUCH COMMAND
     if (commandName === "vouch") {
       res.status(200).json({
         type: 5,
@@ -1200,11 +1353,9 @@ export default async function handler(req, res) {
       return;
     }
 
-    // QUESTION COMMAND
     if (commandName === "question") {
       res.status(200).json({
         type: 5,
-
         data: {
           flags: 64
         }
@@ -1235,6 +1386,35 @@ export default async function handler(req, res) {
   if (interaction.type === 3) {
     const customId =
       interaction.data?.custom_id;
+
+    // VERIFY BUTTON
+    if (customId === VERIFY_CUSTOM_ID) {
+      if (!interaction.guild_id) {
+        return res.status(200).json({
+          type: 4,
+
+          data: {
+            content:
+              "You must verify inside the Chuppys server.",
+            flags: 64
+          }
+        });
+      }
+
+      res.status(200).json({
+        type: 5,
+
+        data: {
+          flags: 64
+        }
+      });
+
+      waitUntil(
+        processVerification(interaction)
+      );
+
+      return;
+    }
 
     // MAKE A SUPPORT TICKET
     if (
