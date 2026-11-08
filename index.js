@@ -52,6 +52,53 @@ const ROBUX_CASHOUT_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1561094713153429746.png";
 
 // ==================================================
+// VERIFICATION SETTINGS
+// ==================================================
+
+const VERIFY_CHANNEL_ID = "1528716328985301052";
+const VERIFY_BUTTON_ID = "chuppys_verify";
+
+const VERIFY_THUMBNAIL_URL =
+  "https://cdn.discordapp.com/emojis/1561103471325745242.png";
+
+const VERIFY_BUTTON_EMOJI_ID = "1561103471325745242";
+
+// Role granted after successful verification
+const CHUPPYS_ROLE_ID = "1550230619127021568";
+
+// Roles channel
+const ROLES_CHANNEL_ID = "1530808091380285592";
+
+// Required age roles — at least one
+const AGE_ROLE_IDS = [
+  "1531084465126772877",
+  "1531084550849954003",
+  "1531084611399188640"
+];
+
+// Required pronoun roles — at least one
+const PRONOUN_ROLE_IDS = [
+  "1531084942241697854",
+  "1531086100867842190",
+  "1531101006451048448"
+];
+
+// Required ping roles — at least two
+const PING_ROLE_IDS = [
+  "1531039846871728248",
+  "1568240267344093254",
+  "1531084435716571137",
+  "1531104789075853472",
+  "1531104886630907925",
+  "1531105107586973696",
+  "1551276593425682543",
+  "1558913216602706011",
+  "1568240367076122634",
+  "1568283533879939123",
+  "1568240484206514248"
+];
+
+// ==================================================
 // RANKED ROLES SETTINGS
 // ==================================================
 
@@ -105,10 +152,8 @@ const QUESTION_COMMAND = new SlashCommandBuilder()
 // CHUPPYS ROLE COMMANDS
 // ==================================================
 
-const CHUPPYS_ROLE_ID = "1550230619127021568";
 const TICKET_SUPPORT_ROLE_ID = "1563003884656398406";
 
-const ROLES_CHANNEL_ID = "1530808091380285592";
 const RULES_CHANNEL_ID = "1551275482857865336";
 
 const VOUCH_TUTORIAL_CHANNEL_ID = "1562958688896028802";
@@ -118,50 +163,6 @@ const PARTNER_AD_CHANNEL_ID = "1552387259276329110";
 
 const CHUPPYS_WELCOME_EMOJI =
   "<:chuppys:1560284517955141653>";
-
-// ==================================================
-// VERIFICATION SYSTEM
-// ==================================================
-
-const VERIFY_CHANNEL_ID = "1528716328985301052";
-const VERIFY_BUTTON_ID = "chuppys_verify";
-
-const VERIFY_EMOJI = {
-  id: "1561103471325745242",
-  name: "chuppyhi"
-};
-
-// Age roles
-const AGE_ROLE_IDS = [
-  "1531084465126772877",
-  "1531084550849954003",
-  "1531084611399188640"
-];
-
-// Pronoun roles
-const PRONOUN_ROLE_IDS = [
-  "1531084942241697854",
-  "1531086100867842190",
-  "1531101006451048448"
-];
-
-// Ping roles required for verification.
-// These are checked by the button but are NOT displayed
-// in the verification embed.
-
-const PING_ROLE_IDS = [
-  "1531039846871728248",
-  "1568240267344093254",
-  "1531084435716571137",
-  "1531104789075853472",
-  "1531104886630907925",
-  "1531105107586973696",
-  "1551276593425682543",
-  "1558913216602706011",
-  "1568240367076122634",
-  "1568283533879939123",
-  "1568240484206514248"
-];
 
 // ==================================================
 // VOUCH COUNTERS
@@ -221,7 +222,7 @@ const QUESTION_EMOJI_URL = PAYMENT_EMOJI_URL;
 
 const SERVICE_EMOJI = "<a:aBouncyDiscord:1557138733717782599>";
 const BOOST_EMOJI = "<:white_nitro_boost:1557165507600326756>";
-const SELLER_EMOJI = "<:chuppyseller:1560284517955141653>";
+const SELLER_EMOJI = "<:chuppyseller:1560283615445778503>";
 
 const WELCOME_IMAGE =
   "https://cdn.discordapp.com/attachments/1531043582348230767/1551448584656916530/BCA71D48-B1AD-46BA-BAAA-CC87D8C81E62.png";
@@ -262,6 +263,117 @@ const client = new Client({
 
 require("./vouch")(client);
 require("./transactions")(client);
+
+// ==================================================
+// VERIFICATION MESSAGE
+// ==================================================
+
+function makeVerificationEmbed() {
+  return new EmbedBuilder()
+    .setTitle("Verify to Access .gg/chuppys")
+    .setDescription(
+      `Select your roles in <#${ROLES_CHANNEL_ID}> before verifying ` +
+      `to gain full access to **.gg/chuppys**.`
+    )
+    .setColor("#FFFFFF")
+    .setThumbnail(VERIFY_THUMBNAIL_URL)
+    .setFooter({ text: ".gg/chuppys" });
+}
+
+function makeVerificationButton() {
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(VERIFY_BUTTON_ID)
+      .setLabel("Verify")
+      .setEmoji({ id: VERIFY_BUTTON_EMOJI_ID })
+      .setStyle(ButtonStyle.Primary)
+  );
+
+  return row;
+}
+
+async function sendOrUpdateVerificationMessage() {
+  try {
+    const channel = await client.channels.fetch(VERIFY_CHANNEL_ID);
+
+    if (!channel || !channel.isTextBased() || !channel.messages) {
+      throw new Error("Verification channel not found or invalid.");
+    }
+
+    const messages = await channel.messages.fetch({ limit: 100 });
+
+    const matching = messages.filter(message =>
+      message.author.id === client.user.id &&
+      message.embeds.some(embed =>
+        embed.title === "Verify to Access .gg/chuppys"
+      )
+    );
+
+    const existing = matching.first();
+
+    const payload = {
+      embeds: [makeVerificationEmbed()],
+      components: [makeVerificationButton()],
+      allowedMentions: { parse: [] }
+    };
+
+    if (existing) {
+      await existing.edit(payload);
+
+      for (const duplicate of matching.values()) {
+        if (duplicate.id !== existing.id) {
+          await duplicate.delete().catch(error => {
+            console.error(
+              "[VERIFY] Could not delete duplicate:",
+              error
+            );
+          });
+        }
+      }
+
+      console.log("[VERIFY] Existing verification message updated.");
+      return existing;
+    }
+
+    const sent = await channel.send(payload);
+
+    console.log("[VERIFY] Verification message created.");
+
+    return sent;
+  } catch (error) {
+    console.error("[VERIFY] Could not create/update verification message:", error);
+  }
+}
+
+// ==================================================
+// VERIFICATION ROLE CHECKS
+// ==================================================
+
+function hasAtLeastOneRole(member, roleIds) {
+  return roleIds.some(roleId => member.roles.cache.has(roleId));
+}
+
+function countMatchingRoles(member, roleIds) {
+  return roleIds.filter(roleId =>
+    member.roles.cache.has(roleId)
+  ).length;
+}
+
+function checkVerificationRequirements(member) {
+  const hasAgeRole = hasAtLeastOneRole(member, AGE_ROLE_IDS);
+  const hasPronounRole = hasAtLeastOneRole(member, PRONOUN_ROLE_IDS);
+  const pingRoleCount = countMatchingRoles(member, PING_ROLE_IDS);
+
+  return {
+    hasAgeRole,
+    hasPronounRole,
+    pingRoleCount,
+    passed:
+      hasAgeRole &&
+      hasPronounRole &&
+      pingRoleCount >= 2
+  };
+}
 
 // ==================================================
 // QUESTION COMMAND REGISTRATION
@@ -312,124 +424,6 @@ async function registerQuestionCommand() {
   } catch (error) {
     console.error("[QUESTION] Command registration failed:", error);
   }
-}
-
-// ==================================================
-// VERIFICATION EMBED
-// ==================================================
-
-function makeVerificationEmbed() {
-  return new EmbedBuilder()
-    .setTitle("Verify to Access .gg/chuppys")
-    .setDescription(
-      `Select your roles in <#${ROLES_CHANNEL_ID}> before verifying.\n\n` +
-
-      "**AGE**\n" +
-      `• <@&1531084465126772877> (-18)\n` +
-      `• <@&1531084550849954003> (18-20)\n` +
-      `• <@&1531084611399188640> (21+)\n\n` +
-
-      "**PRONOUNS**\n" +
-      `• <@&1531084942241697854> (She / her)\n` +
-      `• <@&1531086100867842190> (He / him)\n` +
-      `• <@&1531101006451048448> (They / them)`
-    )
-    .setColor("#FFFFFF")
-    .setThumbnail(
-      "https://cdn.discordapp.com/emojis/1561103471325745242.png"
-    )
-    .setFooter({ text: ".gg/chuppys" });
-}
-
-// ==================================================
-// VERIFICATION MESSAGE SENDER / UPDATER
-// ==================================================
-
-async function sendVerificationMessage(guild) {
-  const channel = await guild.channels.fetch(VERIFY_CHANNEL_ID);
-
-  if (!channel || !channel.isTextBased() || !channel.messages) {
-    throw new Error("Verification channel not found or invalid.");
-  }
-
-  const embed = makeVerificationEmbed();
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(VERIFY_BUTTON_ID)
-      .setLabel("Verify")
-      .setEmoji(VERIFY_EMOJI)
-      .setStyle(ButtonStyle.Primary)
-  );
-
-  const payload = {
-    embeds: [embed],
-    components: [row],
-    allowedMentions: { parse: [] }
-  };
-
-  const messages = await channel.messages.fetch({ limit: 100 });
-
-  const matching = messages.filter(message =>
-    message.author.id === client.user.id &&
-    message.embeds.some(existingEmbed =>
-      existingEmbed.title === "Verify to Access .gg/chuppys"
-    )
-  );
-
-  const existing = matching.first();
-
-  if (existing) {
-    await existing.edit(payload);
-
-    for (const duplicate of matching.values()) {
-      if (duplicate.id !== existing.id) {
-        await duplicate.delete().catch(error => {
-          console.error(
-            "[VERIFY] Could not delete duplicate message:",
-            error
-          );
-        });
-      }
-    }
-
-    console.log("[VERIFY] Existing verification message updated.");
-    return existing;
-  }
-
-  const sent = await channel.send(payload);
-
-  console.log("[VERIFY] Verification message created.");
-
-  return sent;
-}
-
-// ==================================================
-// VERIFICATION ROLE CHECK
-// ==================================================
-
-function checkVerificationRoles(member) {
-  const hasAgeRole = AGE_ROLE_IDS.some(roleId =>
-    member.roles.cache.has(roleId)
-  );
-
-  const hasPronounRole = PRONOUN_ROLE_IDS.some(roleId =>
-    member.roles.cache.has(roleId)
-  );
-
-  const pingRoleCount = PING_ROLE_IDS.filter(roleId =>
-    member.roles.cache.has(roleId)
-  ).length;
-
-  return {
-    hasAgeRole,
-    hasPronounRole,
-    pingRoleCount,
-    isComplete:
-      hasAgeRole &&
-      hasPronounRole &&
-      pingRoleCount >= 2
-  };
 }
 
 // ==================================================
@@ -762,14 +756,7 @@ client.once(Events.ClientReady, async readyClient => {
 
   await registerQuestionCommand();
   await recountAllVouches();
-
-  // Create or update the verification message.
-  try {
-    const guild = await client.guilds.fetch(GUILD_ID);
-    await sendVerificationMessage(guild);
-  } catch (error) {
-    console.error("[VERIFY] Could not create/update verification message:", error);
-  }
+  await sendOrUpdateVerificationMessage();
 
   setInterval(() => {
     if (client.isReady()) scheduleVouchCounterUpdate();
@@ -813,40 +800,19 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (member.roles.cache.has(CHUPPYS_ROLE_ID)) {
         await interaction.reply({
-          content: "You're already verified and have access to .gg/chuppys!",
+          content: "You're already verified and have full access to .gg/chuppys!",
           ephemeral: true
         });
         return;
       }
 
-      const roleCheck = checkVerificationRoles(member);
+      const requirements = checkVerificationRequirements(member);
 
-      if (!roleCheck.hasAgeRole || !roleCheck.hasPronounRole) {
-        const missing = [];
-
-        if (!roleCheck.hasAgeRole) {
-          missing.push("• Select one age role.");
-        }
-
-        if (!roleCheck.hasPronounRole) {
-          missing.push("• Select one pronoun role.");
-        }
-
+      if (!requirements.passed) {
         await interaction.reply({
           content:
-            "You need to select your roles before verifying!\n\n" +
-            `${missing.join("\n")}\n\n` +
-            `Please select your roles in <#${ROLES_CHANNEL_ID}> and try again.`,
-          ephemeral: true
-        });
-        return;
-      }
-
-      if (roleCheck.pingRoleCount < 2) {
-        await interaction.reply({
-          content:
-            "You need to select at least **2 ping roles** before verifying.\n\n" +
-            `Please select your roles in <#${ROLES_CHANNEL_ID}> and try again.`,
+            `Please select your roles in <#${ROLES_CHANNEL_ID}> before verifying.\n\n` +
+            "You need at least one age role, one pronoun role, and two ping roles.",
           ephemeral: true
         });
         return;
@@ -859,17 +825,16 @@ client.on(Events.InteractionCreate, async interaction => {
 
       await interaction.reply({
         content:
-          `${VERIFY_EMOJI.name ? "<:chuppyhi:1561103471325745242>" : "✅"} ` +
-          "You've successfully verified and now have access to .gg/chuppys!",
+          `${AFK_RETURN_EMOJI} You're verified! You now have full access to **.gg/chuppys**.`,
         ephemeral: true
       });
 
-      console.log(`[VERIFY] ${member.user.tag} successfully verified.`);
+      console.log(`[VERIFY] ${member.user.tag} verified successfully.`);
       return;
     }
 
     // ==================================================
-    // QUESTION SLASH COMMAND
+    // /QUESTION COMMAND
     // ==================================================
 
     if (
