@@ -1,4 +1,3 @@
-
 const fs = require("fs");
 const path = require("path");
 const { EmbedBuilder } = require("discord.js");
@@ -7,14 +6,77 @@ const { EmbedBuilder } = require("discord.js");
 // CHUPPYS TRANSACTION SYSTEM
 // ==========================================
 
-const DATA_FILE = path.join(__dirname, "spending.json");
+// ==========================================
+// PERMANENT DATA STORAGE
+// ==========================================
+
+// Configure SPENDING_DATA_DIR=/var/data in Render.
+// Mount a Render Persistent Disk at /var/data.
+
+const DATA_DIR =
+  process.env.SPENDING_DATA_DIR || __dirname;
+
+const DATA_FILE = path.join(DATA_DIR, "spending.json");
+const OLD_DATA_FILE = path.join(__dirname, "spending.json");
+
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+// Migrate existing transaction history if needed.
+if (
+  DATA_FILE !== OLD_DATA_FILE &&
+  !fs.existsSync(DATA_FILE) &&
+  fs.existsSync(OLD_DATA_FILE)
+) {
+  fs.copyFileSync(OLD_DATA_FILE, DATA_FILE);
+}
+
+function loadData() {
+  try {
+    if (!fs.existsSync(DATA_FILE)) {
+      fs.writeFileSync(DATA_FILE, JSON.stringify({}, null, 2));
+      return {};
+    }
+
+    return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+  } catch (error) {
+    console.error("Could not load spending.json:", error);
+    return {};
+  }
+}
+
+let spendingData = loadData();
+
+function saveData() {
+  try {
+    const temporaryFile = `${DATA_FILE}.tmp`;
+
+    fs.writeFileSync(
+      temporaryFile,
+      JSON.stringify(spendingData, null, 2)
+    );
+
+    fs.renameSync(temporaryFile, DATA_FILE);
+  } catch (error) {
+    console.error("Could not save spending.json:", error);
+    throw error;
+  }
+}
+
+// ==========================================
+// PERMISSIONS
+// ==========================================
 
 const TRANSACTION_ALLOWED_ROLE_IDS = [
   "1550322075208646766",
   "1563003884656398406"
 ];
 
-// Reward tiers
+// ==========================================
+// REWARD TIERS
+// ==========================================
+
 const REWARD_ROLES = [
   { amount: 5, roleId: "1550373612144304219" },
   { amount: 10, roleId: "1550373695204360252" },
@@ -36,31 +98,8 @@ const REWARD_NOTIFICATION_EMOJI =
   "<:chuppybye:1561103844832846014>";
 
 // ==========================================
-// DATA STORAGE
+// DATA HELPERS
 // ==========================================
-
-function loadData() {
-  try {
-    if (!fs.existsSync(DATA_FILE)) {
-      fs.writeFileSync(DATA_FILE, JSON.stringify({}, null, 2));
-      return {};
-    }
-
-    return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-  } catch (error) {
-    console.error("Could not load spending.json:", error);
-    return {};
-  }
-}
-
-let spendingData = loadData();
-
-function saveData() {
-  fs.writeFileSync(
-    DATA_FILE,
-    JSON.stringify(spendingData, null, 2)
-  );
-}
 
 function getClientData(userId) {
   if (!spendingData[userId]) {
@@ -81,8 +120,6 @@ function getClientData(userId) {
     data.awardedRoleIds = [];
   }
 
-  // Purchases and cash-outs both contribute positively
-  // to the cumulative reward total.
   data.total = Number(
     data.transactions
       .reduce(
@@ -97,7 +134,7 @@ function getClientData(userId) {
 }
 
 // ==========================================
-// HELPERS
+// GENERAL HELPERS
 // ==========================================
 
 function hasTransactionPermission(member) {
@@ -137,6 +174,68 @@ function getSignedAmount(transaction) {
   return `${sign}${formatMoney(transaction.amount)}`;
 }
 
+// ==========================================
+// OPTIONAL CUSTOM DATE
+// ==========================================
+
+// Supported formats:
+// MM/DD/YYYY
+// YYYY-MM-DD
+//
+// If no date is provided, the current date/time
+// will automatically be used.
+
+function parseOptionalDate(input) {
+  if (!input) {
+    return {
+      timestamp: Date.now(),
+      dateOnly: false
+    };
+  }
+
+  let year;
+  let month;
+  let day;
+
+  // MM/DD/YYYY
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(input)) {
+    const parts = input.split("/");
+
+    month = Number(parts[0]);
+    day = Number(parts[1]);
+    year = Number(parts[2]);
+  }
+
+  // YYYY-MM-DD
+  else if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(input)) {
+    const parts = input.split("-");
+
+    year = Number(parts[0]);
+    month = Number(parts[1]);
+    day = Number(parts[2]);
+  } else {
+    return null;
+  }
+
+  // Validate the calendar date.
+  const check = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    check.getUTCFullYear() !== year ||
+    check.getUTCMonth() !== month - 1 ||
+    check.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  // Store at noon UTC so the date remains the
+  // same calendar day in the New York timezone.
+  return {
+    timestamp: Date.UTC(year, month - 1, day, 12, 0, 0),
+    dateOnly: true
+  };
+}
+
 function formatTimestamp(timestamp) {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
@@ -148,6 +247,27 @@ function formatTimestamp(timestamp) {
     hour12: true,
     timeZoneName: "short"
   }).format(new Date(timestamp));
+}
+
+function getDiscordTimestamp(transaction) {
+  const unix = Math.floor(transaction.timestamp / 1000);
+
+  return transaction.dateOnly
+    ? `<t:${unix}:D>`
+    : `<t:${unix}:f>`;
+}
+
+function getDisplayDate(transaction) {
+  if (transaction.dateOnly) {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      month: "short",
+      day: "numeric",
+      year: "numeric"
+    }).format(new Date(transaction.timestamp));
+  }
+
+  return formatTimestamp(transaction.timestamp);
 }
 
 function createEmbed(title, description) {
@@ -162,7 +282,6 @@ function createEmbed(title, description) {
 
 // ==========================================
 // PRIVATE REWARD DM
-// No role names or role mentions in the DM.
 // ==========================================
 
 async function sendRewardDM(member) {
@@ -241,8 +360,6 @@ async function syncRewardRoles(member, clientData) {
     }
   }
 
-  // Record the reward roles the client currently qualifies for
-  // and still has.
   clientData.awardedRoleIds = REWARD_ROLES
     .filter(reward =>
       member.roles.cache.has(reward.roleId) &&
@@ -252,8 +369,6 @@ async function syncRewardRoles(member, clientData) {
 
   saveData();
 
-  // Send one short private DM if new reward roles were added.
-  // The DM deliberately does not list or mention any roles.
   if (newlyAddedRoles.length > 0) {
     await sendRewardDM(member);
   }
@@ -278,7 +393,7 @@ function createHistoryEmbed(user, clientData) {
     ? transactions.map((transaction, index) => {
         return [
           `**${index + 1}. ${getTransactionLabel(transaction.type)} — ${getSignedAmount(transaction)}**`,
-          `<t:${Math.floor(transaction.timestamp / 1000)}:f>`,
+          getDiscordTimestamp(transaction),
           `Staff: <@${transaction.staffId}>`
         ].join("\n");
       }).join("\n\n")
@@ -369,6 +484,10 @@ module.exports = function (client) {
 
       // ======================================
       // ,addp / ,addc
+      //
+      // Optional date:
+      // ,addp @client $25 10/15/2026
+      // ,addc @client $65 2026-09-20
       // ======================================
 
       if (command === ",addp" || command === ",addc") {
@@ -377,21 +496,37 @@ module.exports = function (client) {
         if (amount === null) {
           return message.reply(
             "❌ Enter a valid amount.\n" +
-            "Examples: `,addp @client $25` or `,addc @client $65`"
+            "Examples:\n" +
+            "`,addp @client $25`\n" +
+            "`,addp @client $25 10/15/2026`\n" +
+            "`,addc @client $65 09/20/2026`"
           );
         }
 
-        const type = command === ",addp" ? "purchase" : "cashout";
+        const customDate = parseOptionalDate(parts[3]);
+
+        if (!customDate) {
+          return message.reply(
+            "❌ Invalid date.\n" +
+            "Use `MM/DD/YYYY` or `YYYY-MM-DD`.\n" +
+            "Example: `,addp @client $25 10/15/2026`"
+          );
+        }
+
+        const type =
+          command === ",addp" ? "purchase" : "cashout";
 
         const transaction = {
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           type,
           amount,
-          timestamp: Date.now(),
+          timestamp: customDate.timestamp,
+          dateOnly: customDate.dateOnly,
           staffId: message.author.id
         };
 
         clientData.transactions.push(transaction);
+
         clientData.total = Number(
           (clientData.total + amount).toFixed(2)
         );
@@ -405,12 +540,11 @@ module.exports = function (client) {
           `**Transaction:** ${getTransactionLabel(type)}`,
           `**Amount:** ${getSignedAmount(transaction)}`,
           `**Recorded by:** ${message.author}`,
-          `**Time:** ${formatTimestamp(transaction.timestamp)}`,
+          `**Date:** ${getDisplayDate(transaction)}`,
           "",
           `**Cumulative Rewards Total:** ${formatMoney(clientData.total)}`
         ];
 
-        // List new reward roles only once, inside this public embed.
         if (roleChanges.newlyAddedRoles.length > 0) {
           description.push(
             "",
@@ -439,8 +573,6 @@ module.exports = function (client) {
           allowedMentions: { parse: [] }
         });
 
-        // No separate public message repeats the reward roles.
-
         if (roleChanges.failedChanges.length > 0) {
           await message.channel.send(
             "⚠️ Some reward roles could not be updated. Check the bot's permissions and role hierarchy."
@@ -464,9 +596,10 @@ module.exports = function (client) {
           );
         }
 
-        const type = command === ",removep" ? "purchase" : "cashout";
+        const type =
+          command === ",removep" ? "purchase" : "cashout";
 
-        // Remove only the newest transaction matching type and amount.
+        // Remove only the newest matching transaction.
         let transactionIndex = -1;
 
         for (let i = clientData.transactions.length - 1; i >= 0; i--) {
@@ -491,7 +624,6 @@ module.exports = function (client) {
         const [removedTransaction] =
           clientData.transactions.splice(transactionIndex, 1);
 
-        // Recalculate the total using the remaining transactions.
         clientData.total = Number(
           clientData.transactions
             .reduce(
@@ -504,14 +636,13 @@ module.exports = function (client) {
 
         saveData();
 
-        // Remove roles the client no longer qualifies for.
         const roleChanges = await syncRewardRoles(member, clientData);
 
         const description = [
           `**Client:** ${user}`,
           `**Removed transaction:** ${getTransactionLabel(type)}`,
           `**Amount removed:** ${getSignedAmount(removedTransaction)}`,
-          `**Originally recorded:** ${formatTimestamp(removedTransaction.timestamp)}`,
+          `**Originally recorded:** ${getDisplayDate(removedTransaction)}`,
           `**Removed by:** ${message.author}`,
           "",
           `**Updated Cumulative Rewards Total:** ${formatMoney(clientData.total)}`
