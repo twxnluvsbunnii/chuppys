@@ -226,7 +226,7 @@ const QUESTION_EMOJI_URL = PAYMENT_EMOJI_URL;
 
 const SERVICE_EMOJI = "<a:aBouncyDiscord:1557138733717782599>";
 const BOOST_EMOJI = "<:white_nitro_boost:1557165507600326756>";
-const SELLER_EMOJI = "<:chuppyseller:1560283615445778503>";
+const SELLER_EMOJI = "<:chuppyseller:1560284517955141653>";
 
 const WELCOME_IMAGE =
   "https://cdn.discordapp.com/attachments/1531043582348230767/1551448584656916530/BCA71D48-B1AD-46BA-BAAA-CC87D8C81E62.png";
@@ -250,6 +250,7 @@ let vouchCounterUpdateRunning = false;
 let vouchCounterRecountRequested = false;
 
 const sellerCommandLocks = new Set();
+const clientCommandLocks = new Set();
 
 // ==================================================
 // DISCORD CLIENT
@@ -486,6 +487,46 @@ function makeClientButton() {
       .setEmoji({ id: CLIENT_EMOJI_ID })
       .setStyle(ButtonStyle.Secondary)
   );
+}
+
+// ==================================================
+// CLIENT MESSAGE HISTORY SEARCH
+// ==================================================
+
+async function findClientRoleMessages(channel) {
+  const matching = [];
+  let before;
+
+  while (true) {
+    const options = { limit: 100 };
+
+    if (before) {
+      options.before = before;
+    }
+
+    const messages = await channel.messages.fetch(options);
+
+    if (messages.size === 0) break;
+
+    for (const msg of messages.values()) {
+      if (
+        msg.author.id === client.user.id &&
+        msg.embeds.some(embed =>
+          (embed.description || "").includes(
+            "Please click the button below for the client role"
+          )
+        )
+      ) {
+        matching.push(msg);
+      }
+    }
+
+    before = messages.last().id;
+
+    if (messages.size < 100) break;
+  }
+
+  return matching;
 }
 
 // ==================================================
@@ -1687,45 +1728,58 @@ client.on(Events.MessageCreate, async message => {
     if (wasAFKCommand) return;
 
     // ==================================================
-    // CLIENT — SEND CLIENT ROLE MESSAGE
+    // CLIENT — SEND OR UPDATE CLIENT ROLE MESSAGE
+    // SEARCHES ENTIRE CHANNEL HISTORY
+    // ONE MESSAGE ONLY
     // ==================================================
 
     if (content === ",client") {
-      const messages = await message.channel.messages.fetch({
-        limit: 100
-      });
+      const channelId = message.channel.id;
 
-      const matching = messages.filter(msg =>
-        msg.author.id === client.user.id &&
-        msg.embeds.some(embed =>
-          (embed.description || "").includes(
-            "Please click the button below for the client role"
-          )
-        )
-      );
+      if (clientCommandLocks.has(channelId)) {
+        console.log(
+          `[CLIENT] Ignored simultaneous command in channel ${channelId}.`
+        );
+        return;
+      }
 
-      const existing = matching.first();
+      clientCommandLocks.add(channelId);
 
-      const payload = {
-        embeds: [makeClientEmbed()],
-        components: [makeClientButton()],
-        allowedMentions: { parse: [] }
-      };
+      try {
+        const matching = await findClientRoleMessages(message.channel);
 
-      if (existing) {
-        await existing.edit(payload);
+        const payload = {
+          embeds: [makeClientEmbed()],
+          components: [makeClientButton()],
+          allowedMentions: { parse: [] }
+        };
 
-        for (const duplicate of matching.values()) {
-          if (duplicate.id !== existing.id) {
-            await duplicate.delete().catch(() => {});
+        if (matching.length > 0) {
+          const existing = matching[0];
+
+          await existing.edit(payload);
+
+          for (const duplicate of matching.slice(1)) {
+            await duplicate.delete().catch(error => {
+              console.error(
+                "[CLIENT] Could not delete duplicate:",
+                error
+              );
+            });
           }
+
+          console.log(
+            `[CLIENT] Updated existing message in ${channelId}.`
+          );
+        } else {
+          await message.channel.send(payload);
+
+          console.log(
+            `[CLIENT] Created new message in ${channelId}.`
+          );
         }
-
-        console.log(`[CLIENT] Updated client role message in ${message.channel.id}.`);
-      } else {
-        await message.channel.send(payload);
-
-        console.log(`[CLIENT] Created client role message in ${message.channel.id}.`);
+      } finally {
+        clientCommandLocks.delete(channelId);
       }
 
       return;
