@@ -166,7 +166,7 @@ const HELP_COMMAND = new SlashCommandBuilder()
 
 const TICKET_SUPPORT_ROLE_ID = "1563003884656398406";
 
-const RULES_CHANNEL_ID = "1551275482857865336";
+const RULES_CHANNEL_ID = "1551275482857865333";
 
 const VOUCH_TUTORIAL_CHANNEL_ID = "1562958688896028802";
 const QUICK_VOUCH_CHANNEL_ID = "1552903786077360269";
@@ -1651,12 +1651,12 @@ function makeStaffEmbed() {
       "",
       `${SELLER_EMOJI} **<@727673410737668107>**`,
       "Role: Mod | staff",
-      "ID: 727673410737668107"
+      "ID: 727673410737668107",
       "",
-       `${SELLER_EMOJI} **<@727673410737668107>**`,
+      `${SELLER_EMOJI} **<@1138255113824256011>**`,
       "Role: Mod | staff",
       "ID: 1138255113824256011"
-    ].join("\n")); 
+    ].join("\n"));
 }
 
 // ==================================================
