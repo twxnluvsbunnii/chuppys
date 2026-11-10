@@ -86,7 +86,7 @@ const PING_ROLE_IDS = [
   "1531104789075853472",
   "1531104886630907925",
   "1531105107586973696",
-  "1551276593425682543",
+  "1551276593425685333",
   "1558913216602706011",
   "1568240367076122634",
   "1568283533879939123",
@@ -259,6 +259,7 @@ let vouchCounterRecountRequested = false;
 
 const sellerCommandLocks = new Set();
 const clientCommandLocks = new Set();
+const promoterCommandLocks = new Set();
 
 // ==================================================
 // DISCORD CLIENT
@@ -385,7 +386,6 @@ function checkVerificationRequirements(member) {
 // ==================================================
 // SLASH COMMAND REGISTRATION
 // REGISTERS /QUESTION AND /HELP
-// PRESERVES OTHER COMMANDS
 // ==================================================
 
 async function registerQuestionCommand() {
@@ -507,43 +507,23 @@ function makeClientButton() {
 }
 
 // ==================================================
-// CLIENT MESSAGE HISTORY SEARCH
+// CLIENT MESSAGE SEARCH — OPTIMIZED
+// ONLY SEARCHES THE MOST RECENT 100 MESSAGES
 // ==================================================
 
 async function findClientRoleMessages(channel) {
-  const matching = [];
-  let before;
+  const messages = await channel.messages.fetch({ limit: 100 });
 
-  while (true) {
-    const options = { limit: 100 };
-
-    if (before) {
-      options.before = before;
-    }
-
-    const messages = await channel.messages.fetch(options);
-
-    if (messages.size === 0) break;
-
-    for (const msg of messages.values()) {
-      if (
-        msg.author.id === client.user.id &&
-        msg.embeds.some(embed =>
-          (embed.description || "").includes(
-            "Please click the button below for the client role"
-          )
+  return messages
+    .filter(msg =>
+      msg.author.id === client.user.id &&
+      msg.embeds.some(embed =>
+        (embed.description || "").includes(
+          "Please click the button below for the client role"
         )
-      ) {
-        matching.push(msg);
-      }
-    }
-
-    before = messages.last().id;
-
-    if (messages.size < 100) break;
-  }
-
-  return matching;
+      )
+    )
+    .sort((a, b) => b.createdTimestamp - a.createdTimestamp);
 }
 
 // ==================================================
@@ -851,7 +831,8 @@ function makeHelpEmbed() {
           "`,r @user r` — Sends a member a vouch reminder.\n" +
           "`,partner` — Displays partnership instructions.\n" +
           "`,mod` — Displays moderator responsibilities.\n" +
-          "`,seller` — Displays seller application information."
+          "`,seller` — Displays seller application information.\n" +
+          "`,promoter` — Displays promoter responsibilities and application questions."
       },
       {
         name: "Service Commands",
@@ -876,6 +857,41 @@ function makeHelpEmbed() {
     .setThumbnail(
       "https://cdn.discordapp.com/emojis/1569039366880235560.png"
     )
+    .setFooter({ text: ".gg/chuppys" });
+}
+
+// ==================================================
+// PROMOTER RESPONSIBILITIES — ,promoter
+// ==================================================
+
+function makePromoterEmbed() {
+  return new EmbedBuilder()
+    .setTitle(".gg/chuppys promoter information")
+    .setDescription(
+      "**Interested in becoming a .gg/chuppys promoter?**\n\n" +
+
+      "**Promoter Responsibilities**\n\n" +
+      "• Actively advertise and promote **.gg/chuppys**.\n" +
+      "• Help bring genuine new members into the server.\n" +
+      "• Share the server with your audience and on your platforms.\n" +
+      "• Help the community grow and attract potential customers.\n" +
+      "• Represent Chuppys in a positive and respectful way.\n" +
+      "• Keep promotions appropriate and follow platform rules.\n" +
+      "• Do not use fake invites, spam, or misleading advertisements.\n\n" +
+
+      "**Promoter Application Questions**\n\n" +
+      "**1. Do you have a following base?**\n" +
+      "If so, how many followers do you have and what platform are they on?\n\n" +
+      "**2. How many invites do you think you will gain monthly?**\n\n" +
+
+      "**Payment Information**\n\n" +
+      "Promoters are paid **monthly**. Payment details and arrangements " +
+      "will be discussed with management.\n\n" +
+
+      "If you're interested, please answer both application questions " +
+      "and send your answers to the Chuppys team."
+    )
+    .setColor("#FFFFFF")
     .setFooter({ text: ".gg/chuppys" });
 }
 
@@ -1660,7 +1676,7 @@ function makeStaffEmbed() {
       `${SELLER_EMOJI} **<@941559349808091167>**`,
       "Role: Mod | staff",
       "ID: 941559349808091167",
-      "",
+      ""
     ].join("\n"));
 }
 
@@ -1825,8 +1841,8 @@ client.on(Events.MessageCreate, async message => {
     if (wasAFKCommand) return;
 
     // ==================================================
-    // CLIENT — SEND OR UPDATE CLIENT ROLE MESSAGE
-    // SEARCHES ENTIRE CHANNEL HISTORY
+    // CLIENT — FAST SEND OR UPDATE
+    // SEARCHES ONLY THE MOST RECENT 100 MESSAGES
     // ONE MESSAGE ONLY
     // ==================================================
 
@@ -1851,18 +1867,26 @@ client.on(Events.MessageCreate, async message => {
           allowedMentions: { parse: [] }
         };
 
-        if (matching.length > 0) {
-          const existing = matching[0];
+        if (matching.size > 0) {
+          const existing = matching.first();
 
           await existing.edit(payload);
 
-          for (const duplicate of matching.slice(1)) {
-            await duplicate.delete().catch(error => {
-              console.error(
-                "[CLIENT] Could not delete duplicate:",
-                error
-              );
-            });
+          const duplicates = matching.filter(
+            msg => msg.id !== existing.id
+          );
+
+          if (duplicates.size > 0) {
+            await Promise.all(
+              duplicates.map(msg =>
+                msg.delete().catch(error => {
+                  console.error(
+                    "[CLIENT] Duplicate deletion failed:",
+                    error
+                  );
+                })
+              )
+            );
           }
 
           console.log(
@@ -1882,7 +1906,78 @@ client.on(Events.MessageCreate, async message => {
       return;
     }
 
-    // VOUCH TUTORIAL — Manage Server only
+    // ==================================================
+    // ,promoter — PROMOTER RESPONSIBILITIES
+    // ONE MESSAGE ONLY — LOCKED PER CHANNEL
+    // ==================================================
+
+    if (content === ",promoter") {
+      const channelId = message.channel.id;
+
+      if (promoterCommandLocks.has(channelId)) {
+        console.log(
+          `[PROMOTER] Ignored simultaneous command in channel ${channelId}.`
+        );
+        return;
+      }
+
+      promoterCommandLocks.add(channelId);
+
+      try {
+        const messages = await message.channel.messages.fetch({
+          limit: 100
+        });
+
+        const matching = messages.filter(msg =>
+          msg.author.id === client.user.id &&
+          msg.embeds.some(embed =>
+            embed.title === ".gg/chuppys promoter information"
+          )
+        );
+
+        const existing = matching.first();
+
+        const payload = {
+          embeds: [makePromoterEmbed()],
+          content: "",
+          components: [],
+          allowedMentions: { parse: [] }
+        };
+
+        if (existing) {
+          await existing.edit(payload);
+
+          for (const duplicate of matching.values()) {
+            if (duplicate.id !== existing.id) {
+              await duplicate.delete().catch(error => {
+                console.error(
+                  "[PROMOTER] Could not delete duplicate:",
+                  error
+                );
+              });
+            }
+          }
+
+          console.log(
+            `[PROMOTER] Updated promoter information in ${channelId}.`
+          );
+        } else {
+          await message.channel.send(payload);
+
+          console.log(
+            `[PROMOTER] Created promoter information in ${channelId}.`
+          );
+        }
+      } finally {
+        promoterCommandLocks.delete(channelId);
+      }
+
+      return;
+    }
+
+    // ==================================================
+    // VOUCH TUTORIAL — MANAGE SERVER ONLY
+    // ==================================================
 
     if (content === "!vouchtut") {
       if (!message.member.permissions.has(
@@ -1904,7 +1999,9 @@ client.on(Events.MessageCreate, async message => {
       return;
     }
 
-    // RANKED ROLES — Manage Server only
+    // ==================================================
+    // RANKED ROLES — MANAGE SERVER ONLY
+    // ==================================================
 
     if (content === "!ranked") {
       if (!message.member.permissions.has(
