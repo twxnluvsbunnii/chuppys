@@ -52,6 +52,15 @@ const ROBUX_CASHOUT_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1561094713153429746.png";
 
 // ==================================================
+// STOCK REQUEST SETTINGS
+// ==================================================
+
+const REQUEST_CHANNEL_ID = "1569732416388726834";
+
+const REQUEST_THUMBNAIL_URL =
+  "https://cdn.discordapp.com/emojis/1569738982114459701.png";
+
+// ==================================================
 // VERIFICATION SETTINGS
 // ==================================================
 
@@ -90,7 +99,9 @@ const PING_ROLE_IDS = [
   "1558913216602706011",
   "1568240367076122634",
   "1568283533879939123",
-  "1568240484206514248"
+  "1568240484206514248",
+  "1569731217799127210",
+  "1569731506706849872"
 ];
 
 // ==================================================
@@ -150,6 +161,35 @@ const QUESTION_COMMAND = new SlashCommandBuilder()
       .setName("picture")
       .setDescription("Optionally attach a picture.")
       .setRequired(false)
+  );
+
+// ==================================================
+// REQUEST COMMAND
+// ==================================================
+
+const REQUEST_COMMAND = new SlashCommandBuilder()
+  .setName("request")
+  .setDescription("Request items for Chuppys to stock up on.")
+  .addStringOption(option =>
+    option
+      .setName("category")
+      .setDescription("Choose the category for your request.")
+      .setRequired(true)
+      .addChoices(
+        { name: "Baddies", value: "Baddies" },
+        { name: "Robux", value: "Robux" },
+        { name: "MM2", value: "MM2" },
+        { name: "Blade Ball", value: "Blade Ball" },
+        { name: "Limiteds", value: "Limiteds" },
+        { name: "Adopt Me", value: "Adopt Me" }
+      )
+  )
+  .addStringOption(option =>
+    option
+      .setName("items")
+      .setDescription("What would you like Chuppys to stock up on?")
+      .setRequired(true)
+      .setMaxLength(1000)
   );
 
 // ==================================================
@@ -385,7 +425,7 @@ function checkVerificationRequirements(member) {
 
 // ==================================================
 // SLASH COMMAND REGISTRATION
-// REGISTERS /QUESTION AND /HELP
+// REGISTERS /QUESTION, /REQUEST AND /HELP
 // ==================================================
 
 async function registerQuestionCommand() {
@@ -398,6 +438,7 @@ async function registerQuestionCommand() {
 
   const commandsToRegister = [
     QUESTION_COMMAND,
+    REQUEST_COMMAND,
     HELP_COMMAND
   ];
 
@@ -507,8 +548,7 @@ function makeClientButton() {
 }
 
 // ==================================================
-// CLIENT MESSAGE SEARCH — OPTIMIZED
-// ONLY SEARCHES THE MOST RECENT 100 MESSAGES
+// CLIENT MESSAGE SEARCH
 // ==================================================
 
 async function findClientRoleMessages(channel) {
@@ -819,6 +859,7 @@ function makeHelpEmbed() {
         value:
           "`/help` — Displays this command menu.\n" +
           "`/question` — Submit a question to the Chuppys team.\n" +
+          "`/request` — Request items for Chuppys to stock up on.\n" +
           "`/vouch` — Submit a vouch for a completed transaction.\n" +
           "`,afk [reason]` — Set your AFK status.\n" +
           "`,pay` — Displays available payment methods.\n" +
@@ -915,7 +956,7 @@ client.once(Events.ClientReady, async readyClient => {
 });
 
 // ==================================================
-// QUESTION + VERIFICATION + CLIENT INTERACTIONS
+// QUESTION + REQUEST + VERIFICATION + CLIENT INTERACTIONS
 // ==================================================
 
 client.on(Events.InteractionCreate, async interaction => {
@@ -933,6 +974,71 @@ client.on(Events.InteractionCreate, async interaction => {
         embeds: [makeHelpEmbed()],
         ephemeral: true
       });
+
+      return;
+    }
+
+    // ==================================================
+    // /REQUEST COMMAND
+    // ==================================================
+
+    if (
+      interaction.isChatInputCommand() &&
+      interaction.commandName === "request"
+    ) {
+      if (interaction.channelId !== REQUEST_CHANNEL_ID) {
+        await interaction.reply({
+          content:
+            `Please use \`/request\` in <#${REQUEST_CHANNEL_ID}>.`,
+          ephemeral: true
+        });
+        return;
+      }
+
+      const category = interaction.options.getString("category", true);
+      const items = interaction.options.getString("items", true);
+
+      const requestEmbed = new EmbedBuilder()
+        .setTitle(`${category} Request`)
+        .setDescription(
+          `**Requested by:** ${interaction.user.username}\n\n` +
+          `**What they'd like Chuppys to stock up on:**\n${items}`
+        )
+        .setColor("#FFFFFF")
+        .setThumbnail(REQUEST_THUMBNAIL_URL)
+        .setFooter({ text: ".gg/chuppys" })
+        .setTimestamp();
+
+      const requestChannel = await client.channels.fetch(
+        REQUEST_CHANNEL_ID
+      );
+
+      if (
+        !requestChannel ||
+        !requestChannel.isTextBased() ||
+        !requestChannel.send
+      ) {
+        await interaction.reply({
+          content: "I couldn't find the stock request channel.",
+          ephemeral: true
+        });
+        return;
+      }
+
+      await requestChannel.send({
+        embeds: [requestEmbed],
+        allowedMentions: { parse: [] }
+      });
+
+      await interaction.reply({
+        content:
+          `Your **${category}** request has been submitted! Thank you for helping Chuppys decide what to stock.`,
+        ephemeral: true
+      });
+
+      console.log(
+        `[REQUEST] ${interaction.user.tag} submitted a ${category} request.`
+      );
 
       return;
     }
@@ -1842,8 +1948,6 @@ client.on(Events.MessageCreate, async message => {
 
     // ==================================================
     // CLIENT — FAST SEND OR UPDATE
-    // SEARCHES ONLY THE MOST RECENT 100 MESSAGES
-    // ONE MESSAGE ONLY
     // ==================================================
 
     if (content === ",client") {
@@ -1908,7 +2012,6 @@ client.on(Events.MessageCreate, async message => {
 
     // ==================================================
     // ,promoter — PROMOTER RESPONSIBILITIES
-    // ONE MESSAGE ONLY — LOCKED PER CHANNEL
     // ==================================================
 
     if (content === ",promoter") {
@@ -2124,7 +2227,6 @@ client.on(Events.MessageCreate, async message => {
 
     // ==================================================
     // ,partner — PARTNERSHIP INSTRUCTIONS
-    // TICKET SUPPORT ONLY — ONE MESSAGE ONLY
     // ==================================================
 
     if (content === ",partner") {
@@ -2189,7 +2291,6 @@ client.on(Events.MessageCreate, async message => {
 
     // ==================================================
     // ,mod — MODERATOR RESPONSIBILITIES
-    // TICKET SUPPORT ONLY — ONE MESSAGE ONLY
     // ==================================================
 
     if (content === ",mod") {
@@ -2248,7 +2349,6 @@ client.on(Events.MessageCreate, async message => {
 
     // ==================================================
     // ,seller — SELLER APPLICATION
-    // ONE MESSAGE ONLY — LOCKED PER CHANNEL
     // ==================================================
 
     if (content === ",seller") {
