@@ -1653,9 +1653,6 @@ function makeStaffEmbed() {
       "Role: Mod | staff",
       "ID: 727673410737668107",
       "",
-      `${SELLER_EMOJI} **<@1138255113824256011>**`,
-      "Role: Mod | staff",
-      "ID: 1138255113824256011"
     ].join("\n"));
 }
 
