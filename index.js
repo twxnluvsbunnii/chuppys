@@ -1,3 +1,4 @@
+
 const http = require("http");
 
 const {
@@ -48,6 +49,7 @@ const SELLERS_CHANNEL_ID = "1551713598181605496";
 const STAFF_CHANNEL_ID = "1561013244905132122";
 
 const ROBUX_CASHOUT_CHANNEL_ID = "1552385740405473513";
+
 const ROBUX_CASHOUT_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1561094713153429746.png";
 
@@ -58,7 +60,7 @@ const ROBUX_CASHOUT_THUMBNAIL_URL =
 const REQUEST_CHANNEL_ID = "1569732416388726834";
 
 const REQUEST_THUMBNAIL_URL =
-  "https://cdn.discordapp.com/emojis/1569738982114459701.png";
+  "https://cdn.discordapp.com/emojis/1561388594625511514.png?size=128&quality=lossless";
 
 // ==================================================
 // VERIFICATION SETTINGS
@@ -177,11 +179,10 @@ const REQUEST_COMMAND = new SlashCommandBuilder()
       .setRequired(true)
       .addChoices(
         { name: "Baddies", value: "Baddies" },
-        { name: "Robux", value: "Robux" },
         { name: "MM2", value: "MM2" },
+        { name: "Adopt Me", value: "Adopt Me" },
         { name: "Blade Ball", value: "Blade Ball" },
-        { name: "Limiteds", value: "Limiteds" },
-        { name: "Adopt Me", value: "Adopt Me" }
+        { name: "Robux", value: "Robux" }
       )
   )
   .addStringOption(option =>
@@ -425,7 +426,6 @@ function checkVerificationRequirements(member) {
 
 // ==================================================
 // SLASH COMMAND REGISTRATION
-// REGISTERS /QUESTION, /REQUEST AND /HELP
 // ==================================================
 
 async function registerQuestionCommand() {
@@ -996,12 +996,37 @@ client.on(Events.InteractionCreate, async interaction => {
       }
 
       const category = interaction.options.getString("category", true);
-      const items = interaction.options.getString("items", true);
+      const items = interaction.options.getString("items", true).trim();
+
+      const validCategories = [
+        "Baddies",
+        "MM2",
+        "Adopt Me",
+        "Blade Ball",
+        "Robux"
+      ];
+
+      if (!validCategories.includes(category)) {
+        await interaction.reply({
+          content: "Please select a valid category.",
+          ephemeral: true
+        });
+        return;
+      }
+
+      if (!items) {
+        await interaction.reply({
+          content: "Please enter the items you want to request.",
+          ephemeral: true
+        });
+        return;
+      }
 
       const requestEmbed = new EmbedBuilder()
         .setTitle(`${category} Request`)
         .setDescription(
-          `**Requested by:** ${interaction.user.username}\n\n` +
+          `**Requested by:** <@${interaction.user.id}>\n\n` +
+          `**Category:** ${category}\n\n` +
           `**What they'd like Chuppys to stock up on:**\n${items}`
         )
         .setColor("#FFFFFF")
@@ -1025,15 +1050,17 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
+      await interaction.deferReply({ ephemeral: true });
+
       await requestChannel.send({
         embeds: [requestEmbed],
         allowedMentions: { parse: [] }
       });
 
-      await interaction.reply({
+      await interaction.editReply({
         content:
-          `Your **${category}** request has been submitted! Thank you for helping Chuppys decide what to stock.`,
-        ephemeral: true
+          `Your **${category}** request has been submitted! ` +
+          "Thank you for helping Chuppys decide what to stock. ♡"
       });
 
       console.log(
@@ -1406,15 +1433,17 @@ client.on(Events.InteractionCreate, async interaction => {
   } catch (error) {
     console.error("[INTERACTION] Error:", error);
 
-    if (
-      interaction.isRepliable() &&
-      !interaction.replied &&
-      !interaction.deferred
-    ) {
-      await interaction.reply({
-        content: "Something went wrong while processing that interaction.",
-        ephemeral: true
-      }).catch(() => {});
+    if (interaction.isRepliable()) {
+      if (interaction.deferred && !interaction.replied) {
+        await interaction.editReply({
+          content: "Something went wrong while processing that interaction."
+        }).catch(() => {});
+      } else if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({
+          content: "Something went wrong while processing that interaction.",
+          ephemeral: true
+        }).catch(() => {});
+      }
     }
   }
 });
@@ -1718,7 +1747,7 @@ function makeSellersEmbed() {
     ["1079241163455873074", "seller", "no limit"],
     ["1032693136163622993", "seller", "$45"],
     ["1320199904219496530", "seller", "$35"],
-    ["952566845939023892", "seller", "$100"],
+    ["952566845939023892", "seller", "no limit"],
     ["1473335012769267807", "seller", "$100"],
     ["1472856287527309313", "seller", "$100"],
     ["1269188505935024141", "seller", "$250"],
@@ -1782,6 +1811,11 @@ function makeStaffEmbed() {
       `${SELLER_EMOJI} **<@941559349808091167>**`,
       "Role: Mod | staff",
       "ID: 941559349808091167",
+      "",
+      `${SELLER_EMOJI} **<@952566845939023892>**`,
+      "Role: Mod | seller",
+      "Limit: no limit",
+      "ID: 952566845939023892",
       ""
     ].join("\n"));
 }
@@ -2414,7 +2448,10 @@ client.on(Events.MessageCreate, async message => {
           for (const duplicate of matching.values()) {
             if (duplicate.id !== existing.id) {
               await duplicate.delete().catch(error => {
-                console.error("[SELLER] Could not delete duplicate:", error);
+                console.error(
+                  "[SELLER] Could not delete duplicate:",
+                  error
+                );
               });
             }
           }
