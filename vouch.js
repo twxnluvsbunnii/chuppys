@@ -66,7 +66,7 @@ const SELLERS = [
   },
   {
     id: "1472856287527309313",
-    name: "﹕𐔌・coraline 〃・꒱",
+    name: "﹕𐔌・mira 〃・꒱",
     personal: false
   },
   {
