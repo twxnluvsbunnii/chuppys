@@ -1,3 +1,7 @@
+// ==================================================
+// .GG/CHUPPYS TICKET SYSTEM
+// DISCORD.JS V14
+// ==================================================
 
 const fs = require("fs");
 const path = require("path");
@@ -12,202 +16,250 @@ const {
   ButtonBuilder,
   ButtonStyle,
   AttachmentBuilder,
-  SlashCommandBuilder
+  SlashCommandBuilder,
+  MessageFlags
 } = require("discord.js");
 
 // ==================================================
-// CHUPPYS TICKET SETTINGS
+// CONFIGURATION
 // ==================================================
 
-const PANEL_CHANNEL_ID = "1530811385678790716";
+const TICKET_PANEL_CHANNEL_ID = "1530811385678790716";
+
+const TICKET_EMOJI_ID = "1561103471325745242";
+const TICKET_EMOJI = "<:chuppyhi:1561103471325745242>";
 
 const OWNER_ROLE_ID = "1530988662970650865";
-const STAFF_ROLE_ID = "1563003884656398406";
+const TICKET_SUPPORT_ROLE_ID = "1563003884656398406";
 const SELLER_ROLE_ID = "1550322075208646766";
 const CONVERTER_ROLE_ID = "1569334149695668287";
 const MIDDLEMAN_ROLE_ID = "1569334076224053268";
 
 const TICKET_ACCESS_ROLE_IDS = [
   OWNER_ROLE_ID,
-  STAFF_ROLE_ID,
+  TICKET_SUPPORT_ROLE_ID,
   SELLER_ROLE_ID,
   CONVERTER_ROLE_ID,
   MIDDLEMAN_ROLE_ID
 ];
 
-const TICKET_MANAGEMENT_ROLE_IDS = [
-  OWNER_ROLE_ID,
-  STAFF_ROLE_ID
-];
-
-const EMOJI_ID = "1561103471325745242";
-const EMOJI = "<:chuppyhi:1561103471325745242>";
-
-const EMOJI_OBJECT = {
-  id: EMOJI_ID,
-  name: "chuppyhi"
-};
-
-const EMOJI_URL =
-  `https://cdn.discordapp.com/emojis/${EMOJI_ID}.png`;
-
-const LOG_CHANNEL_ID =
+const TICKET_LOG_CHANNEL_ID =
   process.env.TICKET_LOG_CHANNEL_ID || "";
 
-const DATA_FILE =
+const TICKET_DATA_PATH =
   process.env.TICKET_DATA_PATH ||
   path.join(__dirname, "chuppys-tickets.json");
 
-// ==================================================
-// TICKET CATEGORIES
-// ==================================================
+const TICKET_COLOR = "#FFFFFF";
 
-const TYPES = {
+const TICKET_CATEGORIES = {
   purchase: {
     label: "Purchase",
-    description: "ONLY TO BUY",
-    prefix: "purchasing",
-    category: "Purchasing Tickets"
+    description: "Open a ticket to purchase something.",
+    channelPrefix: "purchase"
   },
 
   cashout: {
     label: "Cashout",
-    description: "ONLY TO CASHOUT",
-    prefix: "cashout",
-    category: "Cashout Tickets"
+    description: "Open a ticket to cash out.",
+    channelPrefix: "cashout"
   },
 
   giveaway: {
     label: "Giveaway",
-    description: "ONLY TO CLAIM",
-    prefix: "giveaway",
-    category: "Giveaway Tickets"
+    description: "Open a ticket to claim a giveaway.",
+    channelPrefix: "giveaway"
   },
 
   partnership: {
     label: "Partnership",
-    description: "PARTNERSHIP ONLY",
-    prefix: "partnership",
-    category: "Partnership Tickets"
+    description: "Open a ticket for a partnership.",
+    channelPrefix: "partnership"
   },
 
   support: {
     label: "Support",
-    description: "GET ASSISTANCE",
-    prefix: "support",
-    category: "Support Tickets"
+    description: "Open a ticket if you need assistance.",
+    channelPrefix: "support"
   }
 };
 
 // ==================================================
-// TICKET DATABASE
+// SLASH COMMAND
 // ==================================================
 
-function loadDatabase() {
-  if (!fs.existsSync(DATA_FILE)) {
-    return {
-      counter: 0,
-      tickets: {}
-    };
-  }
+const TICKET_PANEL_COMMAND = new SlashCommandBuilder()
+  .setName("ticketpanel")
+  .setDescription("Post or update the Chuppys ticket panel.")
+  .setDefaultMemberPermissions(
+    PermissionsBitField.Flags.ManageGuild
+  );
 
+// ==================================================
+// DATA STORAGE
+// ==================================================
+
+function defaultData() {
+  return {
+    panelMessageId: null,
+    ticketCounter: 0,
+    tickets: {}
+  };
+}
+
+function loadData() {
   try {
-    const data = JSON.parse(
-      fs.readFileSync(DATA_FILE, "utf8")
+    if (!fs.existsSync(TICKET_DATA_PATH)) {
+      return defaultData();
+    }
+
+    const raw = fs.readFileSync(
+      TICKET_DATA_PATH,
+      "utf8"
     );
 
+    const parsed = JSON.parse(raw);
+
     return {
-      counter: Number(data.counter) || 0,
-      tickets: data.tickets || {}
+      panelMessageId: parsed.panelMessageId || null,
+      ticketCounter: Number(parsed.ticketCounter) || 0,
+      tickets: parsed.tickets || {}
     };
   } catch (error) {
-    console.error("[TICKETS] Database load error:", error);
+    console.error(
+      "[TICKETS] Failed to load ticket data:",
+      error
+    );
 
-    // Do not silently overwrite an existing damaged database.
+    return defaultData();
+  }
+}
+
+let ticketData = loadData();
+
+function saveData() {
+  try {
+    const directory = path.dirname(TICKET_DATA_PATH);
+
+    fs.mkdirSync(directory, {
+      recursive: true
+    });
+
+    const temporaryPath = `${TICKET_DATA_PATH}.tmp`;
+
+    fs.writeFileSync(
+      temporaryPath,
+      JSON.stringify(ticketData, null, 2),
+      "utf8"
+    );
+
+    fs.renameSync(
+      temporaryPath,
+      TICKET_DATA_PATH
+    );
+  } catch (error) {
+    console.error(
+      "[TICKETS] Failed to save ticket data:",
+      error
+    );
+
     throw error;
   }
 }
 
-const db = loadDatabase();
-
-function saveDatabase() {
-  fs.mkdirSync(path.dirname(DATA_FILE), {
-    recursive: true
-  });
-
-  const temporary = DATA_FILE + ".tmp";
-
-  fs.writeFileSync(
-    temporary,
-    JSON.stringify(db, null, 2),
-    "utf8"
-  );
-
-  fs.renameSync(temporary, DATA_FILE);
-}
-
-const creationLocks = new Set();
-const actionLocks = new Set();
-
 // ==================================================
-// ROLE PERMISSIONS
+// HELPERS
 // ==================================================
 
-function ticketRolePermissions() {
-  return TICKET_ACCESS_ROLE_IDS.map(roleId => ({
-    id: roleId,
-    allow: [
-      PermissionsBitField.Flags.ViewChannel,
-      PermissionsBitField.Flags.SendMessages,
-      PermissionsBitField.Flags.ReadMessageHistory,
-      PermissionsBitField.Flags.AttachFiles
-    ]
-  }));
-}
-
-function hasTicketRole(interaction, roleIds) {
-  const roles = interaction.member?.roles;
-
-  if (roles?.cache) {
-    return roleIds.some(id => roles.cache.has(id));
-  }
-
-  if (Array.isArray(roles)) {
-    return roleIds.some(id => roles.includes(id));
-  }
-
-  return false;
-}
-
-function isTicketManager(interaction) {
-  if (!interaction.guild) return false;
-
-  if (interaction.user.id === interaction.guild.ownerId) {
-    return true;
-  }
+function hasTicketAccess(member) {
+  if (!member) return false;
 
   if (
-    interaction.memberPermissions?.has(
+    member.permissions.has(
       PermissionsBitField.Flags.Administrator
-    ) ||
-    interaction.memberPermissions?.has(
-      PermissionsBitField.Flags.ManageGuild
     )
   ) {
     return true;
   }
 
-  return hasTicketRole(
-    interaction,
-    TICKET_MANAGEMENT_ROLE_IDS
+  return TICKET_ACCESS_ROLE_IDS.some(roleId =>
+    member.roles.cache.has(roleId)
   );
 }
 
-function canCloseTicket(interaction, ticket) {
+function canManageTicket(member, ticket) {
+  if (!member || !ticket) return false;
+
   return (
-    isTicketManager(interaction) ||
-    ticket.userId === interaction.user.id
+    hasTicketAccess(member) ||
+    member.id === ticket.userId
   );
+}
+
+function staffPermissionOverwrites(guild) {
+  return TICKET_ACCESS_ROLE_IDS
+    .filter(roleId => guild.roles.cache.has(roleId))
+    .map(roleId => ({
+      id: roleId,
+      allow: [
+        PermissionsBitField.Flags.ViewChannel,
+        PermissionsBitField.Flags.SendMessages,
+        PermissionsBitField.Flags.ReadMessageHistory,
+        PermissionsBitField.Flags.AttachFiles,
+        PermissionsBitField.Flags.EmbedLinks
+      ]
+    }));
+}
+
+function makeEmbed(title, description) {
+  return new EmbedBuilder()
+    .setTitle(title)
+    .setDescription(description)
+    .setColor(TICKET_COLOR)
+    .setFooter({
+      text: ".gg/chuppys | Ticket System"
+    })
+    .setTimestamp();
+}
+
+function safeChannelName(value) {
+  return String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 35);
+}
+
+function getTicket(channelId) {
+  return ticketData.tickets[channelId] || null;
+}
+
+async function getMember(interaction) {
+  if (!interaction.guild) return null;
+
+  return interaction.guild.members
+    .fetch(interaction.user.id)
+    .catch(() => null);
+}
+
+async function respond(interaction, content) {
+  const payload = {
+    content,
+    flags: MessageFlags.Ephemeral
+  };
+
+  if (interaction.deferred) {
+    return interaction.editReply({
+      content
+    });
+  }
+
+  if (interaction.replied) {
+    return interaction.followUp(payload);
+  }
+
+  return interaction.reply(payload);
 }
 
 // ==================================================
@@ -216,139 +268,187 @@ function canCloseTicket(interaction, ticket) {
 
 function makeTicketPanelEmbed() {
   return new EmbedBuilder()
-    .setTitle("Open a Ticket")
+    .setTitle("Open a ticket with .gg/chuppys")
     .setDescription(
-      `${EMOJI} **Welcome to .gg/chuppys!**\n\n` +
-      "Please select a category from the dropdown " +
-      "menu below to open a private ticket.\n\n" +
-
-      `${EMOJI} **Purchase**\n` +
-      "Only open this ticket if you're buying.\n\n" +
-
-      `${EMOJI} **Cashout**\n` +
-      "Only open this ticket if you're cashing out.\n\n" +
-
-      `${EMOJI} **Giveaway**\n` +
-      "Only open this ticket to claim a giveaway.\n\n" +
-
-      `${EMOJI} **Partnership**\n` +
-      "Only open this ticket for partnerships.\n\n" +
-
-      `${EMOJI} **Support**\n` +
-      "Open this ticket if you need assistance.\n\n" +
-
-      "Our team will assist you as soon as possible!"
+      "Please click the on the drop down menu and pick " +
+      "what you would like to do today " +
+      TICKET_EMOJI
     )
-    .setColor("#FFFFFF")
-    .setThumbnail(EMOJI_URL)
+    .setColor(TICKET_COLOR)
     .setFooter({
       text: ".gg/chuppys | Ticket System"
     });
 }
 
 // ==================================================
-// TICKET DROPDOWN MENU
+// TICKET PANEL DROPDOWN
 // ==================================================
 
-function makeTicketMenu() {
+function makeTicketPanelMenu() {
   const menu = new StringSelectMenuBuilder()
-    .setCustomId("chuppy_ticket_select")
+    .setCustomId("chuppys_ticket_select")
     .setPlaceholder("Select a ticket category")
     .setMinValues(1)
-    .setMaxValues(1);
-
-  for (const [key, type] of Object.entries(TYPES)) {
-    menu.addOptions({
-      label: type.label,
-      description: type.description,
-      value: key,
-      emoji: EMOJI_OBJECT
-    });
-  }
-
-  return new ActionRowBuilder().addComponents(menu);
-}
-
-// ==================================================
-// POST OR UPDATE TICKET PANEL
-// ==================================================
-
-async function sendOrUpdateTicketPanel(client) {
-  const channel = await client.channels.fetch(
-    PANEL_CHANNEL_ID
-  );
-
-  if (!channel?.messages || !channel.send) {
-    throw new Error("Ticket panel channel not found.");
-  }
-
-  const payload = {
-    embeds: [makeTicketPanelEmbed()],
-    components: [makeTicketMenu()],
-    allowedMentions: { parse: [] }
-  };
-
-  let existing = null;
-  let before;
-
-  for (let page = 0; page < 10; page++) {
-    const options = { limit: 100 };
-
-    if (before) {
-      options.before = before;
-    }
-
-    const messages = await channel.messages.fetch(options);
-
-    if (!messages.size) break;
-
-    existing = messages.find(message =>
-      message.author.id === client.user.id &&
-      message.components.some(row =>
-        row.components.some(component =>
-          component.customId === "chuppy_ticket_select"
-        )
+    .setMaxValues(1)
+    .addOptions(
+      Object.entries(TICKET_CATEGORIES).map(
+        ([value, category]) => ({
+          label: category.label,
+          description: category.description,
+          value,
+          emoji: {
+            id: TICKET_EMOJI_ID
+          }
+        })
       )
     );
 
-    if (existing) break;
-
-    before = messages.last().id;
-
-    if (messages.size < 100) break;
-  }
-
-  if (existing) {
-    await existing.edit(payload);
-
-    console.log("[TICKETS] Existing panel updated.");
-    return existing;
-  }
-
-  const sent = await channel.send(payload);
-
-  console.log("[TICKETS] New panel posted.");
-  return sent;
+  return new ActionRowBuilder()
+    .addComponents(menu);
 }
 
 // ==================================================
-// FIND OR CREATE TICKET CATEGORY
+// SEND OR UPDATE TICKET PANEL
 // ==================================================
 
-async function getTicketCategory(guild, type) {
-  await guild.channels.fetch();
+async function sendOrUpdateTicketPanel(client) {
+  try {
+    const channel = await client.channels.fetch(
+      TICKET_PANEL_CHANNEL_ID
+    );
 
-  let category = guild.channels.cache.find(channel =>
-    channel.type === ChannelType.GuildCategory &&
-    channel.name === type.category
+    if (
+      !channel ||
+      !channel.isTextBased() ||
+      !channel.messages
+    ) {
+      throw new Error(
+        "Ticket panel channel not found."
+      );
+    }
+
+    const payload = {
+      embeds: [makeTicketPanelEmbed()],
+      components: [makeTicketPanelMenu()],
+      allowedMentions: {
+        parse: []
+      }
+    };
+
+    let existing = null;
+
+    if (ticketData.panelMessageId) {
+      existing = await channel.messages
+        .fetch(ticketData.panelMessageId)
+        .catch(() => null);
+    }
+
+    const recentMessages = await channel.messages.fetch({
+      limit: 100
+    });
+
+    const matchingMessages = recentMessages.filter(
+      message =>
+        message.author.id === client.user.id &&
+        (
+          message.components.some(row =>
+            row.components.some(component =>
+              component.customId ===
+                "chuppys_ticket_select"
+            )
+          ) ||
+          message.embeds.some(embed =>
+            embed.title ===
+              "Open a Ticket" ||
+            embed.title ===
+              "Open a ticket with .gg/chuppys"
+          )
+        )
+    );
+
+    if (!existing) {
+      existing = matchingMessages.first() || null;
+    }
+
+    if (existing) {
+      await existing.edit(payload);
+
+      ticketData.panelMessageId = existing.id;
+      saveData();
+
+      for (const duplicate of matchingMessages.values()) {
+        if (duplicate.id !== existing.id) {
+          await duplicate.delete().catch(error => {
+            console.error(
+              "[TICKETS] Failed to delete duplicate panel:",
+              error
+            );
+          });
+        }
+      }
+
+      console.log(
+        "[TICKETS] Ticket panel updated."
+      );
+
+      return existing;
+    }
+
+    const sent = await channel.send(payload);
+
+    ticketData.panelMessageId = sent.id;
+    saveData();
+
+    console.log(
+      "[TICKETS] Ticket panel created."
+    );
+
+    return sent;
+  } catch (error) {
+    console.error(
+      "[TICKETS] Ticket panel error:",
+      error
+    );
+
+    throw error;
+  }
+}
+
+// ==================================================
+// TICKET CATEGORY FOLDERS
+// ==================================================
+
+async function getOrCreateTicketCategory(guild, categoryKey) {
+  const category = TICKET_CATEGORIES[categoryKey];
+
+  if (!category) {
+    throw new Error("Invalid ticket category.");
+  }
+
+  const categoryName =
+    `CHUPPYS ${category.label.toUpperCase()} TICKETS`;
+
+  let existing = guild.channels.cache.find(
+    channel =>
+      channel.type === ChannelType.GuildCategory &&
+      channel.name === categoryName
   );
 
-  if (category) return category;
+  if (existing) return existing;
 
-  category = await guild.channels.create({
-    name: type.category,
+  const channels = await guild.channels.fetch();
+
+  existing = channels.find(
+    channel =>
+      channel.type === ChannelType.GuildCategory &&
+      channel.name === categoryName
+  );
+
+  if (existing) return existing;
+
+  return guild.channels.create({
+    name: categoryName,
     type: ChannelType.GuildCategory,
-
     permissionOverwrites: [
       {
         id: guild.roles.everyone.id,
@@ -356,307 +456,544 @@ async function getTicketCategory(guild, type) {
           PermissionsBitField.Flags.ViewChannel
         ]
       },
-
-      ...ticketRolePermissions()
+      ...staffPermissionOverwrites(guild),
+      {
+        id: guild.members.me.id,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.SendMessages,
+          PermissionsBitField.Flags.ManageChannels,
+          PermissionsBitField.Flags.ReadMessageHistory
+        ]
+      }
     ]
   });
+}
 
-  console.log(
-    `[TICKETS] Category created: ${type.category}`
+// ==================================================
+// TICKET BUTTONS
+// ==================================================
+
+function makeOpenTicketButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("chuppys_ticket_claim")
+      .setLabel("Claim")
+      .setEmoji({
+        id: TICKET_EMOJI_ID
+      })
+      .setStyle(ButtonStyle.Primary),
+
+    new ButtonBuilder()
+      .setCustomId("chuppys_ticket_close")
+      .setLabel("Close")
+      .setEmoji({
+        id: TICKET_EMOJI_ID
+      })
+      .setStyle(ButtonStyle.Secondary)
   );
+}
 
-  return category;
+function makeClosedTicketButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("chuppys_ticket_reopen")
+      .setLabel("Reopen")
+      .setEmoji({
+        id: TICKET_EMOJI_ID
+      })
+      .setStyle(ButtonStyle.Success),
+
+    new ButtonBuilder()
+      .setCustomId("chuppys_ticket_delete")
+      .setLabel("Delete")
+      .setEmoji({
+        id: TICKET_EMOJI_ID
+      })
+      .setStyle(ButtonStyle.Danger)
+  );
 }
 
 // ==================================================
-// TICKET CONTROL BUTTONS
+// CREATE TICKET
 // ==================================================
 
-function makeTicketButtons(status = "open") {
-  if (status === "closed") {
-    return [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("chuppy_ticket_reopen")
-          .setLabel("Reopen")
-          .setEmoji(EMOJI_OBJECT)
-          .setStyle(ButtonStyle.Success),
+const openingTickets = new Set();
 
-        new ButtonBuilder()
-          .setCustomId("chuppy_ticket_delete")
-          .setLabel("Delete")
-          .setEmoji(EMOJI_OBJECT)
-          .setStyle(ButtonStyle.Danger)
-      )
-    ];
-  }
+async function openTicket(interaction, categoryKey) {
+  const category = TICKET_CATEGORIES[categoryKey];
 
-  return [
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("chuppy_ticket_claim")
-        .setLabel("Claim")
-        .setEmoji(EMOJI_OBJECT)
-        .setStyle(ButtonStyle.Primary),
-
-      new ButtonBuilder()
-        .setCustomId("chuppy_ticket_close")
-        .setLabel("Close")
-        .setEmoji(EMOJI_OBJECT)
-        .setStyle(ButtonStyle.Danger)
-    )
-  ];
-}
-
-// ==================================================
-// TICKET WELCOME EMBED
-// ==================================================
-
-function makeTicketWelcomeEmbed(type, user) {
-  return new EmbedBuilder()
-    .setTitle(`${type.label} Ticket`)
-    .setDescription(
-      `${EMOJI} **Welcome to .gg/chuppys!**\n\n` +
-
-      `Hello <@${user.id}>!\n\n` +
-
-      `You opened a **${type.label}** ticket.\n\n` +
-
-      "Please explain what you need assistance with " +
-      "and wait patiently for a member of our team.\n\n" +
-
-      "**Ticket Rules**\n\n" +
-
-      `${EMOJI} Be respectful to staff.\n` +
-      `${EMOJI} Do not spam or repeatedly ping.\n` +
-      `${EMOJI} Provide necessary information.\n` +
-      `${EMOJI} Keep transactions inside your ticket.\n\n` +
-
-      `**Ticket Support:** <@&${STAFF_ROLE_ID}>`
-    )
-    .setColor("#FFFFFF")
-    .setThumbnail(EMOJI_URL)
-    .setFooter({ text: ".gg/chuppys" })
-    .setTimestamp();
-}
-
-// ==================================================
-// CREATE PRIVATE TICKET
-// ==================================================
-
-async function createTicket(interaction, typeKey) {
-  const type = TYPES[typeKey];
-
-  if (!type || !interaction.guild) {
-    await interaction.reply({
-      content: "Invalid ticket category.",
-      ephemeral: true
-    });
-
+  if (!category) {
+    await respond(
+      interaction,
+      "That ticket category is invalid."
+    );
     return;
   }
 
-  if (interaction.channelId !== PANEL_CHANNEL_ID) {
-    await interaction.reply({
-      content:
-        `Please open tickets in <#${PANEL_CHANNEL_ID}>.`,
-      ephemeral: true
-    });
-
+  if (!interaction.guild) {
+    await respond(
+      interaction,
+      "Tickets can only be opened inside .gg/chuppys."
+    );
     return;
   }
 
   const lockKey =
-    `${interaction.guild.id}:${interaction.user.id}:${typeKey}`;
+    `${interaction.guild.id}:${interaction.user.id}`;
 
-  if (creationLocks.has(lockKey)) {
-    await interaction.reply({
-      content: "Your ticket is already being created.",
-      ephemeral: true
-    });
-
+  if (openingTickets.has(lockKey)) {
+    await respond(
+      interaction,
+      "Your ticket is already being created."
+    );
     return;
   }
 
-  creationLocks.add(lockKey);
+  openingTickets.add(lockKey);
 
   try {
-    await interaction.deferReply({ ephemeral: true });
-
-    // Check for an existing open ticket of the same type.
-    for (const [channelId, ticket] of Object.entries(
-      db.tickets
-    )) {
-      if (
-        ticket.guildId !== interaction.guild.id ||
-        ticket.userId !== interaction.user.id ||
-        ticket.type !== typeKey ||
-        ticket.status !== "open"
-      ) {
-        continue;
-      }
-
-      const existingChannel =
-        await interaction.guild.channels.fetch(channelId)
-          .catch(() => null);
-
-      if (existingChannel) {
-        await interaction.editReply({
-          content:
-            `${EMOJI} You already have an open ticket: ` +
-            `${existingChannel}`
-        });
-
-        return;
-      }
-
-      delete db.tickets[channelId];
-      saveDatabase();
-    }
-
-    const category = await getTicketCategory(
-      interaction.guild,
-      type
-    );
-
-    const number = db.counter + 1;
-
-    const channelName =
-      `${type.prefix}-${String(number).padStart(3, "0")}`;
-
-    const channel = await interaction.guild.channels.create({
-      name: channelName,
-      type: ChannelType.GuildText,
-      parent: category.id,
-
-      topic:
-        `Chuppys Ticket | User: ${interaction.user.id} | ` +
-        `Type: ${typeKey}`,
-
-      permissionOverwrites: [
-        {
-          id: interaction.guild.roles.everyone.id,
-          deny: [
-            PermissionsBitField.Flags.ViewChannel
-          ]
-        },
-
-        {
-          id: interaction.user.id,
-          allow: [
-            PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages,
-            PermissionsBitField.Flags.ReadMessageHistory,
-            PermissionsBitField.Flags.AttachFiles
-          ]
-        },
-
-        ...ticketRolePermissions(),
-
-        {
-          id: interaction.client.user.id,
-          allow: [
-            PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages,
-            PermissionsBitField.Flags.ReadMessageHistory,
-            PermissionsBitField.Flags.ManageChannels
-          ]
-        }
-      ]
+    await interaction.deferReply({
+      flags: MessageFlags.Ephemeral
     });
 
-    db.counter = number;
+    const existingTicket = Object.entries(
+      ticketData.tickets
+    ).find(
+      ([channelId, ticket]) =>
+        ticket.guildId === interaction.guild.id &&
+        ticket.userId === interaction.user.id &&
+        ticket.category === categoryKey &&
+        ticket.status !== "deleted" &&
+        interaction.guild.channels.cache.has(channelId)
+    );
 
-    db.tickets[channel.id] = {
+    if (existingTicket) {
+      await interaction.editReply({
+        content:
+          `You already have a ${category.label} ticket open: ` +
+          `<#${existingTicket[0]}>`
+      });
+
+      return;
+    }
+
+    const parentCategory =
+      await getOrCreateTicketCategory(
+        interaction.guild,
+        categoryKey
+      );
+
+    const nextNumber =
+      ticketData.ticketCounter + 1;
+
+    const ticketNumber =
+      String(nextNumber).padStart(4, "0");
+
+    const username =
+      safeChannelName(interaction.user.username);
+
+    const channelName =
+      `${category.channelPrefix}-${username}-${ticketNumber}`
+        .slice(0, 100);
+
+    const channel =
+      await interaction.guild.channels.create({
+        name: channelName,
+        type: ChannelType.GuildText,
+        parent: parentCategory.id,
+        topic:
+          `Chuppys Ticket | User: ${interaction.user.id} | ` +
+          `Category: ${category.label} | Ticket: ${ticketNumber}`,
+        permissionOverwrites: [
+          {
+            id: interaction.guild.roles.everyone.id,
+            deny: [
+              PermissionsBitField.Flags.ViewChannel
+            ]
+          },
+          {
+            id: interaction.user.id,
+            allow: [
+              PermissionsBitField.Flags.ViewChannel,
+              PermissionsBitField.Flags.SendMessages,
+              PermissionsBitField.Flags.ReadMessageHistory,
+              PermissionsBitField.Flags.AttachFiles,
+              PermissionsBitField.Flags.EmbedLinks
+            ]
+          },
+          ...staffPermissionOverwrites(interaction.guild),
+          {
+            id: interaction.client.user.id,
+            allow: [
+              PermissionsBitField.Flags.ViewChannel,
+              PermissionsBitField.Flags.SendMessages,
+              PermissionsBitField.Flags.ReadMessageHistory,
+              PermissionsBitField.Flags.ManageChannels,
+              PermissionsBitField.Flags.AttachFiles
+            ]
+          }
+        ]
+      });
+
+    ticketData.ticketCounter = nextNumber;
+
+    ticketData.tickets[channel.id] = {
       guildId: interaction.guild.id,
+      channelId: channel.id,
       userId: interaction.user.id,
-      type: typeKey,
-      number,
+      username: interaction.user.username,
+      category: categoryKey,
+      number: ticketNumber,
       status: "open",
       claimedBy: null,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      closedAt: null
     };
 
-    saveDatabase();
+    saveData();
+
+    const ticketEmbed = makeEmbed(
+      `${TICKET_EMOJI} ${category.label} Ticket`,
+      `Welcome <@${interaction.user.id}>!\n\n` +
+      `Thank you for opening a **${category.label}** ticket ` +
+      `with **.gg/chuppys**.\n\n` +
+      "Please explain what you need help with and " +
+      "a member of our team will assist you shortly.\n\n" +
+      `**Ticket Number:** ${ticketNumber}\n` +
+      `**Category:** ${category.label}\n` +
+      `**Opened By:** <@${interaction.user.id}>`
+    );
 
     await channel.send({
-      content:
-        `<@${interaction.user.id}> ` +
-        `<@&${STAFF_ROLE_ID}>`,
-
-      embeds: [
-        makeTicketWelcomeEmbed(type, interaction.user)
-      ],
-
-      components: makeTicketButtons("open"),
-
+      content: `<@${interaction.user.id}>`,
+      embeds: [ticketEmbed],
+      components: [makeOpenTicketButtons()],
       allowedMentions: {
-        users: [interaction.user.id],
-        roles: [STAFF_ROLE_ID]
+        users: [interaction.user.id]
       }
     });
 
     await interaction.editReply({
       content:
-        `${EMOJI} Your ticket has been created!\n\n` +
-        `**Ticket:** ${channel}`
+        `${TICKET_EMOJI} Your **${category.label}** ` +
+        `ticket has been created: <#${channel.id}>`
     });
 
     console.log(
-      `[TICKETS] ${interaction.user.tag} opened ${channelName}`
+      `[TICKETS] ${interaction.user.tag} opened ` +
+      `${category.label} ticket ${channel.id}.`
+    );
+  } catch (error) {
+    console.error(
+      "[TICKETS] Ticket creation failed:",
+      error
     );
 
-  } catch (error) {
-    console.error("[TICKETS] Creation failed:", error);
-
-    if (interaction.deferred) {
-      await interaction.editReply({
-        content:
-          "I couldn't create your ticket. " +
-          "Please contact staff."
-      }).catch(() => {});
-    }
-
+    await respond(
+      interaction,
+      "I couldn't create your ticket. Please make sure " +
+      "the bot has Manage Channels, View Channels, " +
+      "Send Messages, and Manage Permissions."
+    );
   } finally {
-    creationLocks.delete(lockKey);
+    openingTickets.delete(lockKey);
   }
 }
 
 // ==================================================
-// GENERATE TICKET TRANSCRIPT
+// CLAIM TICKET
 // ==================================================
 
-async function generateTranscript(channel) {
-  const messages = [];
+async function claimTicket(interaction) {
+  const ticket = getTicket(interaction.channelId);
+
+  if (!ticket) {
+    await respond(
+      interaction,
+      "This channel is not a registered ticket."
+    );
+    return;
+  }
+
+  const member = await getMember(interaction);
+
+  if (!hasTicketAccess(member)) {
+    await respond(
+      interaction,
+      "Only authorized Chuppys staff can claim tickets."
+    );
+    return;
+  }
+
+  if (ticket.status === "closed") {
+    await respond(
+      interaction,
+      "You cannot claim a closed ticket."
+    );
+    return;
+  }
+
+  if (ticket.claimedBy) {
+    await respond(
+      interaction,
+      `This ticket has already been claimed by ` +
+      `<@${ticket.claimedBy}>.`
+    );
+    return;
+  }
+
+  ticket.claimedBy = interaction.user.id;
+  saveData();
+
+  await interaction.reply({
+    embeds: [
+      makeEmbed(
+        `${TICKET_EMOJI} Ticket Claimed`,
+        `This ticket has been claimed by ` +
+        `<@${interaction.user.id}>.\n\n` +
+        "They will assist you shortly."
+      )
+    ]
+  });
+
+  console.log(
+    `[TICKETS] Ticket ${interaction.channelId} ` +
+    `claimed by ${interaction.user.tag}.`
+  );
+}
+
+// ==================================================
+// CLOSE TICKET
+// ==================================================
+
+async function closeTicket(interaction) {
+  const ticket = getTicket(interaction.channelId);
+
+  if (!ticket) {
+    await respond(
+      interaction,
+      "This channel is not a registered ticket."
+    );
+    return;
+  }
+
+  const member = await getMember(interaction);
+
+  if (!canManageTicket(member, ticket)) {
+    await respond(
+      interaction,
+      "You don't have permission to close this ticket."
+    );
+    return;
+  }
+
+  if (ticket.status === "closed") {
+    await respond(
+      interaction,
+      "This ticket is already closed."
+    );
+    return;
+  }
+
+  await interaction.deferReply({
+    flags: MessageFlags.Ephemeral
+  });
+
+  ticket.status = "closed";
+  ticket.closedAt = Date.now();
+  saveData();
+
+  const channel = interaction.channel;
+
+  await channel.permissionOverwrites.edit(
+    ticket.userId,
+    {
+      ViewChannel: false,
+      SendMessages: false
+    }
+  );
+
+  await channel.setName(
+    `closed-${ticket.category}-${ticket.number}`
+      .slice(0, 100)
+  );
+
+  await channel.send({
+    embeds: [
+      makeEmbed(
+        `${TICKET_EMOJI} Ticket Closed`,
+        `This ticket was closed by ` +
+        `<@${interaction.user.id}>.\n\n` +
+        "Authorized staff can reopen or delete it."
+      )
+    ],
+    components: [makeClosedTicketButtons()]
+  });
+
+  await interaction.editReply({
+    content: "The ticket has been closed successfully."
+  });
+
+  console.log(
+    `[TICKETS] Ticket ${channel.id} closed.`
+  );
+}
+
+// ==================================================
+// REOPEN TICKET
+// ==================================================
+
+async function reopenTicket(interaction) {
+  const ticket = getTicket(interaction.channelId);
+
+  if (!ticket) {
+    await respond(
+      interaction,
+      "This channel is not a registered ticket."
+    );
+    return;
+  }
+
+  const member = await getMember(interaction);
+
+  if (!hasTicketAccess(member)) {
+    await respond(
+      interaction,
+      "Only authorized Chuppys staff can reopen tickets."
+    );
+    return;
+  }
+
+  if (ticket.status !== "closed") {
+    await respond(
+      interaction,
+      "This ticket is already open."
+    );
+    return;
+  }
+
+  await interaction.deferReply({
+    flags: MessageFlags.Ephemeral
+  });
+
+  const channel = interaction.channel;
+
+  await channel.permissionOverwrites.edit(
+    ticket.userId,
+    {
+      ViewChannel: true,
+      SendMessages: true,
+      ReadMessageHistory: true,
+      AttachFiles: true,
+      EmbedLinks: true
+    }
+  );
+
+  await channel.setName(
+    `${ticket.category}-${safeChannelName(ticket.username)}-${ticket.number}`
+      .slice(0, 100)
+  );
+
+  ticket.status = "open";
+  ticket.closedAt = null;
+
+  saveData();
+
+  await channel.send({
+    content: `<@${ticket.userId}>`,
+    embeds: [
+      makeEmbed(
+        `${TICKET_EMOJI} Ticket Reopened`,
+        `This ticket was reopened by ` +
+        `<@${interaction.user.id}>.\n\n` +
+        "You can continue your conversation here."
+      )
+    ],
+    components: [makeOpenTicketButtons()],
+    allowedMentions: {
+      users: [ticket.userId]
+    }
+  });
+
+  await interaction.editReply({
+    content: "The ticket has been reopened successfully."
+  });
+
+  console.log(
+    `[TICKETS] Ticket ${channel.id} reopened.`
+  );
+}
+
+// ==================================================
+// FETCH TICKET MESSAGES FOR TRANSCRIPT
+// ==================================================
+
+async function fetchAllTicketMessages(channel) {
+  const allMessages = [];
+
   let before;
 
   while (true) {
-    const options = { limit: 100 };
+    const options = {
+      limit: 100
+    };
 
     if (before) {
       options.before = before;
     }
 
-    const batch = await channel.messages.fetch(options);
+    const messages =
+      await channel.messages.fetch(options);
 
-    if (!batch.size) break;
+    if (messages.size === 0) {
+      break;
+    }
 
-    messages.push(...batch.values());
+    allMessages.push(...messages.values());
 
-    before = batch.last().id;
+    before = messages.last().id;
 
-    if (batch.size < 100) break;
+    if (messages.size < 100) {
+      break;
+    }
   }
 
-  messages.sort(
-    (a, b) => a.createdTimestamp - b.createdTimestamp
+  return allMessages.sort(
+    (a, b) =>
+      a.createdTimestamp - b.createdTimestamp
   );
+}
+
+// ==================================================
+// GENERATE TRANSCRIPT
+// ==================================================
+
+async function createTicketTranscript(channel, ticket) {
+  const messages =
+    await fetchAllTicketMessages(channel);
 
   const lines = [
-    "CHUPPYS TICKET TRANSCRIPT",
-    `Channel: ${channel.name}`,
-    `Channel ID: ${channel.id}`,
-    `Generated: ${new Date().toISOString()}`,
+    "========================================",
+    ".GG/CHUPPYS TICKET TRANSCRIPT",
+    "========================================",
+    "",
+    `Ticket Number: ${ticket.number}`,
+    `Ticket Channel: ${channel.name}`,
+    `Ticket Channel ID: ${channel.id}`,
+    `Ticket Category: ${ticket.category}`,
+    `Opened By: ${ticket.username}`,
+    `Opened By ID: ${ticket.userId}`,
+    `Claimed By: ${ticket.claimedBy || "Nobody"}`,
+    `Created At: ${new Date(ticket.createdAt).toISOString()}`,
+    `Closed At: ${
+      ticket.closedAt
+        ? new Date(ticket.closedAt).toISOString()
+        : "Not recorded"
+    }`,
+    "",
+    "========================================",
+    "MESSAGES",
     "========================================",
     ""
   ];
@@ -671,480 +1008,349 @@ async function generateTranscript(channel) {
       lines.push(message.content);
     }
 
-    for (const attachment of message.attachments.values()) {
-      lines.push(`Attachment: ${attachment.url}`);
-    }
-
     for (const embed of message.embeds) {
-      if (embed.title) {
-        lines.push(`Embed title: ${embed.title}`);
-      }
+      lines.push(
+        `[EMBED] ${embed.title || "Untitled"}`
+      );
 
       if (embed.description) {
         lines.push(embed.description);
       }
+    }
 
-      for (const field of embed.fields || []) {
-        lines.push(`${field.name}: ${field.value}`);
-      }
+    for (const attachment of message.attachments.values()) {
+      lines.push(
+        `[ATTACHMENT] ${attachment.url}`
+      );
     }
 
     lines.push("");
   }
 
-  return Buffer.from(lines.join("\n"), "utf8");
+  return Buffer.from(
+    lines.join("\n"),
+    "utf8"
+  );
 }
 
 // ==================================================
-// SEND TICKET TRANSCRIPT TO LOG CHANNEL
+// DELETE TICKET
 // ==================================================
 
-async function sendTranscriptLog(interaction, ticket) {
-  if (!LOG_CHANNEL_ID) {
-    throw new Error(
-      "TICKET_LOG_CHANNEL_ID is not configured."
+async function deleteTicket(interaction) {
+  const ticket = getTicket(interaction.channelId);
+
+  if (!ticket) {
+    await respond(
+      interaction,
+      "This channel is not a registered ticket."
     );
+    return;
   }
 
-  const logChannel =
-    await interaction.client.channels.fetch(LOG_CHANNEL_ID);
+  const member = await getMember(interaction);
 
-  if (!logChannel?.send) {
-    throw new Error("Ticket log channel unavailable.");
+  if (!hasTicketAccess(member)) {
+    await respond(
+      interaction,
+      "Only authorized Chuppys staff can delete tickets."
+    );
+    return;
   }
 
-  const transcript = await generateTranscript(
-    interaction.channel
-  );
+  if (ticket.status !== "closed") {
+    await respond(
+      interaction,
+      "Please close the ticket before deleting it."
+    );
+    return;
+  }
 
-  const type = TYPES[ticket.type];
-
-  const embed = new EmbedBuilder()
-    .setTitle("Ticket Transcript")
-    .setDescription(
-      `${EMOJI} **Chuppys Ticket Log**\n\n` +
-      `**Ticket:** ${interaction.channel.name}\n` +
-      `**Type:** ${type?.label || ticket.type}\n` +
-      `**Opened by:** <@${ticket.userId}>\n` +
-      `**Claimed by:** ${
-        ticket.claimedBy
-          ? `<@${ticket.claimedBy}>`
-          : "Unclaimed"
-      }\n` +
-      `**Deleted by:** <@${interaction.user.id}>`
-    )
-    .setColor("#FFFFFF")
-    .setThumbnail(EMOJI_URL)
-    .setTimestamp();
-
-  const attachment = new AttachmentBuilder(
-    transcript,
-    {
-      name: `chuppys-ticket-${interaction.channelId}.txt`
-    }
-  );
-
-  await logChannel.send({
-    embeds: [embed],
-    files: [attachment],
-    allowedMentions: { parse: [] }
+  await interaction.deferReply({
+    flags: MessageFlags.Ephemeral
   });
-}
 
-// ==================================================
-// HANDLE TICKET BUTTONS
-// ==================================================
-
-async function handleTicketButton(interaction) {
-  const ticket = db.tickets[interaction.channelId];
-
-  if (!ticket || ticket.guildId !== interaction.guildId) {
-    await interaction.reply({
-      content: "This is not a registered Chuppys ticket.",
-      ephemeral: true
-    });
-
-    return;
-  }
-
-  const lockKey = interaction.channelId;
-
-  if (actionLocks.has(lockKey)) {
-    await interaction.reply({
-      content: "Another ticket action is processing.",
-      ephemeral: true
-    });
-
-    return;
-  }
-
-  actionLocks.add(lockKey);
+  const channel = interaction.channel;
 
   try {
-    const action = interaction.customId;
+    const transcriptBuffer =
+      await createTicketTranscript(
+        channel,
+        ticket
+      );
 
-    // ==============================================
-    // CLAIM TICKET
-    // ==============================================
-
-    if (action === "chuppy_ticket_claim") {
-      if (!isTicketManager(interaction)) {
-        await interaction.reply({
-          content:
-            "Only Owner and Ticket Support can claim tickets.",
-          ephemeral: true
-        });
-
-        return;
-      }
-
-      if (ticket.status !== "open") {
-        await interaction.reply({
-          content: "This ticket is closed.",
-          ephemeral: true
-        });
-
-        return;
-      }
-
-      if (ticket.claimedBy) {
-        await interaction.reply({
-          content:
-            `This ticket is already claimed by ` +
-            `<@${ticket.claimedBy}>.`,
-          ephemeral: true
-        });
-
-        return;
-      }
-
-      ticket.claimedBy = interaction.user.id;
-      saveDatabase();
-
-      await interaction.reply({
-        content:
-          `${EMOJI} Ticket claimed by ` +
-          `<@${interaction.user.id}>.`,
-        allowedMentions: { parse: [] }
-      });
-
-      return;
-    }
-
-    // ==============================================
-    // CLOSE TICKET
-    // ==============================================
-
-    if (action === "chuppy_ticket_close") {
-      if (!canCloseTicket(interaction, ticket)) {
-        await interaction.reply({
-          content: "You cannot close this ticket.",
-          ephemeral: true
-        });
-
-        return;
-      }
-
-      if (ticket.status === "closed") {
-        await interaction.reply({
-          content: "This ticket is already closed.",
-          ephemeral: true
-        });
-
-        return;
-      }
-
-      await interaction.deferReply({ ephemeral: true });
-
-      await interaction.channel.permissionOverwrites.edit(
-        ticket.userId,
+    const transcriptFile =
+      new AttachmentBuilder(
+        transcriptBuffer,
         {
-          ViewChannel: false,
-          SendMessages: false
+          name:
+            `chuppys-ticket-${ticket.number}.txt`
         }
       );
 
-      ticket.status = "closed";
-      ticket.closedAt = Date.now();
+    if (TICKET_LOG_CHANNEL_ID) {
+      const logChannel =
+        await interaction.guild.channels
+          .fetch(TICKET_LOG_CHANNEL_ID)
+          .catch(() => null);
 
-      saveDatabase();
-
-      await interaction.message.edit({
-        components: makeTicketButtons("closed")
-      });
-
-      const embed = new EmbedBuilder()
-        .setTitle("Ticket Closed")
-        .setDescription(
-          `${EMOJI} This ticket has been closed by ` +
-          `<@${interaction.user.id}>.\n\n` +
-          "An authorized team member may reopen " +
-          "or delete this ticket."
-        )
-        .setColor("#FFFFFF")
-        .setThumbnail(EMOJI_URL);
-
-      await interaction.channel.send({
-        embeds: [embed],
-        allowedMentions: { parse: [] }
-      });
-
-      await interaction.editReply({
-        content: "Ticket closed successfully."
-      });
-
-      return;
-    }
-
-    // ==============================================
-    // REOPEN TICKET
-    // ==============================================
-
-    if (action === "chuppy_ticket_reopen") {
-      if (!isTicketManager(interaction)) {
-        await interaction.reply({
-          content:
-            "Only Owner and Ticket Support can reopen tickets.",
-          ephemeral: true
-        });
-
-        return;
-      }
-
-      if (ticket.status !== "closed") {
-        await interaction.reply({
-          content: "This ticket is already open.",
-          ephemeral: true
-        });
-
-        return;
-      }
-
-      await interaction.deferReply({ ephemeral: true });
-
-      await interaction.channel.permissionOverwrites.edit(
-        ticket.userId,
-        {
-          ViewChannel: true,
-          SendMessages: true,
-          ReadMessageHistory: true
-        }
-      );
-
-      ticket.status = "open";
-      delete ticket.closedAt;
-
-      saveDatabase();
-
-      await interaction.message.edit({
-        components: makeTicketButtons("open")
-      });
-
-      await interaction.channel.send({
-        content:
-          `${EMOJI} Ticket reopened by ` +
-          `<@${interaction.user.id}>.`,
-        allowedMentions: { parse: [] }
-      });
-
-      await interaction.editReply({
-        content: "Ticket reopened successfully."
-      });
-
-      return;
-    }
-
-    // ==============================================
-    // DELETE TICKET
-    // ==============================================
-
-    if (action === "chuppy_ticket_delete") {
-      if (!isTicketManager(interaction)) {
-        await interaction.reply({
-          content:
-            "Only Owner and Ticket Support can delete tickets.",
-          ephemeral: true
-        });
-
-        return;
-      }
-
-      if (ticket.status !== "closed") {
-        await interaction.reply({
-          content:
-            "Please close the ticket before deleting it.",
-          ephemeral: true
-        });
-
-        return;
-      }
-
-      await interaction.deferReply({ ephemeral: true });
-
-      try {
-        await sendTranscriptLog(interaction, ticket);
-      } catch (error) {
-        console.error(
-          "[TICKETS] Transcript logging failed:",
-          error
+      if (
+        !logChannel ||
+        !logChannel.isTextBased() ||
+        !logChannel.send
+      ) {
+        throw new Error(
+          "Ticket log channel is unavailable."
         );
-
-        await interaction.editReply({
-          content:
-            "The transcript couldn't be saved, " +
-            "so the ticket was not deleted. " +
-            "Check TICKET_LOG_CHANNEL_ID and bot permissions."
-        });
-
-        return;
       }
 
-      await interaction.editReply({
-        content:
-          `${EMOJI} Transcript saved. Deleting ticket...`
+      await logChannel.send({
+        embeds: [
+          makeEmbed(
+            `${TICKET_EMOJI} Ticket Deleted`,
+            `**Ticket:** ${ticket.number}\n` +
+            `**Category:** ${ticket.category}\n` +
+            `**Opened By:** <@${ticket.userId}>\n` +
+            `**Claimed By:** ${
+              ticket.claimedBy
+                ? `<@${ticket.claimedBy}>`
+                : "Nobody"
+            }\n` +
+            `**Deleted By:** <@${interaction.user.id}>`
+          )
+        ],
+        files: [transcriptFile],
+        allowedMentions: {
+          parse: []
+        }
       });
-
-      await interaction.channel.delete(
-        `Chuppys ticket deleted by ${interaction.user.tag}`
-      );
-
-      delete db.tickets[interaction.channelId];
-      saveDatabase();
-
-      console.log(
-        `[TICKETS] Ticket ${interaction.channelId} deleted.`
-      );
+    } else {
+      await interaction.followUp({
+        content:
+          "No ticket log channel is configured. " +
+          "Download and save this transcript before proceeding.",
+        files: [transcriptFile],
+        flags: MessageFlags.Ephemeral
+      });
 
       return;
     }
 
-  } finally {
-    actionLocks.delete(lockKey);
+    await interaction.editReply({
+      content:
+        "Ticket transcript saved. Deleting ticket..."
+    });
+
+    await channel.delete(
+      `Ticket deleted by ${interaction.user.tag}`
+    );
+
+    delete ticketData.tickets[channel.id];
+
+    saveData();
+
+    console.log(
+      `[TICKETS] Ticket ${channel.id} deleted.`
+    );
+  } catch (error) {
+    console.error(
+      "[TICKETS] Ticket deletion failed:",
+      error
+    );
+
+    await interaction.editReply({
+      content:
+        "The ticket could not be deleted. " +
+        "Please check the bot permissions and transcript log channel."
+    });
   }
 }
 
 // ==================================================
-// OPTIONAL /TICKETPANEL COMMAND
+// TICKET INTERACTION HANDLER
 // ==================================================
 
-const TICKET_PANEL_COMMAND = new SlashCommandBuilder()
-  .setName("ticketpanel")
-  .setDescription("Post or update the Chuppys ticket panel.")
-  .setDefaultMemberPermissions(
-    PermissionsBitField.Flags.ManageGuild
-  );
+function setupChuppyTickets(client) {
+  // ==================================================
+  // READY EVENT
+  // ==================================================
 
-// ==================================================
-// CONNECT TO YOUR EXISTING INDEX.JS
-// ==================================================
-
-module.exports = function setupChuppyTickets(client) {
   client.once(Events.ClientReady, async () => {
+    console.log(
+      "[TICKETS] Chuppys ticket system is ready."
+    );
+
     try {
       await sendOrUpdateTicketPanel(client);
     } catch (error) {
       console.error(
-        "[TICKETS] Startup panel error:",
+        "[TICKETS] Failed to initialize panel:",
         error
       );
     }
   });
 
-  client.on(Events.InteractionCreate, async interaction => {
-    try {
-      // ============================================
-      // /TICKETPANEL COMMAND
-      // ============================================
+  // ==================================================
+  // INTERACTIONS
+  // ==================================================
 
-      if (
-        interaction.isChatInputCommand() &&
-        interaction.commandName === "ticketpanel"
-      ) {
-        if (!isTicketManager(interaction)) {
-          await interaction.reply({
+  client.on(
+    Events.InteractionCreate,
+    async interaction => {
+      try {
+        // ==========================================
+        // /TICKETPANEL COMMAND
+        // ==========================================
+
+        if (
+          interaction.isChatInputCommand() &&
+          interaction.commandName === "ticketpanel"
+        ) {
+          if (
+            !interaction.memberPermissions?.has(
+              PermissionsBitField.Flags.ManageGuild
+            )
+          ) {
+            await respond(
+              interaction,
+              "You need Manage Server permission to use this command."
+            );
+
+            return;
+          }
+
+          await interaction.deferReply({
+            flags: MessageFlags.Ephemeral
+          });
+
+          await sendOrUpdateTicketPanel(client);
+
+          await interaction.editReply({
             content:
-              "You don't have permission to update the ticket panel.",
-            ephemeral: true
+              `${TICKET_EMOJI} Ticket panel updated in ` +
+              `<#${TICKET_PANEL_CHANNEL_ID}>.`
           });
 
           return;
         }
 
-        await interaction.deferReply({
-          ephemeral: true
-        });
+        // ==========================================
+        // TICKET DROPDOWN
+        // ==========================================
 
-        await sendOrUpdateTicketPanel(client);
+        if (
+          interaction.isStringSelectMenu() &&
+          interaction.customId ===
+            "chuppys_ticket_select"
+        ) {
+          const selectedCategory =
+            interaction.values[0];
 
-        await interaction.editReply({
-          content:
-            `${EMOJI} Ticket panel updated in ` +
-            `<#${PANEL_CHANNEL_ID}>.`
-        });
+          await openTicket(
+            interaction,
+            selectedCategory
+          );
 
-        return;
-      }
+          return;
+        }
 
-      // ============================================
-      // TICKET DROPDOWN
-      // ============================================
+        // ==========================================
+        // CLAIM BUTTON
+        // ==========================================
 
-      if (
-        interaction.isStringSelectMenu() &&
-        interaction.customId === "chuppy_ticket_select"
-      ) {
-        await createTicket(
-          interaction,
-          interaction.values[0]
+        if (
+          interaction.isButton() &&
+          interaction.customId ===
+            "chuppys_ticket_claim"
+        ) {
+          await claimTicket(interaction);
+          return;
+        }
+
+        // ==========================================
+        // CLOSE BUTTON
+        // ==========================================
+
+        if (
+          interaction.isButton() &&
+          interaction.customId ===
+            "chuppys_ticket_close"
+        ) {
+          await closeTicket(interaction);
+          return;
+        }
+
+        // ==========================================
+        // REOPEN BUTTON
+        // ==========================================
+
+        if (
+          interaction.isButton() &&
+          interaction.customId ===
+            "chuppys_ticket_reopen"
+        ) {
+          await reopenTicket(interaction);
+          return;
+        }
+
+        // ==========================================
+        // DELETE BUTTON
+        // ==========================================
+
+        if (
+          interaction.isButton() &&
+          interaction.customId ===
+            "chuppys_ticket_delete"
+        ) {
+          await deleteTicket(interaction);
+          return;
+        }
+      } catch (error) {
+        console.error(
+          "[TICKETS] Interaction error:",
+          error
         );
 
-        return;
-      }
-
-      // ============================================
-      // TICKET BUTTONS
-      // ============================================
-
-      if (
-        interaction.isButton() &&
-        [
-          "chuppy_ticket_claim",
-          "chuppy_ticket_close",
-          "chuppy_ticket_reopen",
-          "chuppy_ticket_delete"
-        ].includes(interaction.customId)
-      ) {
-        await handleTicketButton(interaction);
-        return;
-      }
-
-    } catch (error) {
-      console.error(
-        "[TICKETS] Interaction error:",
-        error
-      );
-
-      if (!interaction.isRepliable()) return;
-
-      const content =
-        "Something went wrong with the ticket system.";
-
-      if (interaction.deferred && !interaction.replied) {
-        await interaction.editReply({
-          content
-        }).catch(() => {});
-      } else if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({
-          content,
-          ephemeral: true
-        }).catch(() => {});
+        if (interaction.isRepliable()) {
+          await respond(
+            interaction,
+            "Something went wrong while processing your ticket. " +
+            "Please try again."
+          ).catch(() => {});
+        }
       }
     }
-  });
-
-  console.log(
-    "[TICKETS] Chuppys ticket system loaded successfully."
   );
-};
+
+  // ==================================================
+  // REMOVE DATA FOR MANUALLY DELETED CHANNELS
+  // ==================================================
+
+  client.on(
+    Events.ChannelDelete,
+    channel => {
+      if (!ticketData.tickets[channel.id]) {
+        return;
+      }
+
+      delete ticketData.tickets[channel.id];
+
+      try {
+        saveData();
+      } catch (error) {
+        console.error(
+          "[TICKETS] Failed to update deleted channel data:",
+          error
+        );
+      }
+    }
+  );
+}
+
+// ==================================================
+// EXPORTS
+// ==================================================
+
+module.exports = setupChuppyTickets;
 
 module.exports.command = TICKET_PANEL_COMMAND;
