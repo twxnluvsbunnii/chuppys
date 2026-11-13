@@ -11,6 +11,7 @@ const API = "https://discord.com/api/v10";
 
 const PERSONAL_VOUCH_CHANNEL_ID = "1562227276051910676";
 const VOUCH_CHANNEL_ID = "1530811494168657980";
+
 const PERSONAL_SELLER_IDS = [
   "1530733554869473320",
   "1490962480963260466"
@@ -27,6 +28,7 @@ const TICKET_PANEL_CHANNEL_ID = "1530811385678790716";
 const TICKET_LOG_CHANNEL_ID = "1570913954333728808";
 
 const QUESTION_EMOJI_ID = "1561388594625511514";
+
 const QUESTION_EMOJI_URL =
   `https://cdn.discordapp.com/emojis/${QUESTION_EMOJI_ID}.png`;
 
@@ -79,15 +81,20 @@ const PING_ROLE_IDS = [
 const ROLE_GROUPS = {
   chuppys_self_roles: {
     roles: PING_ROLE_IDS,
-    success: "﹕𐔌・your roles have been updated〃・꒱ 🤍"
+    success:
+      "﹕𐔌・your roles have been updated〃・꒱ 🤍"
   },
+
   chuppys_second_roles: {
     roles: AGE_ROLE_IDS,
-    success: "﹕𐔌・your age roles have been updated〃・꒱ 🤍"
+    success:
+      "﹕𐔌・your age roles have been updated〃・꒱ 🤍"
   },
+
   chuppys_pronoun_roles: {
     roles: PRONOUN_ROLE_IDS,
-    success: "﹕𐔌・your pronouns have been updated〃・꒱ 🤍"
+    success:
+      "﹕𐔌・your pronouns have been updated〃・꒱ 🤍"
   }
 };
 
@@ -95,12 +102,15 @@ const ROLE_GROUPS = {
 // TICKET ROLES
 // ==================================================
 
-const TICKET_EMOJI = "<:chuppyhi:1561103471325745242>";
+const TICKET_EMOJI =
+  "<:chuppyhi:1561103471325745242>";
+
 const TICKET_EMOJI_ID = "1561103471325745242";
 
 const OWNER_ROLE_ID = "1530988662970650865";
 const ADMIN_ROLE_ID = "1531800870444994641";
 const MOD_ROLE_ID = "1531800784700706887";
+
 const TICKET_SUPPORT_ROLE_ID = "1563003884656398406";
 const SELLER_ROLE_ID = "1550322075208646766";
 const CONVERTER_ROLE_ID = "1569334149695668287";
@@ -124,7 +134,7 @@ const TICKET_MANAGER_ROLE_IDS = [
 ];
 
 // ==================================================
-// TICKET PINGS BY CATEGORY
+// CATEGORY-SPECIFIC ROLE PINGS
 // ==================================================
 
 const TICKET_PING_ROLES = {
@@ -170,6 +180,7 @@ const TICKET_TYPES = {
     name: "Purchase",
     description: "Please provide your purchase details.",
     env: "PURCHASE_TICKET_CATEGORY_ID",
+
     questions: [
       "What are you purchasing?",
       "Who are you buying from?",
@@ -182,6 +193,7 @@ const TICKET_TYPES = {
     name: "Cash Out",
     description: "Please provide your cash out details.",
     env: "CASHOUT_TICKET_CATEGORY_ID",
+
     questions: [
       "What are you cashing out?",
       "How much are you looking for?",
@@ -192,19 +204,22 @@ const TICKET_TYPES = {
 
   giveaway: {
     name: "Giveaway",
-    description: "Please provide details of the giveaway you won.",
+    description:
+      "Please provide details of the giveaway you won.",
     env: "GIVEAWAY_TICKET_CATEGORY_ID"
   },
 
   partnership: {
     name: "Partnership",
-    description: "Please provide your partnership information.",
+    description:
+      "Please provide your partnership information.",
     env: "PARTNERSHIP_TICKET_CATEGORY_ID"
   },
 
   support: {
     name: "Support",
-    description: "Please explain what you need help with.",
+    description:
+      "Please explain what you need help with.",
     env: "SUPPORT_TICKET_CATEGORY_ID"
   }
 };
@@ -221,7 +236,16 @@ const TICKET_SELECT_IDS = new Set([
 
 const TICKET_MODAL_PREFIX = "chuppys_ticket_form:";
 const TRANSCRIPT_BUTTON_PREFIX = "chuppys_transcript:";
-const COUNTER_PREFIX = "CHUPPYS_TICKET_COUNTERS_V1:";
+
+// ==================================================
+// GLOBAL TICKET COUNTER
+// ==================================================
+
+const GLOBAL_COUNTER_PREFIX =
+  "CHUPPYS_GLOBAL_TICKET_COUNTER_V1:";
+
+const OLD_COUNTER_PREFIX =
+  "CHUPPYS_TICKET_COUNTERS_V1:";
 
 // ==================================================
 // PERMISSIONS
@@ -244,10 +268,15 @@ const TICKET_ALLOW = String(
 );
 
 const TICKET_READ_ONLY = String(
-  VIEW_CHANNEL | READ_HISTORY
+  VIEW_CHANNEL |
+  READ_HISTORY
 );
 
 const TICKET_DENY = String(VIEW_CHANNEL);
+
+// ==================================================
+// BASIC HELPERS
+// ==================================================
 
 function getUserId(i) {
   return i.member?.user?.id || i.user?.id;
@@ -259,57 +288,63 @@ function memberHasRole(i, ids) {
 }
 
 function hasStaffPermission(i) {
-  const p = BigInt(i.member?.permissions || "0");
+  const permissions = BigInt(
+    i.member?.permissions || "0"
+  );
 
-  return memberHasRole(i, TICKET_MANAGER_ROLE_IDS) ||
-    (p & (
+  return memberHasRole(
+    i,
+    TICKET_MANAGER_ROLE_IDS
+  ) || (
+    permissions &
+    (
       ADMINISTRATOR |
       MANAGE_GUILD |
       MANAGE_MESSAGES
-    )) !== 0n;
+    )
+  ) !== 0n;
 }
 
 function canManageTicket(i) {
-  const p = BigInt(i.member?.permissions || "0");
+  const permissions = BigInt(
+    i.member?.permissions || "0"
+  );
 
-  return memberHasRole(i, TICKET_MANAGER_ROLE_IDS) ||
-    (p & ADMINISTRATOR) !== 0n;
+  return memberHasRole(
+    i,
+    TICKET_MANAGER_ROLE_IDS
+  ) || (
+    permissions & ADMINISTRATOR
+  ) !== 0n;
 }
 
 function canViewTranscript(i) {
-  const p = BigInt(i.member?.permissions || "0");
+  const permissions = BigInt(
+    i.member?.permissions || "0"
+  );
 
   return memberHasRole(i, [
     OWNER_ROLE_ID,
     TICKET_SUPPORT_ROLE_ID
-  ]) || (p & ADMINISTRATOR) !== 0n;
+  ]) || (
+    permissions & ADMINISTRATOR
+  ) !== 0n;
 }
 
-// ==================================================
-// TICKET EMBEDS AND BUTTONS
-// ==================================================
+function safeText(value) {
+  return String(value ?? "")
+    .replace(/@/g, "＠");
+}
 
-function ticketButtons(closed = false) {
-  const button = (id, label, style) => ({
-    type: 2,
-    custom_id: id,
-    label,
-    style,
-    emoji: { id: TICKET_EMOJI_ID }
-  });
-
-  return [{
-    type: 1,
-    components: closed
-      ? [
-          button("chuppys_ticket_reopen", "Reopen", 3),
-          button("chuppys_ticket_delete", "Delete", 4)
-        ]
-      : [
-          button("chuppys_ticket_claim", "Claim", 1),
-          button("chuppys_ticket_close", "Close", 4)
-        ]
-  }];
+function ticketChannelName(
+  type,
+  number,
+  closed = false
+) {
+  return (
+    `${closed ? "closed-" : ""}${type}-` +
+    String(number).padStart(4, "0")
+  ).slice(0, 100);
 }
 
 function ticketEmbed(title, description) {
@@ -324,19 +359,49 @@ function ticketEmbed(title, description) {
   };
 }
 
-function ticketChannelName(type, number, closed = false) {
-  return (
-    `${closed ? "closed-" : ""}${type}-` +
-    String(number).padStart(4, "0")
-  ).slice(0, 100);
-}
+function ticketButtons(closed = false) {
+  const button = (id, label, style) => ({
+    type: 2,
+    custom_id: id,
+    label,
+    style,
+    emoji: {
+      id: TICKET_EMOJI_ID
+    }
+  });
 
-function safeText(value) {
-  return String(value ?? "").replace(/@/g, "＠");
+  return [{
+    type: 1,
+    components: closed
+      ? [
+          button(
+            "chuppys_ticket_reopen",
+            "Reopen",
+            3
+          ),
+          button(
+            "chuppys_ticket_delete",
+            "Delete",
+            4
+          )
+        ]
+      : [
+          button(
+            "chuppys_ticket_claim",
+            "Claim",
+            1
+          ),
+          button(
+            "chuppys_ticket_close",
+            "Close",
+            4
+          )
+        ]
+  }];
 }
 
 // ==================================================
-// DISCORD API HELPERS
+// RAW REQUEST AND SIGNATURE VERIFICATION
 // ==================================================
 
 async function getRawBody(req) {
@@ -397,8 +462,13 @@ function verifyDiscordSignature(
   }
 }
 
+// ==================================================
+// DISCORD API HELPERS
+// ==================================================
+
 async function discordFetch(url, options = {}) {
   const controller = new AbortController();
+
   const timeout = setTimeout(
     () => controller.abort(),
     12000
@@ -411,6 +481,7 @@ async function discordFetch(url, options = {}) {
     });
 
     const text = await response.text();
+
     let data;
 
     try {
@@ -431,7 +502,9 @@ async function discordFetch(url, options = {}) {
 
 function botHeaders() {
   if (!process.env.DISCORD_BOT_TOKEN) {
-    throw new Error("DISCORD_BOT_TOKEN is missing.");
+    throw new Error(
+      "DISCORD_BOT_TOKEN is missing."
+    );
   }
 
   return {
@@ -441,14 +514,20 @@ function botHeaders() {
   };
 }
 
-async function botRequest(method, path, body) {
+async function botRequest(
+  method,
+  path,
+  body
+) {
   const result = await discordFetch(
     `${API}${path}`,
     {
       method,
       headers: botHeaders(),
       ...(body !== undefined
-        ? { body: JSON.stringify(body) }
+        ? {
+            body: JSON.stringify(body)
+          }
         : {})
     }
   );
@@ -463,7 +542,10 @@ async function botRequest(method, path, body) {
   return result.data;
 }
 
-async function postChannelMessage(channelId, payload) {
+async function postChannelMessage(
+  channelId,
+  payload
+) {
   return botRequest(
     "POST",
     `/channels/${channelId}/messages`,
@@ -471,7 +553,10 @@ async function postChannelMessage(channelId, payload) {
   );
 }
 
-async function getMemberRoles(guildId, userId) {
+async function getMemberRoles(
+  guildId,
+  userId
+) {
   const member = await botRequest(
     "GET",
     `/guilds/${guildId}/members/${userId}`
@@ -480,7 +565,10 @@ async function getMemberRoles(guildId, userId) {
   return member.roles || [];
 }
 
-async function updateOriginalResponse(i, payload) {
+async function updateOriginalResponse(
+  i,
+  payload
+) {
   const result = await discordFetch(
     `${API}/webhooks/${i.application_id}/${i.token}/messages/@original`,
     {
@@ -490,7 +578,9 @@ async function updateOriginalResponse(i, payload) {
       },
       body: JSON.stringify(
         typeof payload === "string"
-          ? { content: payload }
+          ? {
+              content: payload
+            }
           : payload
       )
     }
@@ -516,12 +606,17 @@ function ephemeral(content) {
 function deferEphemeral(res, task) {
   res.status(200).json({
     type: 5,
-    data: { flags: 64 }
+    data: {
+      flags: 64
+    }
   });
 
   waitUntil(
     Promise.resolve(task).catch(error => {
-      console.error("[BACKGROUND]", error);
+      console.error(
+        "[BACKGROUND]",
+        error
+      );
     })
   );
 }
@@ -537,52 +632,49 @@ function optionsMap(i) {
 }
 
 function getVouchChannelId(sellerId) {
-  return PERSONAL_SELLER_IDS.includes(sellerId)
+  return PERSONAL_SELLER_IDS.includes(
+    sellerId
+  )
     ? PERSONAL_VOUCH_CHANNEL_ID
     : VOUCH_CHANNEL_ID;
 }
 
 // ==================================================
-// DISCORD-BASED TICKET COUNTERS
+// TICKET TOPIC HELPERS
 // ==================================================
 
-function emptyTicketCounters() {
-  return Object.fromEntries(
-    Object.keys(TICKET_TYPES)
-      .map(type => [type, 0])
+function encodeTicketTopic(data) {
+  return (
+    "chuppys-ticket:" +
+    JSON.stringify(data)
   );
 }
 
-function parseCounterMessage(content) {
-  if (!content?.startsWith(COUNTER_PREFIX)) {
+function decodeTicketTopic(topic) {
+  if (
+    !topic?.startsWith(
+      "chuppys-ticket:"
+    )
+  ) {
     return null;
   }
 
   try {
-    const parsed = JSON.parse(
-      content.slice(COUNTER_PREFIX.length)
+    return JSON.parse(
+      topic.slice(
+        "chuppys-ticket:".length
+      )
     );
-
-    const counters = emptyTicketCounters();
-
-    for (const type of Object.keys(counters)) {
-      if (
-        !Number.isSafeInteger(parsed[type]) ||
-        parsed[type] < 0
-      ) {
-        return null;
-      }
-
-      counters[type] = parsed[type];
-    }
-
-    return counters;
   } catch {
     return null;
   }
 }
 
-async function findCounterMessage() {
+// ==================================================
+// FIND GLOBAL TICKET COUNTER
+// ==================================================
+
+async function findGlobalCounterMessage() {
   let before;
 
   while (true) {
@@ -596,12 +688,26 @@ async function findCounterMessage() {
     );
 
     for (const message of messages) {
-      const counters = parseCounterMessage(
-        message.content
-      );
+      if (
+        message.content?.startsWith(
+          GLOBAL_COUNTER_PREFIX
+        )
+      ) {
+        const number = Number(
+          message.content.slice(
+            GLOBAL_COUNTER_PREFIX.length
+          )
+        );
 
-      if (counters) {
-        return { message, counters };
+        if (
+          Number.isSafeInteger(number) &&
+          number >= 0
+        ) {
+          return {
+            message,
+            number
+          };
+        }
       }
     }
 
@@ -609,19 +715,100 @@ async function findCounterMessage() {
       break;
     }
 
-    before = messages[messages.length - 1].id;
+    before = messages[
+      messages.length - 1
+    ].id;
   }
 
   return null;
 }
 
-async function nextTicketNumber(guildId, type) {
-  const found = await findCounterMessage();
+// ==================================================
+// READ OLD COUNTERS FOR MIGRATION
+// ==================================================
 
-  const counters = found?.counters ||
-    emptyTicketCounters();
+async function findOldTicketCounters() {
+  let before;
+
+  while (true) {
+    const query = before
+      ? `?limit=100&before=${before}`
+      : "?limit=100";
+
+    const messages = await botRequest(
+      "GET",
+      `/channels/${TICKET_LOG_CHANNEL_ID}/messages${query}`
+    );
+
+    for (const message of messages) {
+      if (
+        !message.content?.startsWith(
+          OLD_COUNTER_PREFIX
+        )
+      ) {
+        continue;
+      }
+
+      try {
+        const counters = JSON.parse(
+          message.content.slice(
+            OLD_COUNTER_PREFIX.length
+          )
+        );
+
+        const values = Object.values(
+          counters
+        );
+
+        if (
+          values.every(value =>
+            Number.isSafeInteger(value) &&
+            value >= 0
+          )
+        ) {
+          return values.reduce(
+            (sum, value) => sum + value,
+            0
+          );
+        }
+      } catch {
+        // Ignore invalid old counter messages.
+      }
+    }
+
+    if (messages.length < 100) {
+      break;
+    }
+
+    before = messages[
+      messages.length - 1
+    ].id;
+  }
+
+  return 0;
+}
+
+// ==================================================
+// GLOBAL TICKET NUMBER
+// ==================================================
+
+async function nextTicketNumber(guildId) {
+  const found =
+    await findGlobalCounterMessage();
+
+  let number = found?.number || 0;
 
   if (!found) {
+    // Include previous category-specific counters
+    // so existing ticket history is not reset.
+    const oldTotal =
+      await findOldTicketCounters();
+
+    number = Math.max(
+      number,
+      oldTotal
+    );
+
     const channels = await botRequest(
       "GET",
       `/guilds/${guildId}/channels`
@@ -634,68 +821,75 @@ async function nextTicketNumber(guildId, type) {
 
       if (
         ticket &&
-        Number.isSafeInteger(ticket.number) &&
-        counters[ticket.type] !== undefined
+        Number.isSafeInteger(
+          ticket.number
+        )
       ) {
-        counters[ticket.type] = Math.max(
-          counters[ticket.type],
+        number = Math.max(
+          number,
           ticket.number
         );
       }
 
-      for (const name of Object.keys(counters)) {
-        const match = channel.name?.match(
-          new RegExp(
-            `^(?:closed-)?${name}-(\\d+)$`
-          )
-        );
+      const match = channel.name?.match(
+        /^(?:closed-)?(?:purchase|cashout|support|giveaway|partnership)-(\d+)$/
+      );
 
-        if (match) {
-          counters[name] = Math.max(
-            counters[name],
-            Number(match[1])
-          );
-        }
+      if (match) {
+        number = Math.max(
+          number,
+          Number(match[1])
+        );
       }
     }
   }
 
-  counters[type]++;
+  number++;
 
   const content =
-    COUNTER_PREFIX + JSON.stringify(counters);
+    GLOBAL_COUNTER_PREFIX + number;
 
   if (found) {
     await botRequest(
       "PATCH",
       `/channels/${TICKET_LOG_CHANNEL_ID}/messages/${found.message.id}`,
-      { content }
+      {
+        content
+      }
     );
   } else {
     await postChannelMessage(
       TICKET_LOG_CHANNEL_ID,
       {
         content,
-        allowed_mentions: { parse: [] }
+        allowed_mentions: {
+          parse: []
+        }
       }
     );
   }
 
-  return counters[type];
+  return number;
 }
 
 // ==================================================
 // PRIVATE TICKET CATEGORIES
 // ==================================================
 
-async function getTicketCategory(guildId, type) {
+async function getTicketCategory(
+  guildId,
+  type
+) {
   const settings = TICKET_TYPES[type];
 
   if (!settings) {
-    throw new Error("Invalid ticket category.");
+    throw new Error(
+      "Invalid ticket category."
+    );
   }
 
-  const configuredId = process.env[settings.env];
+  const configuredId =
+    process.env[settings.env];
 
   if (configuredId) {
     const channel = await botRequest(
@@ -723,7 +917,8 @@ async function getTicketCategory(guildId, type) {
   const existing = channels.find(
     channel =>
       channel.type === 4 &&
-      channel.name === `chuppys-${type}`
+      channel.name ===
+        `chuppys-${type}`
   );
 
   if (existing) {
@@ -736,40 +931,26 @@ async function getTicketCategory(guildId, type) {
     {
       name: `chuppys-${type}`,
       type: 4,
+
       permission_overwrites: [
         {
           id: guildId,
           type: 0,
           deny: TICKET_DENY
         },
-        ...TICKET_ACCESS_ROLE_IDS.map(id => ({
-          id,
-          type: 0,
-          allow: TICKET_ALLOW
-        }))
+
+        ...TICKET_ACCESS_ROLE_IDS.map(
+          id => ({
+            id,
+            type: 0,
+            allow: TICKET_ALLOW
+          })
+        )
       ]
     }
   );
 
   return category.id;
-}
-
-function encodeTicketTopic(data) {
-  return `chuppys-ticket:${JSON.stringify(data)}`;
-}
-
-function decodeTicketTopic(topic) {
-  if (!topic?.startsWith("chuppys-ticket:")) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(
-      topic.slice("chuppys-ticket:".length)
-    );
-  } catch {
-    return null;
-  }
 }
 
 async function getTicketChannel(i) {
@@ -782,17 +963,23 @@ async function getTicketChannel(i) {
     channel.topic
   );
 
-  if (!ticket || !TICKET_TYPES[ticket.type]) {
+  if (
+    !ticket ||
+    !TICKET_TYPES[ticket.type]
+  ) {
     throw new Error(
       "This channel is not a Chuppys ticket."
     );
   }
 
-  return { channel, ticket };
+  return {
+    channel,
+    ticket
+  };
 }
 
 // ==================================================
-// PURCHASE AND CASH OUT FORMS
+// PURCHASE AND CASH OUT MODALS
 // ==================================================
 
 function ticketForm(type) {
@@ -800,36 +987,50 @@ function ticketForm(type) {
 
   return {
     type: 9,
+
     data: {
-      custom_id: `${TICKET_MODAL_PREFIX}${type}`,
-      title: `${settings.name} Ticket`,
-      components: settings.questions.map(
-        (question, index) => ({
-          type: 1,
-          components: [{
-            type: 4,
-            custom_id: `answer_${index}`,
-            label: question,
-            style: 1,
-            min_length: 1,
-            max_length: 250,
-            required: true
-          }]
-        })
-      )
+      custom_id:
+        `${TICKET_MODAL_PREFIX}${type}`,
+
+      title:
+        `${settings.name} Ticket`,
+
+      components:
+        settings.questions.map(
+          (question, index) => ({
+            type: 1,
+
+            components: [{
+              type: 4,
+              custom_id:
+                `answer_${index}`,
+              label: question,
+              style: 1,
+              min_length: 1,
+              max_length: 250,
+              required: true
+            }]
+          })
+        )
     }
   };
 }
 
 function ticketAnswers(i, type) {
-  const fields = (i.data?.components || [])
-    .flatMap(row => row.components || []);
+  const fields = (
+    i.data?.components || []
+  ).flatMap(
+    row => row.components || []
+  );
 
-  return TICKET_TYPES[type].questions.map(
+  return TICKET_TYPES[
+    type
+  ].questions.map(
     (question, index) => {
       const answer = fields.find(
         field =>
-          field.custom_id === `answer_${index}`
+          field.custom_id ===
+          `answer_${index}`
       )?.value?.trim();
 
       if (!answer) {
@@ -838,42 +1039,60 @@ function ticketAnswers(i, type) {
         );
       }
 
-      return { question, answer };
+      return {
+        question,
+        answer
+      };
     }
   );
 }
 
 // ==================================================
-// TICKET LOGS
+// TICKET LOGGING
 // ==================================================
 
-async function logTicketEvent(title, description) {
+async function logTicketEvent(
+  title,
+  description
+) {
   return postChannelMessage(
     TICKET_LOG_CHANNEL_ID,
     {
       embeds: [
-        ticketEmbed(title, description)
+        ticketEmbed(
+          title,
+          description
+        )
       ],
-      allowed_mentions: { parse: [] }
+
+      allowed_mentions: {
+        parse: []
+      }
     }
   );
 }
 
 // ==================================================
-// CREATE TICKET WITH CATEGORY-SPECIFIC PINGS
+// CREATE TICKET
 // ==================================================
 
-async function processTicketOpen(i, formType = null) {
+async function processTicketOpen(
+  i,
+  formType = null
+) {
   try {
     const guildId = i.guild_id;
     const userId = getUserId(i);
 
     const type = formType ||
-      String(i.data?.values?.[0] || "")
-        .toLowerCase()
-        .trim();
+      String(
+        i.data?.values?.[0] || ""
+      ).toLowerCase().trim();
 
-    if (!guildId || !userId) {
+    if (
+      !guildId ||
+      !userId
+    ) {
       throw new Error(
         "Tickets can only be opened inside the server."
       );
@@ -885,28 +1104,33 @@ async function processTicketOpen(i, formType = null) {
       );
     }
 
-    const settings = TICKET_TYPES[type];
+    const settings =
+      TICKET_TYPES[type];
 
-    const answers = settings.questions
-      ? ticketAnswers(i, type)
-      : [];
+    const answers =
+      settings.questions
+        ? ticketAnswers(i, type)
+        : [];
 
     const channels = await botRequest(
       "GET",
       `/guilds/${guildId}/channels`
     );
 
-    const existing = channels.find(channel => {
-      const ticket = decodeTicketTopic(
-        channel.topic
-      );
+    const existing = channels.find(
+      channel => {
+        const ticket =
+          decodeTicketTopic(
+            channel.topic
+          );
 
-      return (
-        ticket?.ownerId === userId &&
-        ticket?.type === type &&
-        ticket?.status !== "closed"
-      );
-    });
+        return (
+          ticket?.ownerId === userId &&
+          ticket?.type === type &&
+          ticket?.status !== "closed"
+        );
+      }
+    );
 
     if (existing) {
       return updateOriginalResponse(
@@ -915,15 +1139,16 @@ async function processTicketOpen(i, formType = null) {
       );
     }
 
-    const parentId = await getTicketCategory(
-      guildId,
-      type
-    );
+    const parentId =
+      await getTicketCategory(
+        guildId,
+        type
+      );
 
-    const number = await nextTicketNumber(
-      guildId,
-      type
-    );
+    // GLOBAL COUNTER:
+    // All ticket categories share one number.
+    const number =
+      await nextTicketNumber(guildId);
 
     const ticket = {
       ownerId: userId,
@@ -937,77 +1162,98 @@ async function processTicketOpen(i, formType = null) {
       "POST",
       `/guilds/${guildId}/channels`,
       {
-        name: ticketChannelName(type, number),
+        name: ticketChannelName(
+          type,
+          number
+        ),
+
         type: 0,
         parent_id: parentId,
-        topic: encodeTicketTopic(ticket),
+
+        topic:
+          encodeTicketTopic(ticket),
+
         permission_overwrites: [
           {
             id: guildId,
             type: 0,
             deny: TICKET_DENY
           },
+
           {
             id: userId,
             type: 1,
             allow: TICKET_ALLOW
           },
-          ...TICKET_ACCESS_ROLE_IDS.map(id => ({
-            id,
-            type: 0,
-            allow: TICKET_ALLOW
-          }))
+
+          ...TICKET_ACCESS_ROLE_IDS.map(
+            id => ({
+              id,
+              type: 0,
+              allow: TICKET_ALLOW
+            })
+          )
         ]
       }
     );
 
-    const answerText = answers.length
-      ? answers.map(answer =>
-          `**${answer.question}**\n${safeText(answer.answer)}`
-        ).join("\n\n")
-      : settings.description;
+    const answerText =
+      answers.length
+        ? answers.map(
+            answer =>
+              `**${answer.question}**\n` +
+              safeText(answer.answer)
+          ).join("\n\n")
+        : settings.description;
 
-    // Select pings for this ticket category.
-    const pingRoles = getTicketPingRoles(type);
+    const pingRoles =
+      getTicketPingRoles(type);
 
     const pingContent = [
       `<@${userId}>`,
-      ...pingRoles.map(id => `<@&${id}>`)
+      ...pingRoles.map(
+        id => `<@&${id}>`
+      )
     ].join(" ");
 
     try {
-      const welcome = await postChannelMessage(
-        channel.id,
-        {
-          content: pingContent,
+      const welcome =
+        await postChannelMessage(
+          channel.id,
+          {
+            content: pingContent,
 
-          embeds: [
-            ticketEmbed(
-              `${TICKET_EMOJI} ${settings.name} #${number}`,
-              `Welcome to your private **${settings.name}** ticket!\n\n` +
-              `${answerText}\n\n` +
-              `**Opened by:** <@${userId}>\n\n` +
-              "Our team will assist you as soon as possible."
-            )
-          ],
+            embeds: [
+              ticketEmbed(
+                `${TICKET_EMOJI} ${settings.name} #${number}`,
 
-          components: ticketButtons(),
+                `Welcome to your private **${settings.name}** ticket!\n\n` +
+                `${answerText}\n\n` +
+                `**Opened by:** <@${userId}>\n\n` +
+                "Our team will assist you as soon as possible."
+              )
+            ],
 
-          allowed_mentions: {
-            users: [userId],
-            roles: pingRoles,
-            parse: []
+            components:
+              ticketButtons(),
+
+            allowed_mentions: {
+              users: [userId],
+              roles: pingRoles,
+              parse: []
+            }
           }
-        }
-      );
+        );
 
-      ticket.controlMessageId = welcome.id;
+      ticket.controlMessageId =
+        welcome.id;
 
       await botRequest(
         "PATCH",
         `/channels/${channel.id}`,
         {
-          topic: encodeTicketTopic(ticket)
+          topic:
+            encodeTicketTopic(ticket)
         }
       );
     } catch (error) {
@@ -1019,7 +1265,9 @@ async function processTicketOpen(i, formType = null) {
 
     await logTicketEvent(
       "Ticket Opened",
+
       `**Ticket:** ${channel.name}\n` +
+      `**Ticket Number:** #${number}\n` +
       `**Channel ID:** ${channel.id}\n` +
       `**Type:** ${settings.name}\n` +
       `**Opened by:** <@${userId}>`
@@ -1027,10 +1275,13 @@ async function processTicketOpen(i, formType = null) {
 
     await updateOriginalResponse(
       i,
-      `${TICKET_EMOJI} Your **${settings.name}** ticket has been created!\n\n<#${channel.id}>`
+      `${TICKET_EMOJI} Your **${settings.name}** ticket #${number} has been created!\n\n<#${channel.id}>`
     );
   } catch (error) {
-    console.error("[TICKET OPEN]", error);
+    console.error(
+      "[TICKET OPEN]",
+      error
+    );
 
     await updateOriginalResponse(
       i,
@@ -1040,10 +1291,12 @@ async function processTicketOpen(i, formType = null) {
 }
 
 // ==================================================
-// FETCH TICKET MESSAGES FOR TRANSCRIPTS
+// FETCH TICKET MESSAGES
 // ==================================================
 
-async function fetchTicketMessages(channelId) {
+async function fetchTicketMessages(
+  channelId
+) {
   const messages = [];
   let before;
 
@@ -1063,7 +1316,9 @@ async function fetchTicketMessages(channelId) {
 
     messages.push(...batch);
 
-    before = batch[batch.length - 1].id;
+    before = batch[
+      batch.length - 1
+    ].id;
 
     if (batch.length < 100) {
       break;
@@ -1072,6 +1327,10 @@ async function fetchTicketMessages(channelId) {
 
   return messages.reverse();
 }
+
+// ==================================================
+// BUILD TRANSCRIPT
+// ==================================================
 
 function buildTranscript(
   channel,
@@ -1092,14 +1351,17 @@ function buildTranscript(
     ...messages.map(message => {
       const attachments = (
         message.attachments || []
-      ).map(attachment =>
-        `${attachment.filename}: ${attachment.url}`
+      ).map(
+        attachment =>
+          `${attachment.filename}: ${attachment.url}`
       ).join("\n");
 
       const embeds = (
         message.embeds || []
-      ).map(embed =>
-        `${embed.title || ""}\n${embed.description || ""}`
+      ).map(
+        embed =>
+          `${embed.title || ""}\n` +
+          `${embed.description || ""}`
       ).join("\n");
 
       return (
@@ -1115,7 +1377,7 @@ function buildTranscript(
 }
 
 // ==================================================
-// UPLOAD TRANSCRIPT FILE
+// UPLOAD TRANSCRIPT
 // ==================================================
 
 async function uploadTranscriptFile(
@@ -1130,7 +1392,9 @@ async function uploadTranscriptFile(
     "payload_json",
     JSON.stringify({
       embeds: [logEmbed],
-      allowed_mentions: { parse: [] }
+      allowed_mentions: {
+        parse: []
+      }
     })
   );
 
@@ -1139,7 +1403,8 @@ async function uploadTranscriptFile(
     new Blob(
       [transcript],
       {
-        type: "text/plain;charset=utf-8"
+        type:
+          "text/plain;charset=utf-8"
       }
     ),
     filename
@@ -1149,10 +1414,12 @@ async function uploadTranscriptFile(
     `${API}/channels/${channelId}/messages`,
     {
       method: "POST",
+
       headers: {
         Authorization:
           `Bot ${process.env.DISCORD_BOT_TOKEN}`
       },
+
       body: form
     }
   );
@@ -1173,7 +1440,7 @@ async function uploadTranscriptFile(
 }
 
 // ==================================================
-// SAVE TRANSCRIPT AND ADD BUTTON
+// SAVE TRANSCRIPT TO LOGS
 // ==================================================
 
 async function saveTranscriptLog(
@@ -1182,12 +1449,13 @@ async function saveTranscriptLog(
   deletedBy,
   messages
 ) {
-  const transcript = buildTranscript(
-    channel,
-    ticket,
-    deletedBy,
-    messages
-  );
+  const transcript =
+    buildTranscript(
+      channel,
+      ticket,
+      deletedBy,
+      messages
+    );
 
   const filename =
     `transcript-${ticket.type}-` +
@@ -1195,21 +1463,23 @@ async function saveTranscriptLog(
 
   const description =
     `**Ticket:** ${channel.name}\n` +
+    `**Ticket Number:** #${ticket.number || "Legacy"}\n` +
     `**Owner:** <@${ticket.ownerId}>\n` +
     `**Category:** ${ticket.type}\n` +
     `**Deleted by:** <@${deletedBy}>\n` +
     `**Messages:** ${messages.length}\n\n` +
     "Press **View Transcript** to access the conversation.";
 
-  const saved = await uploadTranscriptFile(
-    TICKET_LOG_CHANNEL_ID,
-    filename,
-    transcript,
-    ticketEmbed(
-      "Ticket Deleted",
-      description
-    )
-  );
+  const saved =
+    await uploadTranscriptFile(
+      TICKET_LOG_CHANNEL_ID,
+      filename,
+      transcript,
+      ticketEmbed(
+        "Ticket Deleted",
+        description
+      )
+    );
 
   await botRequest(
     "PATCH",
@@ -1217,13 +1487,20 @@ async function saveTranscriptLog(
     {
       components: [{
         type: 1,
+
         components: [{
           type: 2,
           style: 1,
+
           custom_id:
             `${TRANSCRIPT_BUTTON_PREFIX}${saved.id}`,
-          label: "View Transcript",
-          emoji: { name: "📄" }
+
+          label:
+            "View Transcript",
+
+          emoji: {
+            name: "📄"
+          }
         }]
       }]
     }
@@ -1248,9 +1525,10 @@ async function processViewTranscript(i) {
       );
     }
 
-    const messageId = i.data.custom_id.slice(
-      TRANSCRIPT_BUTTON_PREFIX.length
-    );
+    const messageId =
+      i.data.custom_id.slice(
+        TRANSCRIPT_BUTTON_PREFIX.length
+      );
 
     if (
       !/^\d{17,20}$/.test(messageId) ||
@@ -1266,13 +1544,16 @@ async function processViewTranscript(i) {
       `/channels/${TICKET_LOG_CHANNEL_ID}/messages/${messageId}`
     );
 
-    const file = log.attachments?.find(
-      attachment =>
-        attachment.filename?.startsWith(
-          "transcript-"
-        ) &&
-        attachment.filename?.endsWith(".txt")
-    );
+    const file =
+      log.attachments?.find(
+        attachment =>
+          attachment.filename?.startsWith(
+            "transcript-"
+          ) &&
+          attachment.filename?.endsWith(
+            ".txt"
+          )
+      );
 
     if (!file) {
       throw new Error(
@@ -1288,7 +1569,9 @@ async function processViewTranscript(i) {
           `[Open ${file.filename}](${file.url})\n\n` +
           "This response is visible only to you.",
 
-        allowed_mentions: { parse: [] }
+        allowed_mentions: {
+          parse: []
+        }
       }
     );
   } catch (error) {
@@ -1305,7 +1588,7 @@ async function processViewTranscript(i) {
 }
 
 // ==================================================
-// UPDATE TICKET CONTROL BUTTONS
+// UPDATE TICKET BUTTONS
 // ==================================================
 
 async function updateTicketControlMessage(
@@ -1321,7 +1604,8 @@ async function updateTicketControlMessage(
     "PATCH",
     `/channels/${channelId}/messages/${ticket.controlMessageId}`,
     {
-      components: ticketButtons(closed)
+      components:
+        ticketButtons(closed)
     }
   ).catch(console.warn);
 }
@@ -1330,10 +1614,15 @@ async function updateTicketControlMessage(
 // CLAIM / CLOSE / REOPEN / DELETE
 // ==================================================
 
-async function processTicketAction(i, action) {
+async function processTicketAction(
+  i,
+  action
+) {
   try {
-    const { channel, ticket } =
-      await getTicketChannel(i);
+    const {
+      channel,
+      ticket
+    } = await getTicketChannel(i);
 
     const userId = getUserId(i);
 
@@ -1343,9 +1632,14 @@ async function processTicketAction(i, action) {
       );
     }
 
+    // ================================================
     // CLAIM
+    // ================================================
+
     if (action === "claim") {
-      if (ticket.status === "closed") {
+      if (
+        ticket.status === "closed"
+      ) {
         throw new Error(
           "Reopen this ticket before claiming it."
         );
@@ -1366,7 +1660,8 @@ async function processTicketAction(i, action) {
         "PATCH",
         `/channels/${channel.id}`,
         {
-          topic: encodeTicketTopic(ticket)
+          topic:
+            encodeTicketTopic(ticket)
         }
       );
 
@@ -1379,13 +1674,18 @@ async function processTicketAction(i, action) {
               `This ticket has been claimed by <@${userId}>.`
             )
           ],
-          allowed_mentions: { parse: [] }
+
+          allowed_mentions: {
+            parse: []
+          }
         }
       );
 
       await logTicketEvent(
         "Ticket Claimed",
+
         `**Ticket:** ${channel.name}\n` +
+        `**Ticket Number:** #${ticket.number}\n` +
         `**Claimed by:** <@${userId}>`
       ).catch(console.error);
 
@@ -1395,9 +1695,14 @@ async function processTicketAction(i, action) {
       );
     }
 
+    // ================================================
     // CLOSE
+    // ================================================
+
     if (action === "close") {
-      if (ticket.status === "closed") {
+      if (
+        ticket.status === "closed"
+      ) {
         throw new Error(
           "This ticket is already closed."
         );
@@ -1419,14 +1724,19 @@ async function processTicketAction(i, action) {
         "PATCH",
         `/channels/${channel.id}`,
         {
-          topic: encodeTicketTopic(ticket),
+          topic:
+            encodeTicketTopic(ticket),
+
           name: ticket.number
             ? ticketChannelName(
                 ticket.type,
                 ticket.number,
                 true
               )
-            : `closed-${ticket.type}-${ticket.ownerId}`.slice(0, 100)
+            : `closed-${ticket.type}-${ticket.ownerId}`.slice(
+                0,
+                100
+              )
         }
       );
 
@@ -1442,18 +1752,26 @@ async function processTicketAction(i, action) {
           embeds: [
             ticketEmbed(
               `${TICKET_EMOJI} Ticket Closed`,
+
               `Closed by <@${userId}>.\n\n` +
               "Staff can reopen or delete this ticket."
             )
           ],
-          components: ticketButtons(true),
-          allowed_mentions: { parse: [] }
+
+          components:
+            ticketButtons(true),
+
+          allowed_mentions: {
+            parse: []
+          }
         }
       );
 
       await logTicketEvent(
         "Ticket Closed",
+
         `**Ticket:** ${channel.name}\n` +
+        `**Ticket Number:** #${ticket.number}\n` +
         `**Category:** ${ticket.type}\n` +
         `**Closed by:** <@${userId}>`
       ).catch(console.error);
@@ -1464,9 +1782,14 @@ async function processTicketAction(i, action) {
       );
     }
 
+    // ================================================
     // REOPEN
+    // ================================================
+
     if (action === "reopen") {
-      if (ticket.status !== "closed") {
+      if (
+        ticket.status !== "closed"
+      ) {
         throw new Error(
           "This ticket is already open."
         );
@@ -1488,13 +1811,18 @@ async function processTicketAction(i, action) {
         "PATCH",
         `/channels/${channel.id}`,
         {
-          topic: encodeTicketTopic(ticket),
+          topic:
+            encodeTicketTopic(ticket),
+
           name: ticket.number
             ? ticketChannelName(
                 ticket.type,
                 ticket.number
               )
-            : `${ticket.type}-${ticket.ownerId}`.slice(0, 100)
+            : `${ticket.type}-${ticket.ownerId}`.slice(
+                0,
+                100
+              )
         }
       );
 
@@ -1513,14 +1841,21 @@ async function processTicketAction(i, action) {
               `Reopened by <@${userId}>.`
             )
           ],
-          components: ticketButtons(),
-          allowed_mentions: { parse: [] }
+
+          components:
+            ticketButtons(),
+
+          allowed_mentions: {
+            parse: []
+          }
         }
       );
 
       await logTicketEvent(
         "Ticket Reopened",
+
         `**Ticket:** ${channel.name}\n` +
+        `**Ticket Number:** #${ticket.number}\n` +
         `**Category:** ${ticket.type}\n` +
         `**Reopened by:** <@${userId}>`
       ).catch(console.error);
@@ -1531,19 +1866,25 @@ async function processTicketAction(i, action) {
       );
     }
 
+    // ================================================
     // DELETE
+    // ================================================
+
     if (action === "delete") {
-      if (ticket.status !== "closed") {
+      if (
+        ticket.status !== "closed"
+      ) {
         throw new Error(
           "Close the ticket before deleting it."
         );
       }
 
-      const messages = await fetchTicketMessages(
-        channel.id
-      );
+      const messages =
+        await fetchTicketMessages(
+          channel.id
+        );
 
-      // Never delete until transcript is saved.
+      // Save transcript before deleting.
       await saveTranscriptLog(
         channel,
         ticket,
@@ -1564,7 +1905,9 @@ async function processTicketAction(i, action) {
       return;
     }
 
-    throw new Error("Unknown ticket action.");
+    throw new Error(
+      "Unknown ticket action."
+    );
   } catch (error) {
     console.error(
       "[TICKET ACTION]",
@@ -1582,7 +1925,10 @@ async function processTicketAction(i, action) {
 // ROLE DROPDOWNS
 // ==================================================
 
-async function changeRoles(i, group) {
+async function changeRoles(
+  i,
+  group
+) {
   const guildId = i.guild_id;
   const userId = getUserId(i);
 
@@ -1591,7 +1937,9 @@ async function changeRoles(i, group) {
   );
 
   for (const id of selected) {
-    if (!group.roles.includes(id)) {
+    if (
+      !group.roles.includes(id)
+    ) {
       throw new Error(
         "Invalid role selection."
       );
@@ -1599,33 +1947,52 @@ async function changeRoles(i, group) {
   }
 
   const current = new Set(
-    await getMemberRoles(guildId, userId)
+    await getMemberRoles(
+      guildId,
+      userId
+    )
   );
 
   for (const id of group.roles) {
-    const shouldHave = selected.has(id);
+    const shouldHave =
+      selected.has(id);
 
-    if (shouldHave === current.has(id)) {
+    if (
+      shouldHave ===
+      current.has(id)
+    ) {
       continue;
     }
 
     await botRequest(
-      shouldHave ? "PUT" : "DELETE",
+      shouldHave
+        ? "PUT"
+        : "DELETE",
+
       `/guilds/${guildId}/members/${userId}/roles/${id}`
     );
   }
 }
 
-async function processRoleInteraction(i, group) {
+async function processRoleInteraction(
+  i,
+  group
+) {
   try {
-    await changeRoles(i, group);
+    await changeRoles(
+      i,
+      group
+    );
 
     await updateOriginalResponse(
       i,
       group.success
     );
   } catch (error) {
-    console.error("[ROLE]", error);
+    console.error(
+      "[ROLE]",
+      error
+    );
 
     await updateOriginalResponse(
       i,
@@ -1643,12 +2010,17 @@ async function processClientRole(i) {
     const guildId = i.guild_id;
     const userId = getUserId(i);
 
-    const roles = await getMemberRoles(
-      guildId,
-      userId
-    );
+    const roles =
+      await getMemberRoles(
+        guildId,
+        userId
+      );
 
-    if (roles.includes(CLIENT_ROLE_ID)) {
+    if (
+      roles.includes(
+        CLIENT_ROLE_ID
+      )
+    ) {
       return updateOriginalResponse(
         i,
         "You already have the client role! 🤍"
@@ -1665,7 +2037,10 @@ async function processClientRole(i) {
       "You now have the client role! You can submit a vouch. 🤍"
     );
   } catch (error) {
-    console.error("[CLIENT]", error);
+    console.error(
+      "[CLIENT]",
+      error
+    );
 
     await updateOriginalResponse(
       i,
@@ -1684,27 +2059,35 @@ async function processVerification(i) {
     const userId = getUserId(i);
 
     const roles = new Set(
-      await getMemberRoles(guildId, userId)
+      await getMemberRoles(
+        guildId,
+        userId
+      )
     );
 
-    if (roles.has(CHUPPYS_ROLE_ID)) {
+    if (
+      roles.has(CHUPPYS_ROLE_ID)
+    ) {
       return updateOriginalResponse(
         i,
         "You are already verified! 🤍"
       );
     }
 
-    const hasAge = AGE_ROLE_IDS.some(
-      id => roles.has(id)
-    );
+    const hasAge =
+      AGE_ROLE_IDS.some(
+        id => roles.has(id)
+      );
 
-    const hasPronoun = PRONOUN_ROLE_IDS.some(
-      id => roles.has(id)
-    );
+    const hasPronoun =
+      PRONOUN_ROLE_IDS.some(
+        id => roles.has(id)
+      );
 
-    const pingCount = PING_ROLE_IDS.filter(
-      id => roles.has(id)
-    ).length;
+    const pingCount =
+      PING_ROLE_IDS.filter(
+        id => roles.has(id)
+      ).length;
 
     if (
       !hasAge ||
@@ -1727,7 +2110,10 @@ async function processVerification(i) {
       "You are now verified! Welcome to .gg/chuppys 🤍"
     );
   } catch (error) {
-    console.error("[VERIFY]", error);
+    console.error(
+      "[VERIFY]",
+      error
+    );
 
     await updateOriginalResponse(
       i,
@@ -1750,12 +2136,17 @@ async function processVouchInteraction(i) {
 
     const buyerId = getUserId(i);
 
-    const roles = await getMemberRoles(
-      i.guild_id,
-      buyerId
-    );
+    const roles =
+      await getMemberRoles(
+        i.guild_id,
+        buyerId
+      );
 
-    if (!roles.includes(CLIENT_ROLE_ID)) {
+    if (
+      !roles.includes(
+        CLIENT_ROLE_ID
+      )
+    ) {
       throw new Error(
         "You need the client role before submitting a vouch."
       );
@@ -1763,17 +2154,25 @@ async function processVouchInteraction(i) {
 
     const options = optionsMap(i);
 
-    const sellerId = options.seller;
-    const rating = options.rating;
-    const order = options.order?.trim();
+    const sellerId =
+      options.seller;
 
-    const resolved = i.data.resolved || {};
+    const rating =
+      options.rating;
 
-    const proof = resolved.attachments?.[
-      options.proof
-    ];
+    const order =
+      options.order?.trim();
 
-    const seller = resolved.users?.[sellerId];
+    const resolved =
+      i.data.resolved || {};
+
+    const proof =
+      resolved.attachments?.[
+        options.proof
+      ];
+
+    const seller =
+      resolved.users?.[sellerId];
 
     if (
       !sellerId ||
@@ -1807,7 +2206,9 @@ async function processVouchInteraction(i) {
     if (
       !proof ||
       !(
-        proof.content_type?.startsWith("image/") ||
+        proof.content_type?.startsWith(
+          "image/"
+        ) ||
         /\.(png|jpe?g|gif|webp)$/i.test(
           proof.filename || ""
         )
@@ -1821,9 +2222,11 @@ async function processVouchInteraction(i) {
     const embed = {
       color: 0xffffff,
       title: "NEW VOUCH",
+
       thumbnail: {
         url: VOUCH_EMOJI_URL
       },
+
       description:
         `**seller:** <@${sellerId}>\n` +
         `**buyer:** <@${buyerId}>\n` +
@@ -1831,17 +2234,25 @@ async function processVouchInteraction(i) {
         `**rating:** ${rating}/5\n` +
         `**proof:** 📎 ${safeText(proof.filename)}\n\n` +
         "*thank you for vouching! shop again ♡*",
+
       image: {
         url: proof.url
       },
-      timestamp: new Date().toISOString()
+
+      timestamp:
+        new Date().toISOString()
     };
 
     await postChannelMessage(
-      getVouchChannelId(sellerId),
+      getVouchChannelId(
+        sellerId
+      ),
       {
         embeds: [embed],
-        allowed_mentions: { parse: [] }
+
+        allowed_mentions: {
+          parse: []
+        }
       }
     );
 
@@ -1850,7 +2261,10 @@ async function processVouchInteraction(i) {
       "Your vouch was submitted successfully! ♡"
     );
   } catch (error) {
-    console.error("[VOUCH]", error);
+    console.error(
+      "[VOUCH]",
+      error
+    );
 
     await updateOriginalResponse(
       i,
@@ -1865,15 +2279,22 @@ async function processVouchInteraction(i) {
 
 async function processQuestionInteraction(i) {
   try {
-    if (i.channel_id !== QUESTION_CHANNEL_ID) {
+    if (
+      i.channel_id !==
+      QUESTION_CHANNEL_ID
+    ) {
       throw new Error(
         `Use /question in <#${QUESTION_CHANNEL_ID}>.`
       );
     }
 
     const options = optionsMap(i);
-    const question = options.question?.trim();
-    const askerId = getUserId(i);
+
+    const question =
+      options.question?.trim();
+
+    const askerId =
+      getUserId(i);
 
     if (!question) {
       throw new Error(
@@ -1881,16 +2302,19 @@ async function processQuestionInteraction(i) {
       );
     }
 
-    const picture = options.picture
-      ? i.data.resolved?.attachments?.[
-          options.picture
-        ]
-      : null;
+    const picture =
+      options.picture
+        ? i.data.resolved?.attachments?.[
+            options.picture
+          ]
+        : null;
 
     if (
       picture &&
       !(
-        picture.content_type?.startsWith("image/") ||
+        picture.content_type?.startsWith(
+          "image/"
+        ) ||
         /\.(png|jpe?g|gif|webp)$/i.test(
           picture.filename || ""
         )
@@ -1904,17 +2328,23 @@ async function processQuestionInteraction(i) {
     const embed = {
       title:
         `Question from @${i.member?.user?.username || i.user?.username || "Member"}`,
+
       color: 0xffffff,
+
       description:
         `**Question**\n${safeText(question)}`,
+
       thumbnail: {
         url: QUESTION_EMOJI_URL
       },
+
       footer: {
         text:
           `.gg/chuppys • Question User ID: ${askerId}`
       },
-      timestamp: new Date().toISOString()
+
+      timestamp:
+        new Date().toISOString()
     };
 
     if (picture) {
@@ -1927,26 +2357,38 @@ async function processQuestionInteraction(i) {
       QUESTION_CHANNEL_ID,
       {
         embeds: [embed],
+
         components: [{
           type: 1,
+
           components: [
             {
               type: 2,
               style: 2,
-              label: "Make a Support Ticket",
+
+              label:
+                "Make a Support Ticket",
+
               custom_id:
                 `${QUESTION_TICKET_CUSTOM_ID}${askerId}`
             },
+
             {
               type: 2,
               style: 1,
-              label: "Reply to Question",
+
+              label:
+                "Reply to Question",
+
               custom_id:
                 `${QUESTION_REPLY_CUSTOM_ID}${askerId}`
             }
           ]
         }],
-        allowed_mentions: { parse: [] }
+
+        allowed_mentions: {
+          parse: []
+        }
       }
     );
 
@@ -1955,7 +2397,10 @@ async function processQuestionInteraction(i) {
       "Your question was sent to Chuppys staff! ♡"
     );
   } catch (error) {
-    console.error("[QUESTION]", error);
+    console.error(
+      "[QUESTION]",
+      error
+    );
 
     await updateOriginalResponse(
       i,
@@ -1970,17 +2415,28 @@ async function processQuestionInteraction(i) {
 
 async function processRequestInteraction(i) {
   try {
-    if (i.channel_id !== REQUEST_CHANNEL_ID) {
+    if (
+      i.channel_id !==
+      REQUEST_CHANNEL_ID
+    ) {
       throw new Error(
         `Use /request in <#${REQUEST_CHANNEL_ID}>.`
       );
     }
 
     const options = optionsMap(i);
-    const category = options.category;
-    const items = options.items?.trim();
 
-    if (!REQUEST_CATEGORIES.has(category)) {
+    const category =
+      options.category;
+
+    const items =
+      options.items?.trim();
+
+    if (
+      !REQUEST_CATEGORIES.has(
+        category
+      )
+    ) {
       throw new Error(
         "Invalid request category."
       );
@@ -1996,27 +2452,37 @@ async function processRequestInteraction(i) {
     }
 
     const embed = {
-      title: `${category} Request`,
+      title:
+        `${category} Request`,
+
       color: 0xffffff,
+
       description:
         `**Requested by:** <@${getUserId(i)}>\n\n` +
         `**Category:** ${category}\n\n` +
         "**What they'd like Chuppys to stock up on:**\n" +
         safeText(items),
+
       thumbnail: {
         url: QUESTION_EMOJI_URL
       },
+
       footer: {
         text: ".gg/chuppys"
       },
-      timestamp: new Date().toISOString()
+
+      timestamp:
+        new Date().toISOString()
     };
 
     await postChannelMessage(
       REQUEST_CHANNEL_ID,
       {
         embeds: [embed],
-        allowed_mentions: { parse: [] }
+
+        allowed_mentions: {
+          parse: []
+        }
       }
     );
 
@@ -2025,7 +2491,10 @@ async function processRequestInteraction(i) {
       `Your **${category}** request has been submitted! ♡`
     );
   } catch (error) {
-    console.error("[REQUEST]", error);
+    console.error(
+      "[REQUEST]",
+      error
+    );
 
     await updateOriginalResponse(
       i,
@@ -2040,14 +2509,19 @@ async function processRequestInteraction(i) {
 
 function makeHelpEmbed() {
   return {
-    title: ".gg/chuppys Bot Commands",
+    title:
+      ".gg/chuppys Bot Commands",
+
     color: 0xffffff,
+
     description:
       "Here is a list of available commands and what they do.",
 
     fields: [
       {
-        name: "General Commands",
+        name:
+          "General Commands",
+
         value:
           "`/help` — Displays this command menu.\n" +
           "`/question` — Submit a question.\n" +
@@ -2059,15 +2533,20 @@ function makeHelpEmbed() {
       },
 
       {
-        name: "Tickets",
+        name:
+          "Tickets",
+
         value:
           `Open a ticket in <#${TICKET_PANEL_CHANNEL_ID}>.\n` +
           "Categories: Purchase, Cashout, Giveaway, Partnership, Support.\n" +
+          "Every new ticket increases the global ticket number by 1.\n" +
           "Authorized staff can claim, close, reopen, and delete tickets."
       },
 
       {
-        name: "Support Commands",
+        name:
+          "Support Commands",
+
         value:
           "`,r @user c` — Give Chuppys role.\n" +
           "`,r @user r` — Vouch reminder.\n" +
@@ -2078,7 +2557,9 @@ function makeHelpEmbed() {
       },
 
       {
-        name: "Service Commands",
+        name:
+          "Service Commands",
+
         value:
           "`,nitro` / `!nitro`\n" +
           "`,decor` / `!decor`\n" +
@@ -2088,7 +2569,9 @@ function makeHelpEmbed() {
       },
 
       {
-        name: "Additional Commands",
+        name:
+          "Additional Commands",
+
         value:
           "`!vouchtut` — Vouch tutorial.\n" +
           "`!ranked` — Ranked roles.\n" +
@@ -2110,22 +2593,27 @@ function makeHelpEmbed() {
 }
 
 // ==================================================
-// QUESTION BUTTONS
+// QUESTION SUPPORT BUTTON
 // ==================================================
 
 function handleQuestionTicketButton() {
   return {
     type: 4,
+
     data: {
       flags: 64,
+
       embeds: [{
         color: 0xffffff,
+
         description:
           `Please open a Support ticket in <#${TICKET_PANEL_CHANNEL_ID}>.\n\n` +
           `Our Ticket Support team will assist you. ${TICKET_EMOJI}`,
+
         thumbnail: {
           url: QUESTION_EMOJI_URL
         },
+
         footer: {
           text: ".gg/chuppys"
         }
@@ -2134,6 +2622,10 @@ function handleQuestionTicketButton() {
   };
 }
 
+// ==================================================
+// QUESTION REPLY BUTTON
+// ==================================================
+
 function handleQuestionReplyButton(i) {
   if (!hasStaffPermission(i)) {
     return ephemeral(
@@ -2141,11 +2633,16 @@ function handleQuestionReplyButton(i) {
     );
   }
 
-  const askerId = i.data.custom_id.slice(
-    QUESTION_REPLY_CUSTOM_ID.length
-  );
+  const askerId =
+    i.data.custom_id.slice(
+      QUESTION_REPLY_CUSTOM_ID.length
+    );
 
-  if (!/^\d{17,20}$/.test(askerId)) {
+  if (
+    !/^\d{17,20}$/.test(
+      askerId
+    )
+  ) {
     return ephemeral(
       "Invalid question button."
     );
@@ -2153,16 +2650,23 @@ function handleQuestionReplyButton(i) {
 
   return {
     type: 9,
+
     data: {
       custom_id:
         `${QUESTION_MODAL_CUSTOM_ID}${askerId}:${i.message.id}`,
-      title: "Reply to Question",
+
+      title:
+        "Reply to Question",
+
       components: [{
         type: 1,
+
         components: [{
           type: 4,
-          custom_id: "question_reply_text",
-          label: "Your response",
+          custom_id:
+            "question_reply_text",
+          label:
+            "Your response",
           style: 2,
           min_length: 1,
           max_length: 2000,
@@ -2179,15 +2683,18 @@ function handleQuestionReplyButton(i) {
 
 async function processQuestionReply(i) {
   try {
-    if (!hasStaffPermission(i)) {
+    if (
+      !hasStaffPermission(i)
+    ) {
       throw new Error(
         "Only authorized staff can reply."
       );
     }
 
-    const match = i.data.custom_id.match(
-      /^question_reply_modal:(\d{17,20}):(\d{17,20})$/
-    );
+    const match =
+      i.data.custom_id.match(
+        /^question_reply_modal:(\d{17,20}):(\d{17,20})$/
+      );
 
     if (!match) {
       throw new Error(
@@ -2195,15 +2702,23 @@ async function processQuestionReply(i) {
       );
     }
 
-    const askerId = match[1];
-    const originalMessageId = match[2];
+    const askerId =
+      match[1];
 
-    const answer = i.data.components
-      ?.flatMap(row => row.components || [])
-      .find(
-        component =>
-          component.custom_id === "question_reply_text"
-      )?.value?.trim();
+    const originalMessageId =
+      match[2];
+
+    const answer =
+      i.data.components
+        ?.flatMap(
+          row => row.components || []
+        )
+        .find(
+          component =>
+            component.custom_id ===
+            "question_reply_text"
+        )
+        ?.value?.trim();
 
     if (!answer) {
       throw new Error(
@@ -2215,7 +2730,8 @@ async function processQuestionReply(i) {
       "POST",
       "/users/@me/channels",
       {
-        recipient_id: askerId
+        recipient_id:
+          askerId
       }
     );
 
@@ -2223,20 +2739,30 @@ async function processQuestionReply(i) {
       dm.id,
       {
         embeds: [{
-          title: "Response to Your Question",
+          title:
+            "Response to Your Question",
+
           color: 0xffffff,
+
           description:
             `${QUESTION_EMOJI} **Replied by:** <@${getUserId(i)}>\n\n` +
             `**Response:**\n${safeText(answer)}`,
+
           thumbnail: {
             url: QUESTION_EMOJI_URL
           },
+
           footer: {
             text: ".gg/chuppys"
           },
-          timestamp: new Date().toISOString()
+
+          timestamp:
+            new Date().toISOString()
         }],
-        allowed_mentions: { parse: [] }
+
+        allowed_mentions: {
+          parse: []
+        }
       }
     );
 
@@ -2245,11 +2771,18 @@ async function processQuestionReply(i) {
       {
         content:
           "A response was sent privately to the member.",
+
         message_reference: {
-          message_id: originalMessageId,
-          fail_if_not_exists: false
+          message_id:
+            originalMessageId,
+
+          fail_if_not_exists:
+            false
         },
-        allowed_mentions: { parse: [] }
+
+        allowed_mentions: {
+          parse: []
+        }
       }
     ).catch(console.warn);
 
@@ -2274,9 +2807,17 @@ async function processQuestionReply(i) {
 // MAIN VERCEL INTERACTIONS ENDPOINT
 // ==================================================
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
+export default async function handler(
+  req,
+  res
+) {
+  if (
+    req.method !== "POST"
+  ) {
+    res.setHeader(
+      "Allow",
+      "POST"
+    );
 
     return res.status(405).send(
       "Method not allowed"
@@ -2286,19 +2827,26 @@ export default async function handler(req, res) {
   let body;
 
   try {
-    body = await getRawBody(req);
+    body =
+      await getRawBody(req);
   } catch {
     return res.status(400).send(
       "Invalid request body"
     );
   }
 
-  if (!verifyDiscordSignature(
-    body,
-    req.headers["x-signature-ed25519"],
-    req.headers["x-signature-timestamp"],
-    process.env.DISCORD_PUBLIC_KEY
-  )) {
+  if (
+    !verifyDiscordSignature(
+      body,
+      req.headers[
+        "x-signature-ed25519"
+      ],
+      req.headers[
+        "x-signature-timestamp"
+      ],
+      process.env.DISCORD_PUBLIC_KEY
+    )
+  ) {
     return res.status(401).send(
       "Invalid signature"
     );
@@ -2316,8 +2864,13 @@ export default async function handler(req, res) {
     );
   }
 
+  // ==================================================
   // DISCORD PING
-  if (i.type === 1) {
+  // ==================================================
+
+  if (
+    i.type === 1
+  ) {
     return res.status(200).json({
       type: 1
     });
@@ -2327,26 +2880,41 @@ export default async function handler(req, res) {
   // SLASH COMMANDS
   // ==================================================
 
-  if (i.type === 2) {
-    const command = i.data?.name;
+  if (
+    i.type === 2
+  ) {
+    const command =
+      i.data?.name;
 
-    if (command === "help") {
+    if (
+      command === "help"
+    ) {
       return res.status(200).json({
         type: 4,
+
         data: {
           flags: 64,
-          embeds: [makeHelpEmbed()]
+          embeds: [
+            makeHelpEmbed()
+          ]
         }
       });
     }
 
     const handlers = {
-      request: processRequestInteraction,
-      question: processQuestionInteraction,
-      vouch: processVouchInteraction
+      request:
+        processRequestInteraction,
+
+      question:
+        processQuestionInteraction,
+
+      vouch:
+        processVouchInteraction
     };
 
-    if (handlers[command]) {
+    if (
+      handlers[command]
+    ) {
       deferEphemeral(
         res,
         handlers[command](i)
@@ -2366,8 +2934,11 @@ export default async function handler(req, res) {
   // BUTTONS AND DROPDOWNS
   // ==================================================
 
-  if (i.type === 3) {
-    const id = i.data?.custom_id || "";
+  if (
+    i.type === 3
+  ) {
+    const id =
+      i.data?.custom_id || "";
 
     // TICKET DROPDOWN
     if (
@@ -2378,7 +2949,9 @@ export default async function handler(req, res) {
         i.data?.values?.[0] || ""
       ).toLowerCase().trim();
 
-      if (!TICKET_TYPES[type]) {
+      if (
+        !TICKET_TYPES[type]
+      ) {
         return res.status(200).json(
           ephemeral(
             "Please select a valid ticket category."
@@ -2386,7 +2959,9 @@ export default async function handler(req, res) {
         );
       }
 
-      if (TICKET_TYPES[type].questions) {
+      if (
+        TICKET_TYPES[type].questions
+      ) {
         return res.status(200).json(
           ticketForm(type)
         );
@@ -2401,9 +2976,11 @@ export default async function handler(req, res) {
     }
 
     // TRANSCRIPT BUTTON
-    if (id.startsWith(
-      TRANSCRIPT_BUTTON_PREFIX
-    )) {
+    if (
+      id.startsWith(
+        TRANSCRIPT_BUTTON_PREFIX
+      )
+    ) {
       deferEphemeral(
         res,
         processViewTranscript(i)
@@ -2412,15 +2989,24 @@ export default async function handler(req, res) {
       return;
     }
 
-    // TICKET MANAGEMENT BUTTONS
+    // TICKET MANAGEMENT
     const ticketActions = {
-      chuppys_ticket_claim: "claim",
-      chuppys_ticket_close: "close",
-      chuppys_ticket_reopen: "reopen",
-      chuppys_ticket_delete: "delete"
+      chuppys_ticket_claim:
+        "claim",
+
+      chuppys_ticket_close:
+        "close",
+
+      chuppys_ticket_reopen:
+        "reopen",
+
+      chuppys_ticket_delete:
+        "delete"
     };
 
-    if (ticketActions[id]) {
+    if (
+      ticketActions[id]
+    ) {
       deferEphemeral(
         res,
         processTicketAction(
@@ -2433,7 +3019,9 @@ export default async function handler(req, res) {
     }
 
     // CLIENT ROLE
-    if (id === CLIENT_ROLE_BUTTON_ID) {
+    if (
+      id === CLIENT_ROLE_BUTTON_ID
+    ) {
       deferEphemeral(
         res,
         processClientRole(i)
@@ -2442,8 +3030,10 @@ export default async function handler(req, res) {
       return;
     }
 
-    // VERIFY BUTTON
-    if (id === VERIFY_CUSTOM_ID) {
+    // VERIFICATION
+    if (
+      id === VERIFY_CUSTOM_ID
+    ) {
       deferEphemeral(
         res,
         processVerification(i)
@@ -2453,18 +3043,22 @@ export default async function handler(req, res) {
     }
 
     // QUESTION SUPPORT BUTTON
-    if (id.startsWith(
-      QUESTION_TICKET_CUSTOM_ID
-    )) {
+    if (
+      id.startsWith(
+        QUESTION_TICKET_CUSTOM_ID
+      )
+    ) {
       return res.status(200).json(
         handleQuestionTicketButton()
       );
     }
 
     // QUESTION REPLY BUTTON
-    if (id.startsWith(
-      QUESTION_REPLY_CUSTOM_ID
-    )) {
+    if (
+      id.startsWith(
+        QUESTION_REPLY_CUSTOM_ID
+      )
+    ) {
       return res.status(200).json(
         handleQuestionReplyButton(i)
       );
@@ -2482,7 +3076,10 @@ export default async function handler(req, res) {
     if (group) {
       deferEphemeral(
         res,
-        processRoleInteraction(i, group)
+        processRoleInteraction(
+          i,
+          group
+        )
       );
 
       return;
@@ -2504,18 +3101,26 @@ export default async function handler(req, res) {
   // MODAL SUBMISSIONS
   // ==================================================
 
-  if (i.type === 5) {
-    const id = i.data?.custom_id || "";
+  if (
+    i.type === 5
+  ) {
+    const id =
+      i.data?.custom_id || "";
 
-    // PURCHASE / CASH OUT FORM
-    if (id.startsWith(
-      TICKET_MODAL_PREFIX
-    )) {
-      const type = id.slice(
-        TICKET_MODAL_PREFIX.length
-      );
+    // PURCHASE / CASH OUT FORMS
+    if (
+      id.startsWith(
+        TICKET_MODAL_PREFIX
+      )
+    ) {
+      const type =
+        id.slice(
+          TICKET_MODAL_PREFIX.length
+        );
 
-      if (!TICKET_TYPES[type]?.questions) {
+      if (
+        !TICKET_TYPES[type]?.questions
+      ) {
         return res.status(200).json(
           ephemeral(
             "Invalid ticket form."
@@ -2525,16 +3130,21 @@ export default async function handler(req, res) {
 
       deferEphemeral(
         res,
-        processTicketOpen(i, type)
+        processTicketOpen(
+          i,
+          type
+        )
       );
 
       return;
     }
 
-    // QUESTION REPLY FORM
-    if (id.startsWith(
-      QUESTION_MODAL_CUSTOM_ID
-    )) {
+    // QUESTION REPLY MODAL
+    if (
+      id.startsWith(
+        QUESTION_MODAL_CUSTOM_ID
+      )
+    ) {
       deferEphemeral(
         res,
         processQuestionReply(i)
