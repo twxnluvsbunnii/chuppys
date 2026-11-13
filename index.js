@@ -315,8 +315,13 @@ const client = new Client({
   ]
 });
 
+// ==================================================
+// CONNECT SEPARATE BOT MODULES
+// ==================================================
+
 require("./vouch")(client);
 require("./transactions")(client);
+require("./tickets")(client);
 
 // ==================================================
 // VERIFICATION MESSAGE
@@ -390,7 +395,10 @@ async function sendOrUpdateVerificationMessage() {
 
     return sent;
   } catch (error) {
-    console.error("[VERIFY] Could not create/update verification message:", error);
+    console.error(
+      "[VERIFY] Could not create/update verification message:",
+      error
+    );
   }
 }
 
@@ -430,16 +438,20 @@ function checkVerificationRequirements(member) {
 
 async function registerQuestionCommand() {
   if (!TOKEN || !GUILD_ID || !client.user) {
-    console.error("[COMMANDS] Missing token, guild ID, or logged-in bot.");
+    console.error(
+      "[COMMANDS] Missing token, guild ID, or logged-in bot."
+    );
     return;
   }
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
 
+  // Ticket panel command is exported from tickets.js.
   const commandsToRegister = [
     QUESTION_COMMAND,
     REQUEST_COMMAND,
-    HELP_COMMAND
+    HELP_COMMAND,
+    require("./tickets").command
   ];
 
   try {
@@ -467,13 +479,17 @@ async function registerQuestionCommand() {
           }
         );
 
-        console.log(`[COMMANDS] Updated /${command.name}.`);
+        console.log(
+          `[COMMANDS] Updated /${command.name}.`
+        );
       } else {
         await rest.post(route, {
           body: command.toJSON()
         });
 
-        console.log(`[COMMANDS] Registered /${command.name}.`);
+        console.log(
+          `[COMMANDS] Registered /${command.name}.`
+        );
       }
     }
   } catch (error) {
@@ -491,9 +507,15 @@ function canReplyToQuestion(interaction) {
   const memberPermissions = interaction.memberPermissions;
 
   if (
-    memberPermissions?.has(PermissionsBitField.Flags.Administrator) ||
-    memberPermissions?.has(PermissionsBitField.Flags.ManageGuild) ||
-    memberPermissions?.has(PermissionsBitField.Flags.ManageMessages)
+    memberPermissions?.has(
+      PermissionsBitField.Flags.Administrator
+    ) ||
+    memberPermissions?.has(
+      PermissionsBitField.Flags.ManageGuild
+    ) ||
+    memberPermissions?.has(
+      PermissionsBitField.Flags.ManageMessages
+    )
   ) {
     return true;
   }
@@ -563,7 +585,9 @@ async function findClientRoleMessages(channel) {
         )
       )
     )
-    .sort((a, b) => b.createdTimestamp - a.createdTimestamp);
+    .sort((a, b) =>
+      b.createdTimestamp - a.createdTimestamp
+    );
 }
 
 // ==================================================
@@ -572,7 +596,9 @@ async function findClientRoleMessages(channel) {
 
 async function sendRobuxCashoutEmbed(channel) {
   if (!channel || !channel.isTextBased() || !channel.messages) {
-    throw new Error("Robux Cash Out channel not found or invalid.");
+    throw new Error(
+      "Robux Cash Out channel not found or invalid."
+    );
   }
 
   const embed = new EmbedBuilder()
@@ -594,12 +620,15 @@ async function sendRobuxCashoutEmbed(channel) {
     allowedMentions: { parse: [] }
   };
 
-  const messages = await channel.messages.fetch({ limit: 100 });
+  const messages = await channel.messages.fetch({
+    limit: 100
+  });
 
   const matches = messages.filter(message =>
     message.author.id === client.user.id &&
     message.embeds.some(existingEmbed => {
       const title = existingEmbed.title || "";
+
       return (
         title.startsWith("Cashing Out Robux") ||
         title.startsWith("Robux Cash out")
@@ -618,11 +647,14 @@ async function sendRobuxCashoutEmbed(channel) {
       }
     }
 
-    console.log("[ROBUX CASHOUT] Existing embed updated.");
+    console.log(
+      "[ROBUX CASHOUT] Existing embed updated."
+    );
     return existing;
   }
 
   const sent = await channel.send(payload);
+
   console.log("[ROBUX CASHOUT] New embed created.");
   return sent;
 }
@@ -633,7 +665,9 @@ async function sendRobuxCashoutEmbed(channel) {
 
 function makeRankedRolesEmbed() {
   const roleList = RANKED_ROLE_IDS
-    .map((roleId, index) => `**${index + 1}.** <@&${roleId}>`)
+    .map((roleId, index) =>
+      `**${index + 1}.** <@&${roleId}>`
+    )
     .join("\n\n");
 
   return new EmbedBuilder()
@@ -645,10 +679,14 @@ function makeRankedRolesEmbed() {
 }
 
 async function sendRankedRoles(guild) {
-  const channel = await guild.channels.fetch(RANKED_ROLES_CHANNEL_ID);
+  const channel = await guild.channels.fetch(
+    RANKED_ROLES_CHANNEL_ID
+  );
 
   if (!channel || !channel.isTextBased() || !channel.send) {
-    throw new Error("Ranked roles channel not found or invalid.");
+    throw new Error(
+      "Ranked roles channel not found or invalid."
+    );
   }
 
   const sent = await channel.send({
@@ -657,7 +695,8 @@ async function sendRankedRoles(guild) {
   });
 
   console.log(
-    `[RANKED ROLES] Embed sent in ${channel.id}. Message: ${sent.id}`
+    `[RANKED ROLES] Embed sent in ${channel.id}. ` +
+    `Message: ${sent.id}`
   );
 
   return sent;
@@ -670,7 +709,8 @@ async function sendRankedRoles(guild) {
 async function countChannelMessages(channel) {
   if (!channel || !channel.isTextBased() || !channel.messages) {
     throw new Error(
-      `Vouch source channel ${channel?.id || "unknown"} is unavailable.`
+      `Vouch source channel ${channel?.id || "unknown"} ` +
+      "is unavailable."
     );
   }
 
@@ -679,6 +719,7 @@ async function countChannelMessages(channel) {
 
   while (true) {
     const options = { limit: 100 };
+
     if (before) options.before = before;
 
     const messages = await channel.messages.fetch(options);
@@ -699,13 +740,17 @@ async function renameCounterChannel(channelId, name) {
 
   if (!channel || typeof channel.setName !== "function") {
     throw new Error(
-      `Counter channel ${channelId} was not found or cannot be renamed.`
+      `Counter channel ${channelId} was not found ` +
+      "or cannot be renamed."
     );
   }
 
   if (channel.name !== name) {
     await channel.setName(name);
-    console.log(`[VOUCH COUNTER] Updated channel name: ${name}`);
+
+    console.log(
+      `[VOUCH COUNTER] Updated channel name: ${name}`
+    );
   }
 }
 
@@ -729,28 +774,47 @@ async function recountAllVouches() {
         VOUCH_CHANNEL_ID
       );
 
-      const personalCount = await countChannelMessages(personalChannel);
-      const regularCount = await countChannelMessages(regularChannel);
+      const personalCount =
+        await countChannelMessages(personalChannel);
+
+      const regularCount =
+        await countChannelMessages(regularChannel);
 
       const chuppyName =
-        `${CHUPPY_COUNT_PREFIX}${personalCount}${CHUPPY_COUNT_SUFFIX}`;
+        `${CHUPPY_COUNT_PREFIX}${personalCount}` +
+        `${CHUPPY_COUNT_SUFFIX}`;
 
       const serverTotal = personalCount + regularCount;
+
       const serverName =
-        `${SERVER_COUNT_PREFIX}${serverTotal}${SERVER_COUNT_SUFFIX}`;
+        `${SERVER_COUNT_PREFIX}${serverTotal}` +
+        `${SERVER_COUNT_SUFFIX}`;
 
       await Promise.all([
-        renameCounterChannel(CHUPPY_COUNT_CHANNEL_ID, chuppyName),
-        renameCounterChannel(SERVER_COUNT_CHANNEL_ID, serverName)
+        renameCounterChannel(
+          CHUPPY_COUNT_CHANNEL_ID,
+          chuppyName
+        ),
+        renameCounterChannel(
+          SERVER_COUNT_CHANNEL_ID,
+          serverName
+        )
       ]);
 
       console.log(
         `[VOUCH COUNTER] Personal: ${personalCount} | ` +
-        `Regular: ${regularCount} | Server total: ${serverTotal}`
+        `Regular: ${regularCount} | ` +
+        `Server total: ${serverTotal}`
       );
+
     } while (vouchCounterRecountRequested);
+
   } catch (error) {
-    console.error("[VOUCH COUNTER] Recount failed:", error);
+    console.error(
+      "[VOUCH COUNTER] Recount failed:",
+      error
+    );
+
   } finally {
     vouchCounterUpdateRunning = false;
 
@@ -773,7 +837,9 @@ function scheduleVouchCounterUpdate() {
 // ==================================================
 
 async function sendVouchTutorial(guild) {
-  const channel = await guild.channels.fetch(VOUCH_TUTORIAL_CHANNEL_ID);
+  const channel = await guild.channels.fetch(
+    VOUCH_TUTORIAL_CHANNEL_ID
+  );
 
   if (!channel || !channel.isTextBased()) {
     throw new Error("Vouch tutorial channel not found.");
@@ -784,8 +850,8 @@ async function sendVouchTutorial(guild) {
       .setTitle("HOW TO VOUCH")
       .setDescription(
         "Please follow this tutorial to leave a vouch!\n\n" +
-        "Stay inside your **purchase or cash-out ticket** while completing " +
-        "the process.\n\n" +
+        "Stay inside your **purchase or cash-out ticket** " +
+        "while completing the process.\n\n" +
         "When you're ready, use the **`/vouch`** command."
       )
       .setColor("#FFFFFF")
@@ -794,8 +860,9 @@ async function sendVouchTutorial(guild) {
     new EmbedBuilder()
       .setTitle("STEP 1 — USE /VOUCH")
       .setDescription(
-        "Run the **`/vouch`** slash command in your ticket. Select the " +
-        "seller you purchased from and complete the fields that appear."
+        "Run the **`/vouch`** slash command in your ticket. " +
+        "Select the seller you purchased from and complete " +
+        "the fields that appear."
       )
       .setImage(VOUCH_TUTORIAL_IMAGES.command)
       .setColor("#FFFFFF")
@@ -806,8 +873,10 @@ async function sendVouchTutorial(guild) {
       .setDescription(
         "**Seller:** Select the seller you purchased from.\n\n" +
         "**Rating:** Give your honest rating of the transaction.\n\n" +
-        "**Order:** Describe what you purchased or the service you received.\n\n" +
-        "**Proof:** Provide the requested proof or screenshot if prompted.\n\n" +
+        "**Order:** Describe what you purchased or " +
+        "the service you received.\n\n" +
+        "**Proof:** Provide the requested proof or " +
+        "screenshot if prompted.\n\n" +
         "Check your answers before submitting."
       )
       .setColor("#FFFFFF")
@@ -816,8 +885,8 @@ async function sendVouchTutorial(guild) {
     new EmbedBuilder()
       .setTitle("EXAMPLE OF A COMPLETED VOUCH")
       .setDescription(
-        "If the command was completed correctly, your vouch should look " +
-        "similar to this! ↓"
+        "If the command was completed correctly, " +
+        "your vouch should look similar to this! ↓"
       )
       .setImage(VOUCH_TUTORIAL_IMAGES.completed)
       .setColor("#FFFFFF")
@@ -826,9 +895,11 @@ async function sendVouchTutorial(guild) {
     new EmbedBuilder()
       .setTitle("SUCCESSFULLY SUBMITTED")
       .setDescription(
-        "Once you submit the command successfully, your vouch should appear " +
-        "in the appropriate vouch channel.\n\n" +
-        "Make sure your vouch accurately describes your actual transaction."
+        "Once you submit the command successfully, " +
+        "your vouch should appear in the appropriate " +
+        "vouch channel.\n\n" +
+        "Make sure your vouch accurately describes " +
+        "your actual transaction."
       )
       .setImage(VOUCH_TUTORIAL_IMAGES.success)
       .setColor("#FFFFFF")
@@ -836,10 +907,14 @@ async function sendVouchTutorial(guild) {
   ];
 
   for (const embed of embeds) {
-    await channel.send({ embeds: [embed] });
+    await channel.send({
+      embeds: [embed]
+    });
   }
 
-  console.log(`[VOUCH TUTORIAL] Tutorial posted in ${channel.id}`);
+  console.log(
+    `[VOUCH TUTORIAL] Tutorial posted in ${channel.id}`
+  );
 }
 
 // ==================================================
@@ -866,6 +941,14 @@ function makeHelpEmbed() {
           "`,client` — Posts or updates the client-role message."
       },
       {
+        name: "Ticket Commands",
+        value:
+          "`/ticketpanel` — Posts or updates the ticket panel.\n" +
+          "Use the ticket dropdown to open a private ticket.\n" +
+          "Ticket buttons allow claiming, closing, reopening, " +
+          "and deleting tickets."
+      },
+      {
         name: "Support Commands",
         value:
           "`,r @user c` — Gives a member the Chuppys role.\n" +
@@ -873,7 +956,8 @@ function makeHelpEmbed() {
           "`,partner` — Displays partnership instructions.\n" +
           "`,mod` — Displays moderator responsibilities.\n" +
           "`,seller` — Displays seller application information.\n" +
-          "`,promoter` — Displays promoter responsibilities and application questions."
+          "`,promoter` — Displays promoter responsibilities " +
+          "and application questions."
       },
       {
         name: "Service Commands",
@@ -941,17 +1025,24 @@ function makePromoterEmbed() {
 // ==================================================
 
 client.once(Events.ClientReady, async readyClient => {
-  console.log(`[READY] Logged in as ${readyClient.user.tag}`);
+  console.log(
+    `[READY] Logged in as ${readyClient.user.tag}`
+  );
+
   console.log("[READY] Chuppys bot is online.");
 
-  readyClient.user.setActivity(".gg/chuppys", { type: 3 });
+  readyClient.user.setActivity(".gg/chuppys", {
+    type: 3
+  });
 
   await registerQuestionCommand();
   await recountAllVouches();
   await sendOrUpdateVerificationMessage();
 
   setInterval(() => {
-    if (client.isReady()) scheduleVouchCounterUpdate();
+    if (client.isReady()) {
+      scheduleVouchCounterUpdate();
+    }
   }, 5 * 60 * 1000);
 });
 
@@ -995,8 +1086,15 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      const category = interaction.options.getString("category", true);
-      const items = interaction.options.getString("items", true).trim();
+      const category = interaction.options.getString(
+        "category",
+        true
+      );
+
+      const items = interaction.options.getString(
+        "items",
+        true
+      ).trim();
 
       const validCategories = [
         "Baddies",
@@ -1016,7 +1114,8 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (!items) {
         await interaction.reply({
-          content: "Please enter the items you want to request.",
+          content:
+            "Please enter the items you want to request.",
           ephemeral: true
         });
         return;
@@ -1027,7 +1126,8 @@ client.on(Events.InteractionCreate, async interaction => {
         .setDescription(
           `**Requested by:** <@${interaction.user.id}>\n\n` +
           `**Category:** ${category}\n\n` +
-          `**What they'd like Chuppys to stock up on:**\n${items}`
+          "**What they'd like Chuppys to stock up on:**\n" +
+          items
         )
         .setColor("#FFFFFF")
         .setThumbnail(REQUEST_THUMBNAIL_URL)
@@ -1044,13 +1144,16 @@ client.on(Events.InteractionCreate, async interaction => {
         !requestChannel.send
       ) {
         await interaction.reply({
-          content: "I couldn't find the stock request channel.",
+          content:
+            "I couldn't find the stock request channel.",
           ephemeral: true
         });
         return;
       }
 
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({
+        ephemeral: true
+      });
 
       await requestChannel.send({
         embeds: [requestEmbed],
@@ -1064,7 +1167,8 @@ client.on(Events.InteractionCreate, async interaction => {
       });
 
       console.log(
-        `[REQUEST] ${interaction.user.tag} submitted a ${category} request.`
+        `[REQUEST] ${interaction.user.tag} submitted ` +
+        `a ${category} request.`
       );
 
       return;
@@ -1080,7 +1184,8 @@ client.on(Events.InteractionCreate, async interaction => {
     ) {
       if (!interaction.guild) {
         await interaction.reply({
-          content: "Verification can only be completed inside the server.",
+          content:
+            "Verification can only be completed inside the server.",
           ephemeral: true
         });
         return;
@@ -1092,7 +1197,8 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (!member) {
         await interaction.reply({
-          content: "I couldn't find your server membership. Please try again.",
+          content:
+            "I couldn't find your server membership. Please try again.",
           ephemeral: true
         });
         return;
@@ -1100,19 +1206,23 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (member.roles.cache.has(CHUPPYS_ROLE_ID)) {
         await interaction.reply({
-          content: "You're already verified and have full access to .gg/chuppys!",
+          content:
+            "You're already verified and have full access to .gg/chuppys!",
           ephemeral: true
         });
         return;
       }
 
-      const requirements = checkVerificationRequirements(member);
+      const requirements =
+        checkVerificationRequirements(member);
 
       if (!requirements.passed) {
         await interaction.reply({
           content:
-            `Please select your roles in <#${ROLES_CHANNEL_ID}> before verifying.\n\n` +
-            "You need at least one age role, one pronoun role, and two ping roles.",
+            `Please select your roles in <#${ROLES_CHANNEL_ID}> ` +
+            "before verifying.\n\n" +
+            "You need at least one age role, " +
+            "one pronoun role, and two ping roles.",
           ephemeral: true
         });
         return;
@@ -1125,11 +1235,15 @@ client.on(Events.InteractionCreate, async interaction => {
 
       await interaction.reply({
         content:
-          `${AFK_RETURN_EMOJI} You're verified! You now have full access to **.gg/chuppys**.`,
+          `${AFK_RETURN_EMOJI} You're verified! ` +
+          "You now have full access to **.gg/chuppys**.",
         ephemeral: true
       });
 
-      console.log(`[VERIFY] ${member.user.tag} verified successfully.`);
+      console.log(
+        `[VERIFY] ${member.user.tag} verified successfully.`
+      );
+
       return;
     }
 
@@ -1143,7 +1257,8 @@ client.on(Events.InteractionCreate, async interaction => {
     ) {
       if (!interaction.guild) {
         await interaction.reply({
-          content: "This button can only be used inside the server.",
+          content:
+            "This button can only be used inside the server.",
           ephemeral: true
         });
         return;
@@ -1155,7 +1270,8 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (!member) {
         await interaction.reply({
-          content: "I couldn't find your server membership.",
+          content:
+            "I couldn't find your server membership.",
           ephemeral: true
         });
         return;
@@ -1181,7 +1297,10 @@ client.on(Events.InteractionCreate, async interaction => {
         ephemeral: true
       });
 
-      console.log(`[CLIENT] ${member.user.tag} received the client role.`);
+      console.log(
+        `[CLIENT] ${member.user.tag} received the client role.`
+      );
+
       return;
     }
 
@@ -1202,24 +1321,39 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      const questionText = interaction.options.getString("question", true);
-      const picture = interaction.options.getAttachment("picture");
+      const questionText = interaction.options.getString(
+        "question",
+        true
+      );
 
-      if (picture && !picture.contentType?.startsWith("image/")) {
+      const picture =
+        interaction.options.getAttachment("picture");
+
+      if (
+        picture &&
+        !picture.contentType?.startsWith("image/")
+      ) {
         await interaction.reply({
-          content: "The optional picture must be an image.",
+          content:
+            "The optional picture must be an image.",
           ephemeral: true
         });
         return;
       }
 
       const questionEmbed = new EmbedBuilder()
-        .setTitle(`Question from ${interaction.user.username}`)
-        .setDescription(`**Question**\n${questionText}`)
+        .setTitle(
+          `Question from ${interaction.user.username}`
+        )
+        .setDescription(
+          `**Question**\n${questionText}`
+        )
         .setColor("#FFFFFF")
         .setThumbnail(QUESTION_EMOJI_URL)
         .setFooter({
-          text: `.gg/chuppys • Question User ID: ${interaction.user.id}`
+          text:
+            `.gg/chuppys • Question User ID: ` +
+            interaction.user.id
         })
         .setTimestamp();
 
@@ -1231,13 +1365,17 @@ client.on(Events.InteractionCreate, async interaction => {
         new ButtonBuilder()
           .setCustomId("question_ticket")
           .setLabel("Make a Support Ticket")
-          .setEmoji("🎫")
+          .setEmoji({
+            id: "1561103471325745242"
+          })
           .setStyle(ButtonStyle.Secondary),
 
         new ButtonBuilder()
           .setCustomId("question_reply")
           .setLabel("Reply to Question")
-          .setEmoji("💬")
+          .setEmoji({
+            id: "1561103471325745242"
+          })
           .setStyle(ButtonStyle.Primary)
       );
 
@@ -1248,7 +1386,8 @@ client.on(Events.InteractionCreate, async interaction => {
       });
 
       await interaction.reply({
-        content: "Your question has been submitted!",
+        content:
+          "Your question has been submitted!",
         ephemeral: true
       });
 
@@ -1266,8 +1405,10 @@ client.on(Events.InteractionCreate, async interaction => {
       const ticketEmbed = new EmbedBuilder()
         .setDescription(
           "This question requires a support ticket.\n\n" +
-          `Please make one in <#${QUESTION_TICKET_CHANNEL_ID}> and ` +
-          `ping <@&${TICKET_SUPPORT_ROLE_ID}> for assistance.\n\n` +
+          `Please make one in <#${QUESTION_TICKET_CHANNEL_ID}> ` +
+          "using the ticket dropdown menu.\n\n" +
+          `Our <@&${TICKET_SUPPORT_ROLE_ID}> team ` +
+          "will assist you there.\n\n" +
           "Thank you! <:uppyty:1561094713153429746>"
         )
         .setColor("#FFFFFF")
@@ -1294,7 +1435,9 @@ client.on(Events.InteractionCreate, async interaction => {
       if (!canReplyToQuestion(interaction)) {
         await interaction.reply({
           content:
-            "Only Ticket Support, moderators, administrators, or the server owner can reply to questions.",
+            "Only Ticket Support, moderators, " +
+            "administrators, or the server owner " +
+            "can reply to questions.",
           ephemeral: true
         });
         return;
@@ -1309,7 +1452,9 @@ client.on(Events.InteractionCreate, async interaction => {
       const replyInput = new TextInputBuilder()
         .setCustomId("question_reply_text")
         .setLabel("Your response")
-        .setPlaceholder("Write your response to the user here...")
+        .setPlaceholder(
+          "Write your response to the user here..."
+        )
         .setStyle(TextInputStyle.Paragraph)
         .setRequired(true)
         .setMaxLength(2000);
@@ -1319,6 +1464,7 @@ client.on(Events.InteractionCreate, async interaction => {
       );
 
       await interaction.showModal(replyModal);
+
       return;
     }
 
@@ -1328,11 +1474,14 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (
       interaction.isModalSubmit() &&
-      interaction.customId.startsWith("question_reply_modal:")
+      interaction.customId.startsWith(
+        "question_reply_modal:"
+      )
     ) {
       if (!canReplyToQuestion(interaction)) {
         await interaction.reply({
-          content: "You are not allowed to reply to questions.",
+          content:
+            "You are not allowed to reply to questions.",
           ephemeral: true
         });
         return;
@@ -1342,41 +1491,58 @@ client.on(Events.InteractionCreate, async interaction => {
         interaction.customId.split(":")[1];
 
       const answerText =
-        interaction.fields.getTextInputValue("question_reply_text");
+        interaction.fields.getTextInputValue(
+          "question_reply_text"
+        );
 
-      const questionChannel = await client.channels.fetch(
-        QUESTION_CHANNEL_ID
-      );
+      const questionChannel =
+        await client.channels.fetch(
+          QUESTION_CHANNEL_ID
+        );
 
-      if (!questionChannel || !questionChannel.isTextBased()) {
+      if (
+        !questionChannel ||
+        !questionChannel.isTextBased()
+      ) {
         await interaction.reply({
-          content: "I couldn't find the question channel.",
+          content:
+            "I couldn't find the question channel.",
           ephemeral: true
         });
         return;
       }
 
-      const questionMessage = await questionChannel.messages
-        .fetch(questionMessageId)
-        .catch(() => null);
+      const questionMessage =
+        await questionChannel.messages
+          .fetch(questionMessageId)
+          .catch(() => null);
 
       if (!questionMessage) {
         await interaction.reply({
           content:
-            "I couldn't find the original question. It may have been deleted.",
+            "I couldn't find the original question. " +
+            "It may have been deleted.",
           ephemeral: true
         });
         return;
       }
 
-      const originalEmbed = questionMessage.embeds[0];
-      const footerText = originalEmbed?.footer?.text || "";
-      const userIdMatch = footerText.match(/Question User ID:\s*(\d+)/);
+      const originalEmbed =
+        questionMessage.embeds[0];
+
+      const footerText =
+        originalEmbed?.footer?.text || "";
+
+      const userIdMatch =
+        footerText.match(
+          /Question User ID:\s*(\d+)/
+        );
 
       if (!userIdMatch) {
         await interaction.reply({
           content:
-            "I couldn't identify the person who submitted this question.",
+            "I couldn't identify the person " +
+            "who submitted this question.",
           ephemeral: true
         });
         return;
@@ -1390,7 +1556,8 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (!questionUser) {
         await interaction.reply({
-          content: "I couldn't find that user's Discord account.",
+          content:
+            "I couldn't find that user's Discord account.",
           ephemeral: true
         });
         return;
@@ -1399,7 +1566,8 @@ client.on(Events.InteractionCreate, async interaction => {
       const responseEmbed = new EmbedBuilder()
         .setTitle("Response to Your Question")
         .setDescription(
-          `${QUESTION_EMOJI} **Replied by:** ${interaction.user.username}\n\n` +
+          `${QUESTION_EMOJI} **Replied by:** ` +
+          `${interaction.user.username}\n\n` +
           `**Response:**\n${answerText}`
         )
         .setColor("#FFFFFF")
@@ -1415,7 +1583,8 @@ client.on(Events.InteractionCreate, async interaction => {
       } catch (error) {
         await interaction.reply({
           content:
-            "I couldn't DM that user. They may have their direct messages disabled.",
+            "I couldn't DM that user. " +
+            "They may have their direct messages disabled.",
           ephemeral: true
         });
         return;
@@ -1423,7 +1592,8 @@ client.on(Events.InteractionCreate, async interaction => {
 
       await interaction.reply({
         content:
-          `Your response was sent privately to **${questionUser.username}**.`,
+          `Your response was sent privately to ` +
+          `**${questionUser.username}**.`,
         ephemeral: true
       });
 
@@ -1434,13 +1604,22 @@ client.on(Events.InteractionCreate, async interaction => {
     console.error("[INTERACTION] Error:", error);
 
     if (interaction.isRepliable()) {
-      if (interaction.deferred && !interaction.replied) {
+      if (
+        interaction.deferred &&
+        !interaction.replied
+      ) {
         await interaction.editReply({
-          content: "Something went wrong while processing that interaction."
+          content:
+            "Something went wrong while processing that interaction."
         }).catch(() => {});
-      } else if (!interaction.replied && !interaction.deferred) {
+
+      } else if (
+        !interaction.replied &&
+        !interaction.deferred
+      ) {
         await interaction.reply({
-          content: "Something went wrong while processing that interaction.",
+          content:
+            "Something went wrong while processing that interaction.",
           ephemeral: true
         }).catch(() => {});
       }
@@ -1453,7 +1632,13 @@ client.on(Events.InteractionCreate, async interaction => {
 // ==================================================
 
 client.on(Events.MessageCreate, async message => {
-  if (!VOUCH_SOURCE_CHANNEL_IDS.includes(message.channel.id)) return;
+  if (
+    !VOUCH_SOURCE_CHANNEL_IDS.includes(
+      message.channel.id
+    )
+  ) {
+    return;
+  }
 
   scheduleVouchCounterUpdate();
 
@@ -1461,23 +1646,36 @@ client.on(Events.MessageCreate, async message => {
     await message.react(CHUPPY_TY_EMOJI);
   } catch (error) {
     console.error(
-      `[VOUCH REACTION] Could not react to message ${message.id}:`,
+      `[VOUCH REACTION] Could not react ` +
+      `to message ${message.id}:`,
       error.message
     );
   }
 });
 
 client.on(Events.MessageDelete, message => {
-  if (!VOUCH_SOURCE_CHANNEL_IDS.includes(message.channel.id)) return;
+  if (
+    !VOUCH_SOURCE_CHANNEL_IDS.includes(
+      message.channel.id
+    )
+  ) {
+    return;
+  }
+
   scheduleVouchCounterUpdate();
 });
 
 client.on(Events.MessageBulkDelete, messages => {
-  const affectsVouchChannel = messages.some(message =>
-    VOUCH_SOURCE_CHANNEL_IDS.includes(message.channel.id)
-  );
+  const affectsVouchChannel =
+    messages.some(message =>
+      VOUCH_SOURCE_CHANNEL_IDS.includes(
+        message.channel.id
+      )
+    );
 
-  if (affectsVouchChannel) scheduleVouchCounterUpdate();
+  if (affectsVouchChannel) {
+    scheduleVouchCounterUpdate();
+  }
 });
 
 // ==================================================
@@ -1486,26 +1684,48 @@ client.on(Events.MessageBulkDelete, messages => {
 
 client.on(Events.GuildMemberAdd, async member => {
   try {
-    const channel = await member.guild.channels.fetch(WELCOME_CHANNEL_ID);
-    if (!channel || !channel.isTextBased()) return;
+    const channel =
+      await member.guild.channels.fetch(
+        WELCOME_CHANNEL_ID
+      );
 
-    await member.roles.add(WELCOME_ROLE_ID).catch(error => {
-      console.error("[WELCOME] Could not assign role:", error);
+    if (!channel || !channel.isTextBased()) {
+      return;
+    }
+
+    await member.roles.add(
+      WELCOME_ROLE_ID
+    ).catch(error => {
+      console.error(
+        "[WELCOME] Could not assign role:",
+        error
+      );
     });
 
     const embed = new EmbedBuilder()
-      .setTitle(`Welcome to .gg/chuppys ${AFK_RETURN_EMOJI}`)
+      .setTitle(
+        `Welcome to .gg/chuppys ${AFK_RETURN_EMOJI}`
+      )
       .setDescription(
         `Welcome ${member}!\n\n` +
-        "We're happy to have you here. Make sure to read the rules " +
+        "We're happy to have you here. " +
+        "Make sure to read the rules " +
         "and enjoy your time in the server!"
       )
       .setColor("#FFFFFF")
-      .setThumbnail(member.user.displayAvatarURL())
+      .setThumbnail(
+        member.user.displayAvatarURL()
+      )
       .setImage(WELCOME_IMAGE)
-      .setFooter({ text: member.guild.name });
+      .setFooter({
+        text: member.guild.name
+      });
 
-    await channel.send({ content: `${member}`, embeds: [embed] });
+    await channel.send({
+      content: `${member}`,
+      embeds: [embed]
+    });
+
   } catch (error) {
     console.error("[WELCOME] Error:", error);
   }
@@ -1517,20 +1737,36 @@ client.on(Events.GuildMemberAdd, async member => {
 
 client.on(Events.GuildMemberRemove, async member => {
   try {
-    const channel = await member.guild.channels.fetch(GOODBYE_CHANNEL_ID);
-    if (!channel || !channel.isTextBased()) return;
+    const channel =
+      await member.guild.channels.fetch(
+        GOODBYE_CHANNEL_ID
+      );
+
+    if (!channel || !channel.isTextBased()) {
+      return;
+    }
 
     const embed = new EmbedBuilder()
-      .setTitle(`Goodbye ${AFK_GOING_EMOJI}`)
+      .setTitle(
+        `Goodbye ${AFK_GOING_EMOJI}`
+      )
       .setDescription(
-        `**${member.user.username}** has left **${member.guild.name}**.\n\n` +
+        `**${member.user.username}** has left ` +
+        `**${member.guild.name}**.\n\n` +
         "We hope to see you again!"
       )
       .setColor("#FFFFFF")
-      .setThumbnail(member.user.displayAvatarURL())
-      .setFooter({ text: member.guild.name });
+      .setThumbnail(
+        member.user.displayAvatarURL()
+      )
+      .setFooter({
+        text: member.guild.name
+      });
 
-    await channel.send({ embeds: [embed] });
+    await channel.send({
+      embeds: [embed]
+    });
+
   } catch (error) {
     console.error("[GOODBYE] Error:", error);
   }
@@ -1541,39 +1777,67 @@ client.on(Events.GuildMemberRemove, async member => {
 // ==================================================
 
 async function sendPaymentEmbed(channel) {
-  if (!channel || !channel.isTextBased() || !channel.messages) {
-    throw new Error("Payment channel not found or invalid.");
+  if (
+    !channel ||
+    !channel.isTextBased() ||
+    !channel.messages
+  ) {
+    throw new Error(
+      "Payment channel not found or invalid."
+    );
   }
 
   const embed = new EmbedBuilder()
     .setTitle("Payment Methods")
     .setDescription(
       "Choose a payment method below.\n\n" +
-      "Please make sure the payment information is correct before sending."
+      "Please make sure the payment information " +
+      "is correct before sending."
     )
     .addFields(
-      { name: "Cash App", value: `\`${CASHAPP_USERNAME}\`` },
-      { name: "PayPal", value: `\`${PAYPAL_USERNAME}\`` },
-      { name: "Apple Pay", value: `\`${APPLE_PAY}\`` },
-      { name: "Zelle", value: `\`${ZELLE}\`` }
+      {
+        name: "Cash App",
+        value: `\`${CASHAPP_USERNAME}\``
+      },
+      {
+        name: "PayPal",
+        value: `\`${PAYPAL_USERNAME}\``
+      },
+      {
+        name: "Apple Pay",
+        value: `\`${APPLE_PAY}\``
+      },
+      {
+        name: "Zelle",
+        value: `\`${ZELLE}\``
+      }
     )
     .setColor("#FFFFFF")
     .setThumbnail(PAYMENT_EMOJI_URL)
-    .setFooter({ text: ".gg/chuppys" });
+    .setFooter({
+      text: ".gg/chuppys"
+    });
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setLabel("Cash App")
       .setStyle(ButtonStyle.Link)
       .setURL(CASHAPP_URL),
+
     new ButtonBuilder()
       .setLabel("PayPal")
       .setStyle(ButtonStyle.Link)
       .setURL(PAYPAL_URL)
   );
 
-  const payload = { embeds: [embed], components: [row] };
-  const messages = await channel.messages.fetch({ limit: 100 });
+  const payload = {
+    embeds: [embed],
+    components: [row]
+  };
+
+  const messages = await channel.messages.fetch({
+    limit: 100
+  });
 
   const matches = messages.filter(msg =>
     msg.author.id === client.user.id &&
@@ -1603,22 +1867,43 @@ async function sendPaymentEmbed(channel) {
 // SERVICE MESSAGE UPDATER
 // ==================================================
 
-async function updateServiceMessage(channel, embed, serviceName) {
-  if (!channel || !channel.isTextBased() || !channel.messages) {
-    throw new Error(`${serviceName} channel not found or invalid.`);
+async function updateServiceMessage(
+  channel,
+  embed,
+  serviceName
+) {
+  if (
+    !channel ||
+    !channel.isTextBased() ||
+    !channel.messages
+  ) {
+    throw new Error(
+      `${serviceName} channel not found or invalid.`
+    );
   }
 
-  const messages = await channel.messages.fetch({ limit: 100 });
+  const messages = await channel.messages.fetch({
+    limit: 100
+  });
 
   const matching = messages.filter(msg => {
-    if (msg.author.id !== client.user.id || !msg.embeds.length) {
+    if (
+      msg.author.id !== client.user.id ||
+      !msg.embeds.length
+    ) {
       return false;
     }
 
-    const description = msg.embeds[0].description || "";
+    const description =
+      msg.embeds[0].description || "";
 
-    if (serviceName === "DECOR") return description.includes("# DECOR");
-    if (serviceName === "NITRO") return description.includes("# NITRO");
+    if (serviceName === "DECOR") {
+      return description.includes("# DECOR");
+    }
+
+    if (serviceName === "NITRO") {
+      return description.includes("# NITRO");
+    }
 
     if (serviceName === "BOOSTIES") {
       return (
@@ -1648,7 +1933,9 @@ async function updateServiceMessage(channel, embed, serviceName) {
     return existing;
   }
 
-  return channel.send({ embeds: [embed] });
+  return channel.send({
+    embeds: [embed]
+  });
 }
 
 // ==================================================
@@ -1681,7 +1968,11 @@ async function sendDecorServices(channel) {
     )
     .setColor("#FFFFFF");
 
-  await updateServiceMessage(channel, embed, "DECOR");
+  await updateServiceMessage(
+    channel,
+    embed,
+    "DECOR"
+  );
 }
 
 // ==================================================
@@ -1698,7 +1989,11 @@ async function sendNitroServices(channel) {
     )
     .setColor("#FFFFFF");
 
-  await updateServiceMessage(channel, embed, "NITRO");
+  await updateServiceMessage(
+    channel,
+    embed,
+    "NITRO"
+  );
 }
 
 // ==================================================
@@ -1707,17 +2002,31 @@ async function sendNitroServices(channel) {
 
 async function sendBoostiesServices(channel) {
   const oneMonth = [
-    ["2", "$1.25"], ["4", "$2.50"], ["6", "$3.75"],
-    ["8", "$4.00"], ["10", "$5.25"], ["12", "$6.50"],
-    ["14", "$7.00"], ["16", "$8.50"], ["18", "$9.00"],
-    ["20", "$9.50"], ["30", "$11.00"]
+    ["2", "$1.25"],
+    ["4", "$2.50"],
+    ["6", "$3.75"],
+    ["8", "$4.00"],
+    ["10", "$5.25"],
+    ["12", "$6.50"],
+    ["14", "$7.00"],
+    ["16", "$8.50"],
+    ["18", "$9.00"],
+    ["20", "$9.50"],
+    ["30", "$11.00"]
   ];
 
   const threeMonths = [
-    ["2", "$2.00"], ["4", "$4.00"], ["6", "$6.00"],
-    ["8", "$8.00"], ["10", "$10.00"], ["12", "$12.00"],
-    ["14", "$14.00"], ["16", "$16.00"], ["18", "$18.00"],
-    ["20", "$20.00"], ["30", "$27.00"]
+    ["2", "$2.00"],
+    ["4", "$4.00"],
+    ["6", "$6.00"],
+    ["8", "$8.00"],
+    ["10", "$10.00"],
+    ["12", "$12.00"],
+    ["14", "$14.00"],
+    ["16", "$16.00"],
+    ["18", "$18.00"],
+    ["20", "$20.00"],
+    ["30", "$27.00"]
   ];
 
   const embed = new EmbedBuilder()
@@ -1726,15 +2035,22 @@ async function sendBoostiesServices(channel) {
       oneMonth.map(([count, price]) =>
         `${BOOST_EMOJI} **${count} • ${price}**`
       ).join("\n") +
+
       `\n\n# 3 MONTHS ${BOOST_EMOJI}\n\n` +
+
       threeMonths.map(([count, price]) =>
         `${BOOST_EMOJI} **${count} • ${price}**`
       ).join("\n") +
+
       `\n\n${PAYMENT_METHODS_TEXT}\n\n**.gg/chuppys**`
     )
     .setColor("#FFFFFF");
 
-  await updateServiceMessage(channel, embed, "BOOSTIES");
+  await updateServiceMessage(
+    channel,
+    embed,
+    "BOOSTIES"
+  );
 }
 
 // ==================================================
@@ -1755,7 +2071,10 @@ function makeSellersEmbed() {
     ["1328450205774909441", "seller", "$100"]
   ];
 
-  const lines = ["# .gg/chuppys sellers", ""];
+  const lines = [
+    "# .gg/chuppys sellers",
+    ""
+  ];
 
   for (const [id, role, limit] of sellers) {
     lines.push(
@@ -1768,7 +2087,8 @@ function makeSellersEmbed() {
   }
 
   lines.push(
-    "-# my sellers are prohibited from dm’ing you, if for whatever reason they do please open a support ticket."
+    "-# my sellers are prohibited from dm’ing you, " +
+    "if for whatever reason they do please open a support ticket."
   );
 
   return new EmbedBuilder()
@@ -1812,7 +2132,7 @@ function makeStaffEmbed() {
       "Role: Mod | staff",
       "ID: 941559349808091167",
       "",
-       `${SELLER_EMOJI} **<@1494112860341670020>**`,
+      `${SELLER_EMOJI} **<@1494112860341670020>**`,
       "Role: Mod | staff",
       "ID: 1494112860341670020",
       "",
@@ -1869,21 +2189,35 @@ function makeModEmbed() {
       "• Contact an owner if you are unsure how to handle a situation.\n" +
       "• Remember that being staff means representing **.gg/chuppys**.\n\n" +
 
-      "-# Thank you for helping keep .gg/chuppys a safe and welcoming community."
+      "-# Thank you for helping keep .gg/chuppys " +
+      "a safe and welcoming community."
     )
     .setColor("#FFFFFF")
-    .setFooter({ text: ".gg/chuppys" });
+    .setFooter({
+      text: ".gg/chuppys"
+    });
 }
 
 // ==================================================
 // SHARED EMBED SENDER
 // ==================================================
 
-async function sendEmbedToChannel(guild, channelId, embed, label) {
-  const channel = await guild.channels.fetch(channelId);
+async function sendEmbedToChannel(
+  guild,
+  channelId,
+  embed,
+  label
+) {
+  const channel =
+    await guild.channels.fetch(channelId);
 
-  if (!channel || !channel.isTextBased()) {
-    throw new Error(`${label} channel not found or is not a text channel.`);
+  if (
+    !channel ||
+    !channel.isTextBased()
+  ) {
+    throw new Error(
+      `${label} channel not found or is not a text channel.`
+    );
   }
 
   await channel.send({
@@ -1899,15 +2233,22 @@ async function sendEmbedToChannel(guild, channelId, embed, label) {
 async function handleAFK(message) {
   const guildId = message.guild.id;
   const userId = message.author.id;
+
   const afkKey = `${guildId}:${userId}`;
+
   const rawContent = message.content.trim();
 
-  const afkMatch = rawContent.match(/^,afk(?:\s+([\s\S]*))?$/i);
+  const afkMatch =
+    rawContent.match(
+      /^,afk(?:\s+([\s\S]*))?$/i
+    );
 
   if (afkMatch) {
-    const reason = (afkMatch[1] || "No reason provided.")
-      .trim()
-      .slice(0, 500) || "No reason provided.";
+    const reason =
+      (afkMatch[1] || "No reason provided.")
+        .trim()
+        .slice(0, 500) ||
+      "No reason provided.";
 
     afkUsers.set(afkKey, {
       reason,
@@ -1917,9 +2258,12 @@ async function handleAFK(message) {
 
     await message.reply({
       content:
-        `${AFK_GOING_EMOJI} ${message.author}, you're now AFK!\n` +
+        `${AFK_GOING_EMOJI} ${message.author}, ` +
+        "you're now AFK!\n" +
         `**Reason:** ${reason}`,
-      allowedMentions: { repliedUser: false }
+      allowedMentions: {
+        repliedUser: false
+      }
     });
 
     return true;
@@ -1927,33 +2271,53 @@ async function handleAFK(message) {
 
   if (afkUsers.has(afkKey)) {
     const oldAFK = afkUsers.get(afkKey);
+
     afkUsers.delete(afkKey);
 
     await message.channel.send({
       content:
-        `${AFK_RETURN_EMOJI} Welcome back, ${message.author}! ` +
+        `${AFK_RETURN_EMOJI} Welcome back, ` +
+        `${message.author}! ` +
         "Your AFK status has been removed.",
       allowedMentions: { parse: [] }
     });
 
     console.log(
-      `[AFK] ${message.author.tag} returned. Previous reason: ${oldAFK.reason}`
+      `[AFK] ${message.author.tag} returned. ` +
+      `Previous reason: ${oldAFK.reason}`
     );
   }
 
   const notifiedUsers = new Set();
 
-  for (const [mentionedUserId, user] of message.mentions.users) {
-    if (mentionedUserId === userId || user.bot) continue;
+  for (
+    const [mentionedUserId, user]
+    of message.mentions.users
+  ) {
+    if (
+      mentionedUserId === userId ||
+      user.bot
+    ) {
+      continue;
+    }
 
-    const afkData = afkUsers.get(`${guildId}:${mentionedUserId}`);
+    const afkData = afkUsers.get(
+      `${guildId}:${mentionedUserId}`
+    );
 
-    if (!afkData || notifiedUsers.has(mentionedUserId)) continue;
+    if (
+      !afkData ||
+      notifiedUsers.has(mentionedUserId)
+    ) {
+      continue;
+    }
+
     notifiedUsers.add(mentionedUserId);
 
     await message.channel.send({
       content:
-        `${AFK_GOING_EMOJI} **${user.username} is currently AFK.**\n` +
+        `${AFK_GOING_EMOJI} ` +
+        `**${user.username} is currently AFK.**\n` +
         `**Reason:** ${afkData.reason}`,
       allowedMentions: { parse: [] }
     });
@@ -1967,21 +2331,37 @@ async function handleAFK(message) {
 // ==================================================
 
 client.on(Events.MessageCreate, async message => {
-  if (!message.guild || message.author.bot) return;
+  if (!message.guild || message.author.bot) {
+    return;
+  }
 
   const rawContent = message.content.trim();
   const content = rawContent.toLowerCase();
 
   try {
-    if (/^(hi+|hey+|hello+|heya+)[!.?,\s]*$/i.test(rawContent)) {
+
+    // ==================================================
+    // GREETING
+    // ==================================================
+
+    if (
+      /^(hi+|hey+|hello+|heya+)[!.?,\s]*$/i
+        .test(rawContent)
+    ) {
       await message.reply({
-        content: `Hi ! ${AFK_RETURN_EMOJI}`,
-        allowedMentions: { repliedUser: false }
+        content:
+          `Hi ! ${AFK_RETURN_EMOJI}`,
+        allowedMentions: {
+          repliedUser: false
+        }
       });
+
       return;
     }
 
-    const wasAFKCommand = await handleAFK(message);
+    const wasAFKCommand =
+      await handleAFK(message);
+
     if (wasAFKCommand) return;
 
     // ==================================================
@@ -1991,9 +2371,12 @@ client.on(Events.MessageCreate, async message => {
     if (content === ",client") {
       const channelId = message.channel.id;
 
-      if (clientCommandLocks.has(channelId)) {
+      if (
+        clientCommandLocks.has(channelId)
+      ) {
         console.log(
-          `[CLIENT] Ignored simultaneous command in channel ${channelId}.`
+          `[CLIENT] Ignored simultaneous command ` +
+          `in channel ${channelId}.`
         );
         return;
       }
@@ -2001,7 +2384,10 @@ client.on(Events.MessageCreate, async message => {
       clientCommandLocks.add(channelId);
 
       try {
-        const matching = await findClientRoleMessages(message.channel);
+        const matching =
+          await findClientRoleMessages(
+            message.channel
+          );
 
         const payload = {
           embeds: [makeClientEmbed()],
@@ -2032,15 +2418,19 @@ client.on(Events.MessageCreate, async message => {
           }
 
           console.log(
-            `[CLIENT] Updated existing message in ${channelId}.`
+            `[CLIENT] Updated existing message ` +
+            `in ${channelId}.`
           );
+
         } else {
           await message.channel.send(payload);
 
           console.log(
-            `[CLIENT] Created new message in ${channelId}.`
+            `[CLIENT] Created new message ` +
+            `in ${channelId}.`
           );
         }
+
       } finally {
         clientCommandLocks.delete(channelId);
       }
@@ -2055,9 +2445,12 @@ client.on(Events.MessageCreate, async message => {
     if (content === ",promoter") {
       const channelId = message.channel.id;
 
-      if (promoterCommandLocks.has(channelId)) {
+      if (
+        promoterCommandLocks.has(channelId)
+      ) {
         console.log(
-          `[PROMOTER] Ignored simultaneous command in channel ${channelId}.`
+          `[PROMOTER] Ignored simultaneous command ` +
+          `in channel ${channelId}.`
         );
         return;
       }
@@ -2065,14 +2458,16 @@ client.on(Events.MessageCreate, async message => {
       promoterCommandLocks.add(channelId);
 
       try {
-        const messages = await message.channel.messages.fetch({
-          limit: 100
-        });
+        const messages =
+          await message.channel.messages.fetch({
+            limit: 100
+          });
 
         const matching = messages.filter(msg =>
           msg.author.id === client.user.id &&
           msg.embeds.some(embed =>
-            embed.title === ".gg/chuppys promoter information"
+            embed.title ===
+            ".gg/chuppys promoter information"
           )
         );
 
@@ -2088,7 +2483,10 @@ client.on(Events.MessageCreate, async message => {
         if (existing) {
           await existing.edit(payload);
 
-          for (const duplicate of matching.values()) {
+          for (
+            const duplicate
+            of matching.values()
+          ) {
             if (duplicate.id !== existing.id) {
               await duplicate.delete().catch(error => {
                 console.error(
@@ -2100,15 +2498,19 @@ client.on(Events.MessageCreate, async message => {
           }
 
           console.log(
-            `[PROMOTER] Updated promoter information in ${channelId}.`
+            `[PROMOTER] Updated promoter information ` +
+            `in ${channelId}.`
           );
+
         } else {
           await message.channel.send(payload);
 
           console.log(
-            `[PROMOTER] Created promoter information in ${channelId}.`
+            `[PROMOTER] Created promoter information ` +
+            `in ${channelId}.`
           );
         }
+
       } finally {
         promoterCommandLocks.delete(channelId);
       }
@@ -2121,22 +2523,33 @@ client.on(Events.MessageCreate, async message => {
     // ==================================================
 
     if (content === "!vouchtut") {
-      if (!message.member.permissions.has(
-        PermissionsBitField.Flags.ManageGuild
-      )) {
+      if (
+        !message.member.permissions.has(
+          PermissionsBitField.Flags.ManageGuild
+        )
+      ) {
         await message.reply({
-          content: "You need **Manage Server** permission to use this command.",
-          allowedMentions: { repliedUser: false }
+          content:
+            "You need **Manage Server** permission " +
+            "to use this command.",
+          allowedMentions: {
+            repliedUser: false
+          }
         });
+
         return;
       }
 
       await sendVouchTutorial(message.guild);
 
       await message.reply({
-        content: "The vouch tutorial has been posted!",
-        allowedMentions: { repliedUser: false }
+        content:
+          "The vouch tutorial has been posted!",
+        allowedMentions: {
+          repliedUser: false
+        }
       });
+
       return;
     }
 
@@ -2145,22 +2558,33 @@ client.on(Events.MessageCreate, async message => {
     // ==================================================
 
     if (content === "!ranked") {
-      if (!message.member.permissions.has(
-        PermissionsBitField.Flags.ManageGuild
-      )) {
+      if (
+        !message.member.permissions.has(
+          PermissionsBitField.Flags.ManageGuild
+        )
+      ) {
         await message.reply({
-          content: "You need **Manage Server** permission to use this command.",
-          allowedMentions: { repliedUser: false }
+          content:
+            "You need **Manage Server** permission " +
+            "to use this command.",
+          allowedMentions: {
+            repliedUser: false
+          }
         });
+
         return;
       }
 
       await sendRankedRoles(message.guild);
 
       await message.reply({
-        content: "The ranked roles embed has been sent!",
-        allowedMentions: { repliedUser: false }
+        content:
+          "The ranked roles embed has been sent!",
+        allowedMentions: {
+          repliedUser: false
+        }
       });
+
       return;
     }
 
@@ -2170,11 +2594,17 @@ client.on(Events.MessageCreate, async message => {
     // ==================================================
 
     if (/^,r(?:\s|$)/i.test(rawContent)) {
-      if (!isTicketSupport(message.member)) {
+      if (
+        !isTicketSupport(message.member)
+      ) {
         await message.reply({
-          content: "Only Ticket Support can use this command.",
-          allowedMentions: { repliedUser: false }
+          content:
+            "Only Ticket Support can use this command.",
+          allowedMentions: {
+            repliedUser: false
+          }
         });
+
         return;
       }
 
@@ -2184,54 +2614,79 @@ client.on(Events.MessageCreate, async message => {
 
       if (!commandMatch) {
         await message.reply({
-          content: "Usage: `,r @user c` or `,r @user r`",
-          allowedMentions: { repliedUser: false }
+          content:
+            "Usage: `,r @user c` or `,r @user r`",
+          allowedMentions: {
+            repliedUser: false
+          }
         });
+
         return;
       }
 
       const targetId = commandMatch[1];
-      const action = commandMatch[2].toLowerCase();
 
-      const target = await message.guild.members
-        .fetch(targetId)
-        .catch(() => null);
+      const action =
+        commandMatch[2].toLowerCase();
+
+      const target =
+        await message.guild.members
+          .fetch(targetId)
+          .catch(() => null);
 
       if (!target) {
         await message.reply({
-          content: "I couldn't find that member in this server.",
-          allowedMentions: { repliedUser: false }
+          content:
+            "I couldn't find that member in this server.",
+          allowedMentions: {
+            repliedUser: false
+          }
         });
+
         return;
       }
 
       if (action === "c") {
-        if (target.roles.cache.has(CHUPPYS_ROLE_ID)) {
+        if (
+          target.roles.cache.has(
+            CHUPPYS_ROLE_ID
+          )
+        ) {
           await message.reply({
-            content: `${target.user.username} already has the Chuppys role.`,
+            content:
+              `${target.user.username} already has ` +
+              "the Chuppys role.",
             allowedMentions: { parse: [] }
           });
+
           return;
         }
 
         await target.roles.add(
           CHUPPYS_ROLE_ID,
-          `Chuppys access granted by Ticket Support: ${message.author.tag}`
+          `Chuppys access granted by Ticket Support: ` +
+          message.author.tag
         );
 
         const embed = new EmbedBuilder()
           .setDescription(
-            `Welcome to **.gg/chuppys**! Please check out ` +
-            `<#${ROLES_CHANNEL_ID}> and <#${RULES_CHANNEL_ID}>. ` +
-            `Enjoy shopping at Chuppy’s Market ${CHUPPYS_WELCOME_EMOJI}`
+            `Welcome to **.gg/chuppys**! ` +
+            `Please check out <#${ROLES_CHANNEL_ID}> ` +
+            `and <#${RULES_CHANNEL_ID}>. ` +
+            `Enjoy shopping at Chuppy’s Market ` +
+            CHUPPYS_WELCOME_EMOJI
           )
           .setColor("#FFFFFF")
-          .setFooter({ text: ".gg/chuppys" });
+          .setFooter({
+            text: ".gg/chuppys"
+          });
 
         await message.channel.send({
           content: `${target}`,
           embeds: [embed],
-          allowedMentions: { users: [target.id] }
+          allowedMentions: {
+            users: [target.id]
+          }
         });
 
         return;
@@ -2241,22 +2696,29 @@ client.on(Events.MessageCreate, async message => {
         const embed = new EmbedBuilder()
           .setTitle("Reminder to Vouch!")
           .setDescription(
-            `Thank you for shopping at **.gg/chuppys**! ` +
+            "Thank you for shopping at **.gg/chuppys**! " +
             `${CHUPPYS_WELCOME_EMOJI}\n\n` +
-            `Please check out <#${VOUCH_TUTORIAL_CHANNEL_ID}> to learn ` +
-            `how to leave a vouch using the **/vouch** command.\n\n` +
-            `And don't forget to stop by <#${QUICK_VOUCH_CHANNEL_ID}> ` +
-            `for a quick vouch as well!\n\n` +
-            `Not vouching sellers within the 2 day grace period will ` +
-            `result in you being black listed in this server.`
+            `Please check out <#${VOUCH_TUTORIAL_CHANNEL_ID}> ` +
+            "to learn how to leave a vouch using " +
+            "the **/vouch** command.\n\n" +
+            `And don't forget to stop by ` +
+            `<#${QUICK_VOUCH_CHANNEL_ID}> ` +
+            "for a quick vouch as well!\n\n" +
+            "Not vouching sellers within the 2 day " +
+            "grace period will result in you being " +
+            "black listed in this server."
           )
           .setColor("#FFFFFF")
-          .setFooter({ text: ".gg/chuppys" });
+          .setFooter({
+            text: ".gg/chuppys"
+          });
 
         await message.channel.send({
           content: `${target}`,
           embeds: [embed],
-          allowedMentions: { users: [target.id] }
+          allowedMentions: {
+            users: [target.id]
+          }
         });
 
         return;
@@ -2268,38 +2730,54 @@ client.on(Events.MessageCreate, async message => {
     // ==================================================
 
     if (content === ",partner") {
-      if (!isTicketSupport(message.member)) {
+      if (
+        !isTicketSupport(message.member)
+      ) {
         await message.reply({
-          content: "Only Ticket Support can use this command.",
-          allowedMentions: { repliedUser: false }
+          content:
+            "Only Ticket Support can use this command.",
+          allowedMentions: {
+            repliedUser: false
+          }
         });
+
         return;
       }
 
       const partnerEmbed = new EmbedBuilder()
         .setDescription(
-          `**.gg/chuppys partnership**\n\n` +
-          `Please make sure all questions from the .gg/chuppys ` +
-          `ticket bot are answered !! If not please answer them now !!\n\n` +
-          `1.  **How many vouches ? Please show us proof !**\n\n\n` +
-          `2.  **How many server members ?**\n\n\n` +
-          `After these questions are answered, please copy and paste ` +
-          `your server ad in this partnership ticket. Staff will post ` +
-          `it shortly in <#1552387314049618041>.\n\n` +
-          `Go to <#${PARTNER_AD_CHANNEL_ID}> to copy and paste ` +
-          `Chuppys' ad. Once this is done, send a screenshot for proof.\n\n` +
-          `Thank you for partnering with **.gg/chuppys!** ` +
-          `${CHUPPYS_WELCOME_EMOJI}`
+          "**.gg/chuppys partnership**\n\n" +
+          "Please make sure all questions from the " +
+          ".gg/chuppys ticket bot are answered !! " +
+          "If not please answer them now !!\n\n" +
+          "1. **How many vouches ? Please show us proof !**\n\n\n" +
+          "2. **How many server members ?**\n\n\n" +
+          "After these questions are answered, " +
+          "please copy and paste your server ad " +
+          "in this partnership ticket. Staff will " +
+          "post it shortly in <#1552387314049618041>.\n\n" +
+          `Go to <#${PARTNER_AD_CHANNEL_ID}> ` +
+          "to copy and paste Chuppys' ad. " +
+          "Once this is done, send a screenshot for proof.\n\n" +
+          "Thank you for partnering with **.gg/chuppys!** " +
+          CHUPPYS_WELCOME_EMOJI
         )
         .setColor("#FFFFFF")
-        .setFooter({ text: ".gg/chuppys" });
+        .setFooter({
+          text: ".gg/chuppys"
+        });
 
-      const messages = await message.channel.messages.fetch({ limit: 100 });
+      const messages =
+        await message.channel.messages.fetch({
+          limit: 100
+        });
 
       const matching = messages.filter(msg =>
         msg.author.id === client.user.id &&
         msg.embeds.some(embed =>
-          (embed.description || "").includes(".gg/chuppys partnership")
+          (embed.description || "").includes(
+            ".gg/chuppys partnership"
+          )
         )
       );
 
@@ -2315,11 +2793,17 @@ client.on(Events.MessageCreate, async message => {
       if (existing) {
         await existing.edit(payload);
 
-        for (const duplicate of matching.values()) {
+        for (
+          const duplicate
+          of matching.values()
+        ) {
           if (duplicate.id !== existing.id) {
-            await duplicate.delete().catch(() => {});
+            await duplicate.delete().catch(
+              () => {}
+            );
           }
         }
+
       } else {
         await message.channel.send(payload);
       }
@@ -2332,22 +2816,30 @@ client.on(Events.MessageCreate, async message => {
     // ==================================================
 
     if (content === ",mod") {
-      if (!isTicketSupport(message.member)) {
+      if (
+        !isTicketSupport(message.member)
+      ) {
         await message.reply({
-          content: "Only Ticket Support can use this command.",
-          allowedMentions: { repliedUser: false }
+          content:
+            "Only Ticket Support can use this command.",
+          allowedMentions: {
+            repliedUser: false
+          }
         });
+
         return;
       }
 
-      const messages = await message.channel.messages.fetch({
-        limit: 100
-      });
+      const messages =
+        await message.channel.messages.fetch({
+          limit: 100
+        });
 
       const matching = messages.filter(msg =>
         msg.author.id === client.user.id &&
         msg.embeds.some(embed =>
-          embed.title === ".gg/chuppys moderator responsibilities"
+          embed.title ===
+          ".gg/chuppys moderator responsibilities"
         )
       );
 
@@ -2363,22 +2855,31 @@ client.on(Events.MessageCreate, async message => {
       if (existing) {
         await existing.edit(payload);
 
-        for (const duplicate of matching.values()) {
+        for (
+          const duplicate
+          of matching.values()
+        ) {
           if (duplicate.id !== existing.id) {
             await duplicate.delete().catch(error => {
-              console.error("[MOD] Could not delete duplicate:", error);
+              console.error(
+                "[MOD] Could not delete duplicate:",
+                error
+              );
             });
           }
         }
 
         console.log(
-          `[MOD] Updated moderator responsibilities in ${message.channel.id}.`
+          `[MOD] Updated moderator responsibilities ` +
+          `in ${message.channel.id}.`
         );
+
       } else {
         await message.channel.send(payload);
 
         console.log(
-          `[MOD] Created moderator responsibilities in ${message.channel.id}.`
+          `[MOD] Created moderator responsibilities ` +
+          `in ${message.channel.id}.`
         );
       }
 
@@ -2392,9 +2893,12 @@ client.on(Events.MessageCreate, async message => {
     if (content === ",seller") {
       const channelId = message.channel.id;
 
-      if (sellerCommandLocks.has(channelId)) {
+      if (
+        sellerCommandLocks.has(channelId)
+      ) {
         console.log(
-          `[SELLER] Ignored simultaneous command in channel ${channelId}.`
+          `[SELLER] Ignored simultaneous command ` +
+          `in channel ${channelId}.`
         );
         return;
       }
@@ -2404,27 +2908,35 @@ client.on(Events.MessageCreate, async message => {
       try {
         const sellerEmbed = new EmbedBuilder()
           .setDescription(
-            `**Interested in selling at .gg/chuppys**\n\n` +
-            `**Permanent fees**\n\n` +
-            `$10 - permanent fee with no personal commands\n\n` +
-            `$15 - permanent fee with personal commands\n\n` +
-            `Personal commands are ones we can create for you or insert ` +
-            `your code that allows you to use your personal payment command, ` +
-            `ps command, etc.\n\n` +
-            `Your limit is defined primarily based on how many personal ` +
-            `vouches you have. If you have a server with multiple sellers, ` +
-            `the vouches they received in your server do not increase your ` +
-            `limit. However, after your limit is determined, every 2 vouches ` +
-            `gained in .gg/chuppys increases your limit by $5.\n\n` +
-            `If you agree and understand all of this, please ping ` +
-            `<@&${TICKET_SUPPORT_ROLE_ID}> to assist you further. Thank you!`
+            "**Interested in selling at .gg/chuppys**\n\n" +
+            "**Permanent fees**\n\n" +
+            "$10 - permanent fee with no personal commands\n\n" +
+            "$15 - permanent fee with personal commands\n\n" +
+            "Personal commands are ones we can create " +
+            "for you or insert your code that allows " +
+            "you to use your personal payment command, " +
+            "ps command, etc.\n\n" +
+            "Your limit is defined primarily based on " +
+            "how many personal vouches you have. " +
+            "If you have a server with multiple sellers, " +
+            "the vouches they received in your server " +
+            "do not increase your limit. However, after " +
+            "your limit is determined, every 2 vouches " +
+            "gained in .gg/chuppys increases your limit " +
+            "by $5.\n\n" +
+            "If you agree and understand all of this, " +
+            `please ping <@&${TICKET_SUPPORT_ROLE_ID}> ` +
+            "to assist you further. Thank you!"
           )
           .setColor("#FFFFFF")
-          .setFooter({ text: ".gg/chuppys" });
+          .setFooter({
+            text: ".gg/chuppys"
+          });
 
-        const messages = await message.channel.messages.fetch({
-          limit: 100
-        });
+        const messages =
+          await message.channel.messages.fetch({
+            limit: 100
+          });
 
         const matching = messages.filter(msg =>
           msg.author.id === client.user.id &&
@@ -2449,7 +2961,10 @@ client.on(Events.MessageCreate, async message => {
         if (existing) {
           await existing.edit(payload);
 
-          for (const duplicate of matching.values()) {
+          for (
+            const duplicate
+            of matching.values()
+          ) {
             if (duplicate.id !== existing.id) {
               await duplicate.delete().catch(error => {
                 console.error(
@@ -2461,15 +2976,19 @@ client.on(Events.MessageCreate, async message => {
           }
 
           console.log(
-            `[SELLER] Updated existing seller embed in ${channelId}.`
+            `[SELLER] Updated existing seller embed ` +
+            `in ${channelId}.`
           );
+
         } else {
           await message.channel.send(payload);
 
           console.log(
-            `[SELLER] Created seller embed in ${channelId}.`
+            `[SELLER] Created seller embed ` +
+            `in ${channelId}.`
           );
         }
+
       } finally {
         sellerCommandLocks.delete(channelId);
       }
@@ -2482,18 +3001,29 @@ client.on(Events.MessageCreate, async message => {
     // ==================================================
 
     if (content === "!robuxcashout") {
-      if (!message.member.permissions.has(
-        PermissionsBitField.Flags.ManageGuild
-      )) {
+      if (
+        !message.member.permissions.has(
+          PermissionsBitField.Flags.ManageGuild
+        )
+      ) {
         await message.reply(
-          "You need **Manage Server** permission to use this command."
+          "You need **Manage Server** permission " +
+          "to use this command."
         );
         return;
       }
 
-      const channel = await client.channels.fetch(ROBUX_CASHOUT_CHANNEL_ID);
+      const channel = await client.channels.fetch(
+        ROBUX_CASHOUT_CHANNEL_ID
+      );
+
       await sendRobuxCashoutEmbed(channel);
-      await message.reply("Robux Cash Out message sent or updated successfully!");
+
+      await message.reply(
+        "Robux Cash Out message sent " +
+        "or updated successfully!"
+      );
+
       return;
     }
 
@@ -2502,7 +3032,9 @@ client.on(Events.MessageCreate, async message => {
     // ==================================================
 
     if (content === ",pay") {
-      await sendPaymentEmbed(message.channel);
+      await sendPaymentEmbed(
+        message.channel
+      );
       return;
     }
 
@@ -2520,57 +3052,96 @@ client.on(Events.MessageCreate, async message => {
 
     if (
       adminCommands.includes(content) &&
-      !message.member.permissions.has(PermissionsBitField.Flags.ManageGuild)
+      !message.member.permissions.has(
+        PermissionsBitField.Flags.ManageGuild
+      )
     ) {
       await message.reply(
-        "You need **Manage Server** permission to use this command."
+        "You need **Manage Server** permission " +
+        "to use this command."
       );
       return;
     }
 
-    if (["!nitro", ",nitro"].includes(content)) {
+    if (
+      ["!nitro", ",nitro"].includes(content)
+    ) {
       await sendNitroServices(
-        await client.channels.fetch(NITRO_CHANNEL_ID)
+        await client.channels.fetch(
+          NITRO_CHANNEL_ID
+        )
       );
-      await message.reply("Nitro message updated successfully.");
+
+      await message.reply(
+        "Nitro message updated successfully."
+      );
+
       return;
     }
 
-    if (["!decor", ",decor"].includes(content)) {
+    if (
+      ["!decor", ",decor"].includes(content)
+    ) {
       await sendDecorServices(
-        await client.channels.fetch(DECOR_CHANNEL_ID)
+        await client.channels.fetch(
+          DECOR_CHANNEL_ID
+        )
       );
-      await message.reply("Decor message updated successfully.");
+
+      await message.reply(
+        "Decor message updated successfully."
+      );
+
       return;
     }
 
-    if (["!boosties", ",boosties"].includes(content)) {
+    if (
+      ["!boosties", ",boosties"].includes(content)
+    ) {
       await sendBoostiesServices(
-        await client.channels.fetch(BOOSTIES_CHANNEL_ID)
+        await client.channels.fetch(
+          BOOSTIES_CHANNEL_ID
+        )
       );
-      await message.reply("Boosties message updated successfully.");
+
+      await message.reply(
+        "Boosties message updated successfully."
+      );
+
       return;
     }
 
-    if (["!sellers", ",sellers"].includes(content)) {
+    if (
+      ["!sellers", ",sellers"].includes(content)
+    ) {
       await sendEmbedToChannel(
         message.guild,
         SELLERS_CHANNEL_ID,
         makeSellersEmbed(),
         "Sellers"
       );
-      await message.reply("The sellers message was sent!");
+
+      await message.reply(
+        "The sellers message was sent!"
+      );
+
       return;
     }
 
-    if (["!staff", ",staff"].includes(content)) {
+    if (
+      ["!staff", ",staff"].includes(content)
+    ) {
       await sendEmbedToChannel(
         message.guild,
         STAFF_CHANNEL_ID,
         makeStaffEmbed(),
         "Staff"
       );
-      await message.reply("The staff message was sent!");
+
+      await message.reply(
+        "The staff message was sent!"
+      );
+
       return;
     }
 
@@ -2579,24 +3150,38 @@ client.on(Events.MessageCreate, async message => {
     // ==================================================
 
     if (content === "!testwelcome") {
-      const channel = await client.channels.fetch(WELCOME_CHANNEL_ID);
+      const channel = await client.channels.fetch(
+        WELCOME_CHANNEL_ID
+      );
 
-      if (!channel || !channel.isTextBased()) {
-        await message.reply("Welcome channel not found.");
+      if (
+        !channel ||
+        !channel.isTextBased()
+      ) {
+        await message.reply(
+          "Welcome channel not found."
+        );
         return;
       }
 
       const embed = new EmbedBuilder()
-        .setTitle(`Welcome to .gg/chuppys ${AFK_RETURN_EMOJI}`)
+        .setTitle(
+          `Welcome to .gg/chuppys ${AFK_RETURN_EMOJI}`
+        )
         .setDescription(
           `Welcome ${message.author}!\n\n` +
-          "We're happy to have you here. Make sure to read the rules " +
+          "We're happy to have you here. " +
+          "Make sure to read the rules " +
           "and enjoy your time in the server!"
         )
         .setColor("#FFFFFF")
-        .setThumbnail(message.author.displayAvatarURL())
+        .setThumbnail(
+          message.author.displayAvatarURL()
+        )
         .setImage(WELCOME_IMAGE)
-        .setFooter({ text: message.guild.name });
+        .setFooter({
+          text: message.guild.name
+        });
 
       await channel.send({
         content: `${message.author}`,
@@ -2611,28 +3196,49 @@ client.on(Events.MessageCreate, async message => {
     // ==================================================
 
     if (content === "!testgoodbye") {
-      const channel = await client.channels.fetch(GOODBYE_CHANNEL_ID);
+      const channel = await client.channels.fetch(
+        GOODBYE_CHANNEL_ID
+      );
 
-      if (!channel || !channel.isTextBased()) {
-        await message.reply("Goodbye channel not found.");
+      if (
+        !channel ||
+        !channel.isTextBased()
+      ) {
+        await message.reply(
+          "Goodbye channel not found."
+        );
         return;
       }
 
       const embed = new EmbedBuilder()
-        .setTitle(`Goodbye ${AFK_GOING_EMOJI}`)
+        .setTitle(
+          `Goodbye ${AFK_GOING_EMOJI}`
+        )
         .setDescription(
           `**${message.author.username}** has left ` +
-          `**${message.guild.name}**.\n\nWe hope to see you again!`
+          `**${message.guild.name}**.\n\n` +
+          "We hope to see you again!"
         )
         .setColor("#FFFFFF")
-        .setThumbnail(message.author.displayAvatarURL())
-        .setFooter({ text: message.guild.name });
+        .setThumbnail(
+          message.author.displayAvatarURL()
+        )
+        .setFooter({
+          text: message.guild.name
+        });
 
-      await channel.send({ embeds: [embed] });
+      await channel.send({
+        embeds: [embed]
+      });
+
       return;
     }
+
   } catch (error) {
-    console.error("[MESSAGE COMMAND] Error:", error);
+    console.error(
+      "[MESSAGE COMMAND] Error:",
+      error
+    );
 
     await message.reply(
       `Something went wrong: ${error.message}`
@@ -2646,14 +3252,28 @@ client.on(Events.MessageCreate, async message => {
 
 client.on(Events.MessageCreate, async message => {
   if (!message.guild) return;
-  if (message.channel.id !== INVITE_CHANNEL_ID) return;
-  if (message.author.id !== INVITE_BOT_ID) return;
+
+  if (
+    message.channel.id !== INVITE_CHANNEL_ID
+  ) {
+    return;
+  }
+
+  if (
+    message.author.id !== INVITE_BOT_ID
+  ) {
+    return;
+  }
 
   try {
-    await message.react(INVITE_REACTION_EMOJI);
+    await message.react(
+      INVITE_REACTION_EMOJI
+    );
+
   } catch (error) {
     console.error(
-      "[INVITE REACTION] Could not react to invite message:",
+      "[INVITE REACTION] Could not react " +
+      "to invite message:",
       error
     );
   }
@@ -2664,7 +3284,10 @@ client.on(Events.MessageCreate, async message => {
 // ==================================================
 
 client.on("error", error => {
-  console.error("[DISCORD CLIENT] Error:", error);
+  console.error(
+    "[DISCORD CLIENT] Error:",
+    error
+  );
 });
 
 // ==================================================
@@ -2672,9 +3295,15 @@ client.on("error", error => {
 // ==================================================
 
 if (!TOKEN) {
-  console.error("[LOGIN] DISCORD_BOT_TOKEN is missing.");
+  console.error(
+    "[LOGIN] DISCORD_BOT_TOKEN is missing."
+  );
+
 } else {
   client.login(TOKEN).catch(error => {
-    console.error("[LOGIN] Discord login failed:", error);
+    console.error(
+      "[LOGIN] Discord login failed:",
+      error
+    );
   });
 }
