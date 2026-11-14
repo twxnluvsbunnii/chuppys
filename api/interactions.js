@@ -1,7 +1,11 @@
 import crypto from "crypto";
 import { waitUntil } from "@vercel/functions";
 
-export const config = { api: { bodyParser: false } };
+export const config = {
+  api: {
+    bodyParser: false
+  }
+};
 
 // ==================================================
 // CONFIGURATION
@@ -28,7 +32,6 @@ const TICKET_PANEL_CHANNEL_ID = "1530811385678790716";
 const TICKET_LOG_CHANNEL_ID = "1570913954333728808";
 
 const QUESTION_EMOJI_ID = "1561388594625511514";
-
 const QUESTION_EMOJI_URL =
   `https://cdn.discordapp.com/emojis/${QUESTION_EMOJI_ID}.png`;
 
@@ -113,18 +116,8 @@ const MOD_ROLE_ID = "1531800784700706887";
 
 const TICKET_SUPPORT_ROLE_ID = "1563003884656398406";
 const SELLER_ROLE_ID = "1550322075208646766";
-const CONVERTER_ROLE_ID = "1569334149695668287";
-const MIDDLEMAN_ROLE_ID = "1569334076224053268";
 
-const TICKET_ACCESS_ROLE_IDS = [
-  OWNER_ROLE_ID,
-  ADMIN_ROLE_ID,
-  MOD_ROLE_ID,
-  TICKET_SUPPORT_ROLE_ID,
-  SELLER_ROLE_ID,
-  CONVERTER_ROLE_ID,
-  MIDDLEMAN_ROLE_ID
-];
+// Middleman and Converter are completely removed.
 
 const TICKET_MANAGER_ROLE_IDS = [
   OWNER_ROLE_ID,
@@ -133,8 +126,50 @@ const TICKET_MANAGER_ROLE_IDS = [
   TICKET_SUPPORT_ROLE_ID
 ];
 
+// Verified is pinged in Purchase/Cash Out but does
+// not automatically receive access to private tickets.
+
+const TICKET_ACCESS_ROLES = {
+  purchase: [
+    OWNER_ROLE_ID,
+    ADMIN_ROLE_ID,
+    MOD_ROLE_ID,
+    TICKET_SUPPORT_ROLE_ID,
+    SELLER_ROLE_ID
+  ],
+
+  cashout: [
+    OWNER_ROLE_ID,
+    ADMIN_ROLE_ID,
+    MOD_ROLE_ID,
+    TICKET_SUPPORT_ROLE_ID,
+    SELLER_ROLE_ID
+  ],
+
+  support: [
+    OWNER_ROLE_ID,
+    ADMIN_ROLE_ID,
+    MOD_ROLE_ID,
+    TICKET_SUPPORT_ROLE_ID
+  ],
+
+  giveaway: [
+    OWNER_ROLE_ID,
+    ADMIN_ROLE_ID,
+    MOD_ROLE_ID,
+    TICKET_SUPPORT_ROLE_ID
+  ],
+
+  partnership: [
+    OWNER_ROLE_ID,
+    ADMIN_ROLE_ID,
+    MOD_ROLE_ID,
+    TICKET_SUPPORT_ROLE_ID
+  ]
+};
+
 // ==================================================
-// CATEGORY-SPECIFIC ROLE PINGS
+// TICKET PINGS
 // ==================================================
 
 const TICKET_PING_ROLES = {
@@ -142,18 +177,14 @@ const TICKET_PING_ROLES = {
     OWNER_ROLE_ID,
     CHUPPYS_ROLE_ID,
     SELLER_ROLE_ID,
-    TICKET_SUPPORT_ROLE_ID,
-    MIDDLEMAN_ROLE_ID,
-    CONVERTER_ROLE_ID
+    TICKET_SUPPORT_ROLE_ID
   ],
 
   cashout: [
     OWNER_ROLE_ID,
     CHUPPYS_ROLE_ID,
     SELLER_ROLE_ID,
-    TICKET_SUPPORT_ROLE_ID,
-    MIDDLEMAN_ROLE_ID,
-    CONVERTER_ROLE_ID
+    TICKET_SUPPORT_ROLE_ID
   ],
 
   support: [
@@ -169,6 +200,10 @@ const TICKET_PING_ROLES = {
 
 function getTicketPingRoles(type) {
   return [...new Set(TICKET_PING_ROLES[type] || [])];
+}
+
+function getTicketAccessRoles(type) {
+  return [...new Set(TICKET_ACCESS_ROLES[type] || [])];
 }
 
 // ==================================================
@@ -238,7 +273,7 @@ const TICKET_MODAL_PREFIX = "chuppys_ticket_form:";
 const TRANSCRIPT_BUTTON_PREFIX = "chuppys_transcript:";
 
 // ==================================================
-// GLOBAL TICKET COUNTER
+// GLOBAL TICKET COUNTER / PRIVATE METADATA
 // ==================================================
 
 const GLOBAL_COUNTER_PREFIX =
@@ -246,6 +281,12 @@ const GLOBAL_COUNTER_PREFIX =
 
 const OLD_COUNTER_PREFIX =
   "CHUPPYS_TICKET_COUNTERS_V1:";
+
+const TICKET_METADATA_PREFIX =
+  "CHUPPYS_PRIVATE_TICKET_METADATA_V2:";
+
+const LEGACY_TOPIC_PREFIX =
+  "chuppys-ticket:";
 
 // ==================================================
 // PERMISSIONS
@@ -640,20 +681,13 @@ function getVouchChannelId(sellerId) {
 }
 
 // ==================================================
-// TICKET TOPIC HELPERS
+// LEGACY TICKET TOPIC SUPPORT
 // ==================================================
 
-function encodeTicketTopic(data) {
-  return (
-    "chuppys-ticket:" +
-    JSON.stringify(data)
-  );
-}
-
-function decodeTicketTopic(topic) {
+function decodeLegacyTicketTopic(topic) {
   if (
     !topic?.startsWith(
-      "chuppys-ticket:"
+      LEGACY_TOPIC_PREFIX
     )
   ) {
     return null;
@@ -662,7 +696,7 @@ function decodeTicketTopic(topic) {
   try {
     return JSON.parse(
       topic.slice(
-        "chuppys-ticket:".length
+        LEGACY_TOPIC_PREFIX.length
       )
     );
   } catch {
@@ -671,7 +705,185 @@ function decodeTicketTopic(topic) {
 }
 
 // ==================================================
-// FIND GLOBAL TICKET COUNTER
+// PRIVATE TICKET METADATA
+// Stored in ticket logs, NOT channel description.
+// ==================================================
+
+function encodeTicketMetadata(channelId, ticket) {
+  return TICKET_METADATA_PREFIX +
+    JSON.stringify({
+      channelId,
+      ...ticket
+    });
+}
+
+function decodeTicketMetadata(content) {
+  if (
+    !content?.startsWith(
+      TICKET_METADATA_PREFIX
+    )
+  ) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(
+      content.slice(
+        TICKET_METADATA_PREFIX.length
+      )
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function findTicketMetadata(channelId) {
+  let before;
+
+  while (true) {
+    const query = before
+      ? `?limit=100&before=${before}`
+      : "?limit=100";
+
+    const messages = await botRequest(
+      "GET",
+      `/channels/${TICKET_LOG_CHANNEL_ID}/messages${query}`
+    );
+
+    for (const message of messages) {
+      const ticket = decodeTicketMetadata(
+        message.content
+      );
+
+      if (
+        ticket?.channelId === channelId
+      ) {
+        return {
+          message,
+          ticket
+        };
+      }
+    }
+
+    if (messages.length < 100) {
+      break;
+    }
+
+    before = messages[
+      messages.length - 1
+    ].id;
+  }
+
+  return null;
+}
+
+async function saveTicketMetadata(
+  channelId,
+  ticket,
+  existingMessageId = null
+) {
+  const content = encodeTicketMetadata(
+    channelId,
+    ticket
+  );
+
+  if (existingMessageId) {
+    return botRequest(
+      "PATCH",
+      `/channels/${TICKET_LOG_CHANNEL_ID}/messages/${existingMessageId}`,
+      {
+        content,
+        allowed_mentions: {
+          parse: []
+        }
+      }
+    );
+  }
+
+  return postChannelMessage(
+    TICKET_LOG_CHANNEL_ID,
+    {
+      content,
+      allowed_mentions: {
+        parse: []
+      }
+    }
+  );
+}
+
+// ==================================================
+// LOAD TICKET DATA
+// ==================================================
+
+async function loadTicketData(channel) {
+  const found = await findTicketMetadata(
+    channel.id
+  );
+
+  if (found) {
+    return {
+      ticket: found.ticket,
+      metadataMessageId: found.message.id
+    };
+  }
+
+  // Support tickets created before this update.
+  const legacy = decodeLegacyTicketTopic(
+    channel.topic
+  );
+
+  if (legacy) {
+    const saved = await saveTicketMetadata(
+      channel.id,
+      legacy
+    );
+
+    // Clear the old visible channel description.
+    await botRequest(
+      "PATCH",
+      `/channels/${channel.id}`,
+      {
+        topic: null
+      }
+    );
+
+    return {
+      ticket: legacy,
+      metadataMessageId: saved.id
+    };
+  }
+
+  throw new Error(
+    "This channel is not a Chuppys ticket."
+  );
+}
+
+async function getTicketChannel(i) {
+  const channel = await botRequest(
+    "GET",
+    `/channels/${i.channel_id}`
+  );
+
+  const data = await loadTicketData(
+    channel
+  );
+
+  if (
+    !TICKET_TYPES[data.ticket.type]
+  ) {
+    throw new Error(
+      "Invalid ticket category."
+    );
+  }
+
+  return {
+    channel,
+    ...data
+  };
+}
+
+// ==================================================
+// GLOBAL TICKET COUNTER
 // ==================================================
 
 async function findGlobalCounterMessage() {
@@ -723,10 +935,6 @@ async function findGlobalCounterMessage() {
   return null;
 }
 
-// ==================================================
-// READ OLD COUNTERS FOR MIGRATION
-// ==================================================
-
 async function findOldTicketCounters() {
   let before;
 
@@ -772,7 +980,7 @@ async function findOldTicketCounters() {
           );
         }
       } catch {
-        // Ignore invalid old counter messages.
+        // Ignore invalid counter messages.
       }
     }
 
@@ -788,10 +996,6 @@ async function findOldTicketCounters() {
   return 0;
 }
 
-// ==================================================
-// GLOBAL TICKET NUMBER
-// ==================================================
-
 async function nextTicketNumber(guildId) {
   const found =
     await findGlobalCounterMessage();
@@ -799,8 +1003,6 @@ async function nextTicketNumber(guildId) {
   let number = found?.number || 0;
 
   if (!found) {
-    // Include previous category-specific counters
-    // so existing ticket history is not reset.
     const oldTotal =
       await findOldTicketCounters();
 
@@ -815,19 +1017,18 @@ async function nextTicketNumber(guildId) {
     );
 
     for (const channel of channels) {
-      const ticket = decodeTicketTopic(
+      const legacy = decodeLegacyTicketTopic(
         channel.topic
       );
 
       if (
-        ticket &&
         Number.isSafeInteger(
-          ticket.number
+          legacy?.number
         )
       ) {
         number = Math.max(
           number,
-          ticket.number
+          legacy.number
         );
       }
 
@@ -873,7 +1074,7 @@ async function nextTicketNumber(guildId) {
 }
 
 // ==================================================
-// PRIVATE TICKET CATEGORIES
+// TICKET CATEGORY
 // ==================================================
 
 async function getTicketCategory(
@@ -939,7 +1140,7 @@ async function getTicketCategory(
           deny: TICKET_DENY
         },
 
-        ...TICKET_ACCESS_ROLE_IDS.map(
+        ...getTicketAccessRoles(type).map(
           id => ({
             id,
             type: 0,
@@ -953,33 +1154,8 @@ async function getTicketCategory(
   return category.id;
 }
 
-async function getTicketChannel(i) {
-  const channel = await botRequest(
-    "GET",
-    `/channels/${i.channel_id}`
-  );
-
-  const ticket = decodeTicketTopic(
-    channel.topic
-  );
-
-  if (
-    !ticket ||
-    !TICKET_TYPES[ticket.type]
-  ) {
-    throw new Error(
-      "This channel is not a Chuppys ticket."
-    );
-  }
-
-  return {
-    channel,
-    ticket
-  };
-}
-
 // ==================================================
-// PURCHASE AND CASH OUT MODALS
+// PURCHASE / CASH OUT MODALS
 // ==================================================
 
 function ticketForm(type) {
@@ -1117,26 +1293,45 @@ async function processTicketOpen(
       `/guilds/${guildId}/channels`
     );
 
-    const existing = channels.find(
-      channel => {
-        const ticket =
-          decodeTicketTopic(
-            channel.topic
-          );
+    for (const existing of channels) {
+      if (
+        existing.type !== 0 ||
+        !/^(?:closed-)?(?:purchase|cashout|support|giveaway|partnership)-\d+$/.test(
+          existing.name || ""
+        )
+      ) {
+        continue;
+      }
 
-        return (
-          ticket?.ownerId === userId &&
-          ticket?.type === type &&
-          ticket?.status !== "closed"
+      const legacy = decodeLegacyTicketTopic(
+        existing.topic
+      );
+
+      if (
+        legacy?.ownerId === userId &&
+        legacy?.type === type &&
+        legacy?.status !== "closed"
+      ) {
+        return updateOriginalResponse(
+          i,
+          `You already have an open ticket: <#${existing.id}>`
         );
       }
-    );
 
-    if (existing) {
-      return updateOriginalResponse(
-        i,
-        `You already have an open **${settings.name}** ticket: <#${existing.id}>`
+      const found = await findTicketMetadata(
+        existing.id
       );
+
+      if (
+        found?.ticket?.ownerId === userId &&
+        found.ticket.type === type &&
+        found.ticket.status !== "closed"
+      ) {
+        return updateOriginalResponse(
+          i,
+          `You already have an open ticket: <#${existing.id}>`
+        );
+      }
     }
 
     const parentId =
@@ -1145,8 +1340,6 @@ async function processTicketOpen(
         type
       );
 
-    // GLOBAL COUNTER:
-    // All ticket categories share one number.
     const number =
       await nextTicketNumber(guildId);
 
@@ -1157,6 +1350,30 @@ async function processTicketOpen(
       status: "open",
       claimedBy: null
     };
+
+    // Explicit overwrites keep removed roles out
+    // of the new ticket's channel permissions.
+    const permissionOverwrites = [
+      {
+        id: guildId,
+        type: 0,
+        deny: TICKET_DENY
+      },
+
+      {
+        id: userId,
+        type: 1,
+        allow: TICKET_ALLOW
+      },
+
+      ...getTicketAccessRoles(type).map(
+        id => ({
+          id,
+          type: 0,
+          allow: TICKET_ALLOW
+        })
+      )
+    ];
 
     const channel = await botRequest(
       "POST",
@@ -1170,32 +1387,20 @@ async function processTicketOpen(
         type: 0,
         parent_id: parentId,
 
-        topic:
-          encodeTicketTopic(ticket),
+        // Blank channel description.
+        topic: null,
 
-        permission_overwrites: [
-          {
-            id: guildId,
-            type: 0,
-            deny: TICKET_DENY
-          },
-
-          {
-            id: userId,
-            type: 1,
-            allow: TICKET_ALLOW
-          },
-
-          ...TICKET_ACCESS_ROLE_IDS.map(
-            id => ({
-              id,
-              type: 0,
-              allow: TICKET_ALLOW
-            })
-          )
-        ]
+        permission_overwrites:
+          permissionOverwrites
       }
     );
+
+    // Save metadata privately in ticket logs.
+    const metadataMessage =
+      await saveTicketMetadata(
+        channel.id,
+        ticket
+      );
 
     const answerText =
       answers.length
@@ -1248,13 +1453,10 @@ async function processTicketOpen(
       ticket.controlMessageId =
         welcome.id;
 
-      await botRequest(
-        "PATCH",
-        `/channels/${channel.id}`,
-        {
-          topic:
-            encodeTicketTopic(ticket)
-        }
+      await saveTicketMetadata(
+        channel.id,
+        ticket,
+        metadataMessage.id
       );
     } catch (error) {
       console.error(
@@ -1440,7 +1642,7 @@ async function uploadTranscriptFile(
 }
 
 // ==================================================
-// SAVE TRANSCRIPT TO LOGS
+// SAVE TRANSCRIPT
 // ==================================================
 
 async function saveTranscriptLog(
@@ -1510,7 +1712,7 @@ async function saveTranscriptLog(
 }
 
 // ==================================================
-// VIEW TRANSCRIPT BUTTON
+// VIEW TRANSCRIPT
 // ==================================================
 
 async function processViewTranscript(i) {
@@ -1588,7 +1790,7 @@ async function processViewTranscript(i) {
 }
 
 // ==================================================
-// UPDATE TICKET BUTTONS
+// UPDATE TICKET CONTROL BUTTONS
 // ==================================================
 
 async function updateTicketControlMessage(
@@ -1621,7 +1823,8 @@ async function processTicketAction(
   try {
     const {
       channel,
-      ticket
+      ticket,
+      metadataMessageId
     } = await getTicketChannel(i);
 
     const userId = getUserId(i);
@@ -1656,13 +1859,10 @@ async function processTicketAction(
 
       ticket.claimedBy = userId;
 
-      await botRequest(
-        "PATCH",
-        `/channels/${channel.id}`,
-        {
-          topic:
-            encodeTicketTopic(ticket)
-        }
+      await saveTicketMetadata(
+        channel.id,
+        ticket,
+        metadataMessageId
       );
 
       await postChannelMessage(
@@ -1724,8 +1924,7 @@ async function processTicketAction(
         "PATCH",
         `/channels/${channel.id}`,
         {
-          topic:
-            encodeTicketTopic(ticket),
+          topic: null,
 
           name: ticket.number
             ? ticketChannelName(
@@ -1738,6 +1937,12 @@ async function processTicketAction(
                 100
               )
         }
+      );
+
+      await saveTicketMetadata(
+        channel.id,
+        ticket,
+        metadataMessageId
       );
 
       await updateTicketControlMessage(
@@ -1811,8 +2016,7 @@ async function processTicketAction(
         "PATCH",
         `/channels/${channel.id}`,
         {
-          topic:
-            encodeTicketTopic(ticket),
+          topic: null,
 
           name: ticket.number
             ? ticketChannelName(
@@ -1824,6 +2028,12 @@ async function processTicketAction(
                 100
               )
         }
+      );
+
+      await saveTicketMetadata(
+        channel.id,
+        ticket,
+        metadataMessageId
       );
 
       await updateTicketControlMessage(
@@ -1884,7 +2094,6 @@ async function processTicketAction(
           channel.id
         );
 
-      // Save transcript before deleting.
       await saveTranscriptLog(
         channel,
         ticket,
