@@ -78,6 +78,11 @@ const SELLERS = [
     id: "1328450205774909441",
     name: "﹕𐔌・alex 〃・꒱",
     personal: false
+  },
+    {
+    id: "1475237851414401105",
+    name: "﹕𐔌・replusive 〃・꒱",
+    personal: false
   }
 ];
 
