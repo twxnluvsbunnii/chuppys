@@ -2069,7 +2069,9 @@ function makeSellersEmbed() {
     ["1269188505935024141", "seller", "$250"],
     ["1427118849215692920", "seller", "$50"],
     ["1328450205774909441", "seller", "$100"]
+    ["1475237851414401105", "seller", "$100"]
   ];
+  
 
   const lines = [
     "# .gg/chuppys sellers",
