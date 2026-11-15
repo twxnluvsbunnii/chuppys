@@ -11,7 +11,7 @@
 // Slash command:
 // require("./tickets").command
 //
-// PREFIX COMMANDS:
+// COMMANDS:
 // ,claim
 // ,close
 // ,close reason here
@@ -24,31 +24,28 @@
 // - Giveaway tickets
 // - Partnership tickets
 // - Support tickets
-// - Global ticket counter
-// - Existing V3 metadata compatibility
+// - Existing global ticket counter preserved
+// - Existing V3 metadata preserved
 // - Legacy metadata recovery
-// - Missing metadata recovery
+// - Existing ticket recovery
 // - Private seller claims
-// - Buyer retains ticket access
-// - Claiming seller retains ticket access
-// - Ticket Support retains ticket access
-// - Owner retains ticket access
-// - Other sellers lose access after claim
-// - Claim, Close, Reopen, Delete buttons
+// - Only buyer, claimer and owner after claim
+// - Claim privacy refresh
+// - Claim, Close, Reopen and Delete buttons
 // - Prefix commands
-// - Blank channel descriptions
+// - Blank ticket channel topics
 // - Ticket activity logs
 // - Private HTML transcripts
 // - Transcript link buttons
 //
 // IMPORTANT:
 // Enable Message Content Intent.
-// Enable Guild Members Intent if available.
-// Bot needs Manage Channels, Manage Roles,
-// View Channels, Send Messages,
-// Read Message History and Attach Files.
+// Bot needs Manage Channels and Manage Roles.
+// Run only ONE Render bot instance.
 //
-// Run only ONE bot instance.
+// Users with Administrator can bypass
+// Discord channel permissions.
+//
 // ==================================================
 
 const {
@@ -69,7 +66,7 @@ const {
 } = require("discord.js");
 
 // ==================================================
-// IDS
+// CHANNEL AND ROLE IDS
 // ==================================================
 
 const IDS = Object.freeze({
@@ -100,11 +97,13 @@ const IDS = Object.freeze({
 
 const BRAND = ".gg/chuppys";
 
-const EMOJI = "<:chuppyhi:1561103471325745242>";
+const EMOJI =
+  "<:chuppyhi:1561103471325745242>";
 
 const LOG_COLOR = 0x2489d7;
 
-const EPHEMERAL = MessageFlags.Ephemeral;
+const EPHEMERAL =
+  MessageFlags.Ephemeral;
 
 const COMMAND_PREFIX = ",";
 
@@ -143,9 +142,11 @@ const SELECT_IDS = new Set([
   "ticket_create"
 ]);
 
-const SELECT_ID = "chuppys_ticket_select";
+const SELECT_ID =
+  "chuppys_ticket_select";
 
-const FORM_PREFIX = "chuppys_ticket_form:";
+const FORM_PREFIX =
+  "chuppys_ticket_form:";
 
 const CLOSE_PREFIX =
   "chuppys_ticket_close_modal:";
@@ -155,8 +156,11 @@ const OLD_TRANSCRIPT_PREFIX =
 
 const BUTTONS = {
   claim: "chuppys_ticket_claim",
+
   close: "chuppys_ticket_close",
+
   reopen: "chuppys_ticket_reopen",
+
   delete: "chuppys_ticket_delete"
 };
 
@@ -231,21 +235,21 @@ const TYPES = {
 };
 
 // ==================================================
-// ROLE ACCESS
+// STAFF ACCESS BEFORE CLAIM
 // ==================================================
 //
-// IMPORTANT:
+// Before a ticket is claimed, staff can
+// see it according to these role lists.
 //
-// Owner is a USER ID, not a role ID.
+// AFTER CLAIM:
+// These role lists are NOT used.
 //
-// After a ticket is claimed:
-// - Buyer gets explicit member access
-// - Claimer gets explicit member access
-// - Ticket Support role retains access
-// - Owner gets explicit member access
-// - Seller role loses role-wide access
+// Only:
+// - Buyer
+// - Claimer
+// - Owner
 //
-// Administrators bypass Discord permissions.
+// will receive normal channel access.
 // ==================================================
 
 const ACCESS = {
@@ -282,6 +286,10 @@ const ACCESS = {
   ]
 };
 
+// ==================================================
+// TICKET PINGS
+// ==================================================
+
 const PINGS = {
   purchase: [
     IDS.seller,
@@ -310,14 +318,15 @@ const PINGS = {
 // SLASH COMMAND
 // ==================================================
 
-const command = new SlashCommandBuilder()
-  .setName("ticketpanel")
-  .setDescription(
-    "Post or update the Chuppys ticket panel."
-  )
-  .setDefaultMemberPermissions(
-    PermissionFlagsBits.ManageGuild
-  );
+const command =
+  new SlashCommandBuilder()
+    .setName("ticketpanel")
+    .setDescription(
+      "Post or update the Chuppys ticket panel."
+    )
+    .setDefaultMemberPermissions(
+      PermissionFlagsBits.ManageGuild
+    );
 
 // ==================================================
 // RUNTIME STATE
@@ -348,14 +357,18 @@ function queued(task) {
 }
 
 // ==================================================
-// HELPERS
+// GENERAL HELPERS
 // ==================================================
 
 function formatNumber(number) {
   return String(number).padStart(4, "0");
 }
 
-function ticketName(type, number, closed = false) {
+function ticketName(
+  type,
+  number,
+  closed = false
+) {
   return (
     `${closed ? "closed-" : ""}` +
     `${type}-${formatNumber(number)}`
@@ -391,9 +404,15 @@ function discordStamp(value) {
   }
 
   return (
-    `<t:${Math.floor(milliseconds / 1000)}:F>`
+    `<t:${Math.floor(
+      milliseconds / 1000
+    )}:F>`
   );
 }
+
+// ==================================================
+// PERMISSION HELPERS
+// ==================================================
 
 function hasRole(context, id) {
   const roles = context.member?.roles;
@@ -422,11 +441,17 @@ function isAdmin(context) {
 }
 
 function isSupport(context) {
-  return hasRole(context, IDS.support);
+  return hasRole(
+    context,
+    IDS.support
+  );
 }
 
 function isSeller(context) {
-  return hasRole(context, IDS.seller);
+  return hasRole(
+    context,
+    IDS.seller
+  );
 }
 
 function isOtherStaff(context) {
@@ -447,7 +472,10 @@ function isManager(context) {
 }
 
 function canClaim(context, state) {
-  if (isOwner(context) || isAdmin(context)) {
+  if (
+    isOwner(context) ||
+    isAdmin(context)
+  ) {
     return true;
   }
 
@@ -466,27 +494,35 @@ function canClaim(context, state) {
 }
 
 function canManage(context, state) {
-  if (isOwner(context) || isAdmin(context)) {
-    return true;
-  }
-
-  if (isSupport(context)) {
+  if (
+    isOwner(context) ||
+    isAdmin(context)
+  ) {
     return true;
   }
 
   if (state.claimedBy) {
-    return state.claimedBy === context.user.id;
+    return (
+      state.claimedBy ===
+      context.user.id
+    );
   }
 
-  return canClaim(context, state);
+  return canClaim(
+    context,
+    state
+  );
 }
 
 function canDelete(context, state) {
-  return canManage(context, state);
+  return canManage(
+    context,
+    state
+  );
 }
 
 // ==================================================
-// INTERACTION REPLIES
+// REPLY HANDLER
 // ==================================================
 
 async function reply(context, content) {
@@ -516,10 +552,13 @@ async function reply(context, content) {
 function messageContext(message) {
   return {
     guild: message.guild,
+
     channel: message.channel,
+
     channelId: message.channelId,
 
     user: message.author,
+
     member: message.member,
 
     memberPermissions:
@@ -528,6 +567,7 @@ function messageContext(message) {
     client: message.client,
 
     deferred: false,
+
     replied: false,
 
     async reply(payload) {
@@ -538,8 +578,10 @@ function messageContext(message) {
 
       return message.reply({
         content,
+
         allowedMentions: {
           parse: [],
+
           repliedUser: false
         }
       });
@@ -551,7 +593,10 @@ function messageContext(message) {
 // EMBED HELPERS
 // ==================================================
 
-function ticketEmbed(title, description) {
+function ticketEmbed(
+  title,
+  description
+) {
   return new EmbedBuilder()
     .setColor(0xffffff)
     .setTitle(title)
@@ -561,7 +606,11 @@ function ticketEmbed(title, description) {
     });
 }
 
-async function textChannel(guild, id, label) {
+async function textChannel(
+  guild,
+  id,
+  label
+) {
   const channel =
     await guild.channels.fetch(id);
 
@@ -571,14 +620,17 @@ async function textChannel(guild, id, label) {
     !channel.send
   ) {
     throw new Error(
-      `${label} channel unavailable: ${id}`
+      `${label} unavailable: ${id}`
     );
   }
 
   return channel;
 }
 
-function channelLink(guildId, channelId) {
+function channelLink(
+  guildId,
+  channelId
+) {
   return (
     "https://discord.com/channels/" +
     `${guildId}/${channelId}`
@@ -586,59 +638,84 @@ function channelLink(guildId, channelId) {
 }
 
 function transcriptButton(url) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setLabel("View Transcript")
-      .setStyle(ButtonStyle.Link)
-      .setURL(url)
-  );
+  return new ActionRowBuilder()
+    .addComponents(
+      new ButtonBuilder()
+        .setLabel("View Transcript")
+        .setStyle(ButtonStyle.Link)
+        .setURL(url)
+    );
 }
 
-function viewTicketButton(guildId, channelId) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setLabel("View Ticket")
-      .setStyle(ButtonStyle.Link)
-      .setURL(
-        channelLink(guildId, channelId)
-      )
-  );
+function viewTicketButton(
+  guildId,
+  channelId
+) {
+  return new ActionRowBuilder()
+    .addComponents(
+      new ButtonBuilder()
+        .setLabel("View Ticket")
+        .setStyle(ButtonStyle.Link)
+        .setURL(
+          channelLink(
+            guildId,
+            channelId
+          )
+        )
+    );
 }
 
 // ==================================================
-// TICKET BUTTONS
+// TICKET CONTROLS
 // ==================================================
 
 function controls(closed) {
-  const row = new ActionRowBuilder();
+  const row =
+    new ActionRowBuilder();
 
   if (closed) {
     row.addComponents(
       new ButtonBuilder()
-        .setCustomId(BUTTONS.reopen)
+        .setCustomId(
+          BUTTONS.reopen
+        )
         .setLabel("Reopen")
         .setEmoji("🔓")
-        .setStyle(ButtonStyle.Success),
+        .setStyle(
+          ButtonStyle.Success
+        ),
 
       new ButtonBuilder()
-        .setCustomId(BUTTONS.delete)
+        .setCustomId(
+          BUTTONS.delete
+        )
         .setLabel("Delete")
         .setEmoji("🗑️")
-        .setStyle(ButtonStyle.Danger)
+        .setStyle(
+          ButtonStyle.Danger
+        )
     );
   } else {
     row.addComponents(
       new ButtonBuilder()
-        .setCustomId(BUTTONS.claim)
+        .setCustomId(
+          BUTTONS.claim
+        )
         .setLabel("Claim")
         .setEmoji("🙋")
-        .setStyle(ButtonStyle.Primary),
+        .setStyle(
+          ButtonStyle.Primary
+        ),
 
       new ButtonBuilder()
-        .setCustomId(BUTTONS.close)
+        .setCustomId(
+          BUTTONS.close
+        )
         .setLabel("Close")
         .setEmoji("🔒")
-        .setStyle(ButtonStyle.Danger)
+        .setStyle(
+          ButtonStyle.Danger
+        )
     );
   }
 
@@ -646,26 +723,31 @@ function controls(closed) {
 }
 
 // ==================================================
-// PANEL
+// TICKET PANEL
 // ==================================================
 
 function panelPayload() {
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId(SELECT_ID)
-    .setPlaceholder(
-      "Select a ticket category"
-    )
-    .addOptions(
-      Object.entries(TYPES).map(
-        ([value, settings]) => ({
-          label: settings.name,
-          value,
-
-          description:
-            `Open a ${settings.name} ticket`
-        })
+  const menu =
+    new StringSelectMenuBuilder()
+      .setCustomId(
+        SELECT_ID
       )
-    );
+      .setPlaceholder(
+        "Select a ticket category"
+      )
+      .addOptions(
+        Object.entries(TYPES).map(
+          ([value, settings]) => ({
+            label:
+              settings.name,
+
+            value,
+
+            description:
+              `Open a ${settings.name} ticket`
+          })
+        )
+      );
 
   return {
     embeds: [
@@ -688,7 +770,8 @@ function panelPayload() {
     ],
 
     components: [
-      new ActionRowBuilder().addComponents(menu)
+      new ActionRowBuilder()
+        .addComponents(menu)
     ],
 
     allowedMentions: {
@@ -698,32 +781,21 @@ function panelPayload() {
 }
 
 // ==================================================
-// TICKET NAME RECOGNITION
-// ==================================================
-//
-// Recognizes existing channels:
-//
-// purchase-0636
-// purchasing-0636
-// cashout-0637
-// cash-out-0637
-// giveaway-0638
-// partnership-0639
-// support-0640
-//
-// Also recognizes closed- versions.
+// EXISTING TICKET NAME RECOGNITION
 // ==================================================
 
 function parseTicketName(name) {
-  const match = String(name || "").match(
-    /^(closed-)?(purchase|purchasing|cashout|cash-out|giveaway|partnership|support)-(\d+)$/i
-  );
+  const match =
+    String(name || "").match(
+      /^(closed-)?(purchase|purchasing|cashout|cash-out|giveaway|partnership|support)-(\d+)$/i
+    );
 
   if (!match) {
     return null;
   }
 
-  let type = match[2].toLowerCase();
+  let type =
+    match[2].toLowerCase();
 
   if (type === "purchasing") {
     type = "purchase";
@@ -733,7 +805,8 @@ function parseTicketName(name) {
     type = "cashout";
   }
 
-  const number = Number(match[3]);
+  const number =
+    Number(match[3]);
 
   if (
     !Number.isSafeInteger(number) ||
@@ -745,13 +818,16 @@ function parseTicketName(name) {
 
   return {
     type,
+
     number,
-    closed: Boolean(match[1])
+
+    closed:
+      Boolean(match[1])
   };
 }
 
 // ==================================================
-// STATE PARSING
+// TICKET STATE PARSING
 // ==================================================
 
 function normalizeState(data) {
@@ -764,7 +840,8 @@ function normalizeState(data) {
     return null;
   }
 
-  const number = Number(data.number);
+  const number =
+    Number(data.number);
 
   if (
     !Number.isSafeInteger(number) ||
@@ -774,11 +851,14 @@ function normalizeState(data) {
   }
 
   return {
-    channelId: String(data.channelId),
+    channelId:
+      String(data.channelId),
 
-    ownerId: String(data.ownerId),
+    ownerId:
+      String(data.ownerId),
 
-    type: data.type,
+    type:
+      data.type,
 
     number,
 
@@ -807,13 +887,16 @@ function normalizeState(data) {
 }
 
 function parseState(message) {
-  const content = message?.content || "";
+  const content =
+    message?.content || "";
 
   const prefix = [
     STATE_PREFIX,
+
     ...LEGACY_PREFIXES
   ].find(
-    value => content.startsWith(value)
+    value =>
+      content.startsWith(value)
   );
 
   if (!prefix) {
@@ -823,7 +906,9 @@ function parseState(message) {
   try {
     return normalizeState(
       JSON.parse(
-        content.slice(prefix.length)
+        content.slice(
+          prefix.length
+        )
       )
     );
   } catch {
@@ -832,7 +917,7 @@ function parseState(message) {
 }
 
 // ==================================================
-// MESSAGE SCANNER
+// SCAN MESSAGES
 // ==================================================
 
 async function scan(
@@ -851,26 +936,34 @@ async function scan(
       await channel.messages.fetch({
         limit: 100,
 
-        ...(before ? { before } : {})
+        ...(before
+          ? { before }
+          : {})
       });
 
     if (!messages.size) {
       return;
     }
 
-    for (const message of messages.values()) {
+    for (
+      const message of
+      messages.values()
+    ) {
       await callback(message);
     }
 
-    if (messages.size < 100) {
+    if (
+      messages.size < 100
+    ) {
       return;
     }
 
-    before = messages.last().id;
+    before =
+      messages.last().id;
   }
 
   console.warn(
-    `[TICKETS] Scan limit reached: ${channel.id}`
+    `[TICKETS] Scan limit reached in ${channel.id}`
   );
 }
 
@@ -878,7 +971,10 @@ async function scan(
 // SAVE STATE
 // ==================================================
 
-async function saveState(channel, entry) {
+async function saveState(
+  channel,
+  entry
+) {
   const storage =
     await textChannel(
       channel.guild,
@@ -888,13 +984,16 @@ async function saveState(channel, entry) {
 
   const content =
     STATE_PREFIX +
-    JSON.stringify(entry.state);
+    JSON.stringify(
+      entry.state
+    );
 
-  let message = entry.storageMessageId
-    ? await storage.messages.fetch(
-        entry.storageMessageId
-      ).catch(() => null)
-    : null;
+  let message =
+    entry.storageMessageId
+      ? await storage.messages.fetch(
+          entry.storageMessageId
+        ).catch(() => null)
+      : null;
 
   if (message) {
     await message.edit({
@@ -905,22 +1004,27 @@ async function saveState(channel, entry) {
       }
     });
   } else {
-    message = await storage.send({
-      content,
+    message =
+      await storage.send({
+        content,
 
-      allowedMentions: {
-        parse: []
-      }
-    });
+        allowedMentions: {
+          parse: []
+        }
+      });
 
-    entry.storageMessageId = message.id;
+    entry.storageMessageId =
+      message.id;
   }
 
-  cache.set(channel.id, entry);
+  cache.set(
+    channel.id,
+    entry
+  );
 }
 
 // ==================================================
-// INITIALIZATION
+// INITIALIZE EXISTING STORAGE
 // ==================================================
 
 async function init(guild) {
@@ -962,7 +1066,8 @@ async function init(guild) {
         return;
       }
 
-      const state = parseState(message);
+      const state =
+        parseState(message);
 
       if (state) {
         highest = Math.max(
@@ -971,7 +1076,9 @@ async function init(guild) {
         );
 
         const existing =
-          cache.get(state.channelId);
+          cache.get(
+            state.channelId
+          );
 
         if (
           !existing ||
@@ -980,12 +1087,17 @@ async function init(guild) {
             !existing.storageMessageId
           )
         ) {
-          cache.set(state.channelId, {
-            state,
+          cache.set(
+            state.channelId,
+            {
+              state,
 
-            storageMessageId:
-              inData ? message.id : null
-          });
+              storageMessageId:
+                inData
+                  ? message.id
+                  : null
+            }
+          );
         }
       }
 
@@ -994,11 +1106,12 @@ async function init(guild) {
           COUNTER_PREFIX
         )
       ) {
-        const value = Number(
-          message.content.slice(
-            COUNTER_PREFIX.length
-          )
-        );
+        const value =
+          Number(
+            message.content.slice(
+              COUNTER_PREFIX.length
+            )
+          );
 
         if (
           Number.isSafeInteger(value) &&
@@ -1009,8 +1122,12 @@ async function init(guild) {
             value
           );
 
-          if (inData && !counterMessage) {
-            counterMessage = message;
+          if (
+            inData &&
+            !counterMessage
+          ) {
+            counterMessage =
+              message;
           }
         }
       }
@@ -1022,11 +1139,12 @@ async function init(guild) {
         )
       ) {
         try {
-          const old = JSON.parse(
-            message.content.slice(
-              OLD_COUNTER_PREFIX.length
-            )
-          );
+          const old =
+            JSON.parse(
+              message.content.slice(
+                OLD_COUNTER_PREFIX.length
+              )
+            );
 
           const values =
             Object.values(old)
@@ -1039,6 +1157,7 @@ async function init(guild) {
 
           highest = Math.max(
             highest,
+
             values.reduce(
               (sum, number) =>
                 sum + number,
@@ -1046,24 +1165,33 @@ async function init(guild) {
             )
           );
         } catch {
-          // Ignore broken legacy counter.
+          // Ignore malformed legacy counters.
         }
       }
     };
 
     await scan(
       dataChannel,
+
       message =>
-        processMessage(message, true)
+        processMessage(
+          message,
+          true
+        )
     );
 
     if (
-      logChannel.id !== dataChannel.id
+      logChannel.id !==
+      dataChannel.id
     ) {
       await scan(
         logChannel,
+
         message =>
-          processMessage(message, false)
+          processMessage(
+            message,
+            false
+          )
       );
     }
 
@@ -1074,7 +1202,9 @@ async function init(guild) {
       guild.channels.cache.values()
     ) {
       const parsed =
-        parseTicketName(channel.name);
+        parseTicketName(
+          channel.name
+        );
 
       if (parsed) {
         highest = Math.max(
@@ -1084,55 +1214,69 @@ async function init(guild) {
       }
     }
 
-    globalCounter = highest;
+    globalCounter =
+      highest;
 
     if (counterMessage) {
       counterMessageId =
         counterMessage.id;
 
-      const value = Number(
-        counterMessage.content.slice(
-          COUNTER_PREFIX.length
-        )
-      );
+      const value =
+        Number(
+          counterMessage.content.slice(
+            COUNTER_PREFIX.length
+          )
+        );
 
-      if (value < highest) {
+      if (
+        value < highest
+      ) {
         await counterMessage.edit({
           content:
-            COUNTER_PREFIX + highest
+            COUNTER_PREFIX +
+            highest
         });
       }
     } else {
       const message =
         await dataChannel.send({
           content:
-            COUNTER_PREFIX + highest,
+            COUNTER_PREFIX +
+            highest,
 
           allowedMentions: {
             parse: []
           }
         });
 
-      counterMessageId = message.id;
+      counterMessageId =
+        message.id;
     }
 
-    // Migrate valid old log records
-    // into the existing private data channel.
+    // Preserve legacy ticket metadata.
 
-    for (const [id, entry] of cache) {
-      if (entry.storageMessageId) {
+    for (
+      const [id, entry] of cache
+    ) {
+      if (
+        entry.storageMessageId
+      ) {
         continue;
       }
 
       const channel =
-        await guild.channels.fetch(id)
-          .catch(() => null);
+        await guild.channels.fetch(
+          id
+        ).catch(() => null);
 
       if (
         channel?.type ===
         ChannelType.GuildText
       ) {
-        await saveState(channel, entry);
+        await saveState(
+          channel,
+          entry
+        );
       }
     }
 
@@ -1143,7 +1287,7 @@ async function init(guild) {
     );
 
     console.log(
-      `[TICKETS] Global counter: ${globalCounter}`
+      `[TICKETS] Counter preserved at ${globalCounter}.`
     );
   })();
 
@@ -1155,7 +1299,7 @@ async function init(guild) {
 }
 
 // ==================================================
-// GLOBAL COUNTER
+// GLOBAL TICKET COUNTER
 // ==================================================
 
 async function nextNumber(guild) {
@@ -1193,11 +1337,13 @@ async function nextNumber(guild) {
       : 0
   );
 
-  const next = globalCounter + 1;
+  const next =
+    globalCounter + 1;
 
   await message.edit({
     content:
-      COUNTER_PREFIX + next
+      COUNTER_PREFIX +
+      next
   });
 
   globalCounter = next;
@@ -1206,7 +1352,7 @@ async function nextNumber(guild) {
 }
 
 // ==================================================
-// RECOVER LEGACY TICKET TOPIC
+// LEGACY TOPIC RECOVERY
 // ==================================================
 
 function parseLegacyTopic(channel) {
@@ -1224,11 +1370,11 @@ function parseLegacyTopic(channel) {
           )
         : channel.topic;
 
-    const data = JSON.parse(raw);
-
     return normalizeState({
-      ...data,
-      channelId: channel.id
+      ...JSON.parse(raw),
+
+      channelId:
+        channel.id
     });
   } catch {
     return null;
@@ -1236,26 +1382,20 @@ function parseLegacyTopic(channel) {
 }
 
 // ==================================================
-// RECOVER EXISTING TICKETS
-// ==================================================
-//
-// FIXES:
-//
-// "This is not a recognized Chuppys ticket."
-//
-// Recovery requires an existing ticket channel
-// AND a bot-created ticket welcome message.
-//
-// A channel name by itself is NOT enough.
-//
-// This prevents normal channels with similar
-// names being treated as tickets.
+// EXISTING TICKET RECOVERY
 // ==================================================
 
 function ticketComponent(message) {
-  for (const row of message.components || []) {
-    for (const component of row.components || []) {
-      const id = component.customId;
+  for (
+    const row of
+    message.components || []
+  ) {
+    for (
+      const component of
+      row.components || []
+    ) {
+      const id =
+        component.customId;
 
       if (
         id === BUTTONS.claim ||
@@ -1264,7 +1404,9 @@ function ticketComponent(message) {
         id === BUTTONS.delete ||
         (
           typeof id === "string" &&
-          id.startsWith("chuppys_ticket:")
+          id.startsWith(
+            "chuppys_ticket:"
+          )
         )
       ) {
         return true;
@@ -1276,24 +1418,35 @@ function ticketComponent(message) {
 }
 
 function extractUserId(text) {
-  const match = String(text || "").match(
-    /<@!?(\d{17,20})>/
-  );
+  const match =
+    String(text || "").match(
+      /<@!?(\d{17,20})>/
+    );
 
-  return match ? match[1] : null;
+  return match
+    ? match[1]
+    : null;
 }
 
 function ticketCreator(message) {
-  // First check the embed's Opened by field.
-
-  for (const embed of message.embeds || []) {
-    for (const field of embed.fields || []) {
+  for (
+    const embed of
+    message.embeds || []
+  ) {
+    for (
+      const field of
+      embed.fields || []
+    ) {
       if (
         /opened by|created by|ticket owner|ticket creator/i
-          .test(field.name || "")
+          .test(
+            field.name || ""
+          )
       ) {
         const id =
-          extractUserId(field.value);
+          extractUserId(
+            field.value
+          );
 
         if (id) {
           return id;
@@ -1304,76 +1457,72 @@ function ticketCreator(message) {
     const description =
       embed.description || "";
 
-    const opened = description.match(
-      /(?:opened by|created by|welcome|creator)\s*:?\s*<@!?(\d{17,20})>/i
-    );
+    const match =
+      description.match(
+        /(?:opened by|created by|welcome|creator)\s*:?\s*<@!?(\d{17,20})>/i
+      );
 
-    if (opened) {
-      return opened[1];
+    if (match) {
+      return match[1];
     }
   }
 
-  // New ticket messages begin with
-  // the buyer mention.
-
   const firstMention =
-    extractUserId(message.content);
+    extractUserId(
+      message.content
+    );
 
   if (firstMention) {
     return firstMention;
   }
 
-  // Older messages sometimes place the
-  // opener in the embed only.
-
-  for (const embed of message.embeds || []) {
-    const id =
-      extractUserId(embed.description);
-
-    if (id) {
-      return id;
-    }
-  }
-
   return null;
 }
 
-function validTicketWelcome(message, parsed, botId) {
+function validTicketWelcome(
+  message,
+  parsed,
+  botId
+) {
   if (
-    message.author.id !== botId ||
+    message.author.id !==
+      botId ||
     !ticketComponent(message)
   ) {
     return false;
   }
 
-  const expectedType =
-    TYPES[parsed.type].name;
-
-  const embedMatches =
-    message.embeds.some(embed => {
+  return message.embeds.some(
+    embed => {
       const title =
-        String(embed.title || "");
+        String(
+          embed.title || ""
+        ).toLowerCase();
 
       const footer =
-        String(embed.footer?.text || "");
+        String(
+          embed.footer?.text || ""
+        );
 
-      const normalizedTitle =
-        title.toLowerCase();
-
-      const normalizedType =
-        expectedType.toLowerCase();
+      const expectedType =
+        TYPES[parsed.type].name
+          .toLowerCase();
 
       const typeMatches =
-        normalizedTitle.includes(
-          normalizedType
+        title.includes(
+          expectedType
         ) ||
         (
           parsed.type === "cashout" &&
-          normalizedTitle.includes("cashout")
+          title.includes(
+            "cashout"
+          )
         );
 
       const numberMatch =
-        title.match(/#\s*0*(\d+)/);
+        title.match(
+          /#\s*0*(\d+)/
+        );
 
       const numberMatches =
         numberMatch &&
@@ -1381,23 +1530,24 @@ function validTicketWelcome(message, parsed, botId) {
           parsed.number;
 
       const brandMatches =
-        footer.includes(BRAND) ||
-        title.includes("Ticket") ||
-        title.includes("ticket");
+        footer.includes(BRAND);
 
       return Boolean(
         typeMatches &&
         numberMatches &&
         brandMatches
       );
-    });
-
-  return embedMatches;
+    }
+  );
 }
 
-async function recoverExistingTicket(channel) {
+async function recoverExistingTicket(
+  channel
+) {
   const parsed =
-    parseTicketName(channel.name);
+    parseTicketName(
+      channel.name
+    );
 
   if (!parsed) {
     return null;
@@ -1407,22 +1557,28 @@ async function recoverExistingTicket(channel) {
 
   let before;
 
-  // Search up to 1000 recent messages
-  // for the original bot welcome message.
-
-  for (let page = 0; page < 10; page++) {
+  for (
+    let page = 0;
+    page < 10;
+    page++
+  ) {
     const batch =
       await channel.messages.fetch({
         limit: 100,
 
-        ...(before ? { before } : {})
+        ...(before
+          ? { before }
+          : {})
       });
 
     if (!batch.size) {
       break;
     }
 
-    for (const message of batch.values()) {
+    for (
+      const message of
+      batch.values()
+    ) {
       if (
         validTicketWelcome(
           message,
@@ -1435,11 +1591,15 @@ async function recoverExistingTicket(channel) {
       }
     }
 
-    if (found || batch.size < 100) {
+    if (
+      found ||
+      batch.size < 100
+    ) {
       break;
     }
 
-    before = batch.last().id;
+    before =
+      batch.last().id;
   }
 
   if (!found) {
@@ -1449,49 +1609,52 @@ async function recoverExistingTicket(channel) {
   const ownerId =
     ticketCreator(found);
 
-  // Never guess the buyer.
-  // We need the real opener to avoid
-  // exposing private ticket messages.
-
   if (!ownerId) {
     return null;
   }
 
   const entry = {
     state: {
-      channelId: channel.id,
+      channelId:
+        channel.id,
 
       ownerId,
 
-      type: parsed.type,
+      type:
+        parsed.type,
 
-      number: parsed.number,
+      number:
+        parsed.number,
 
       status:
         parsed.closed
           ? "closed"
           : "open",
 
-      claimedBy: null,
+      claimedBy:
+        null,
 
       controlMessageId:
         found.id,
 
-      closeReason: "Done",
+      closeReason:
+        "Done",
 
-      transcriptUrl: null,
+      transcriptUrl:
+        null,
 
       createdAt:
         found.createdAt.toISOString()
     },
 
-    storageMessageId: null
+    storageMessageId:
+      null
   };
 
-  // Save recovered metadata
-  // permanently in the existing data channel.
-
-  await saveState(channel, entry);
+  await saveState(
+    channel,
+    entry
+  );
 
   if (channel.topic) {
     await channel.setTopic(null)
@@ -1499,7 +1662,7 @@ async function recoverExistingTicket(channel) {
   }
 
   console.log(
-    `[TICKETS] Recovered existing ticket ${channel.name}`
+    `[TICKETS] Recovered ${channel.name}`
   );
 
   return entry;
@@ -1518,39 +1681,53 @@ async function loadState(channel) {
     return null;
   }
 
-  await init(channel.guild);
+  await init(
+    channel.guild
+  );
 
-  const cached =
-    cache.get(channel.id);
+  const entry =
+    cache.get(
+      channel.id
+    );
 
-  if (cached) {
-    return cached;
+  if (entry) {
+    return entry;
   }
 
   const legacy =
-    parseLegacyTopic(channel);
+    parseLegacyTopic(
+      channel
+    );
 
   if (legacy) {
-    const entry = {
-      state: legacy,
-      storageMessageId: null
+    const recovered = {
+      state:
+        legacy,
+
+      storageMessageId:
+        null
     };
 
-    await saveState(channel, entry);
+    await saveState(
+      channel,
+      recovered
+    );
 
     if (channel.topic) {
       await channel.setTopic(null)
         .catch(() => {});
     }
 
-    return entry;
+    return recovered;
   }
 
-  return recoverExistingTicket(channel);
+  return recoverExistingTicket(
+    channel
+  );
 }
 
 // ==================================================
-// EXISTING OPEN TICKET
+// FIND EXISTING OPEN TICKET
 // ==================================================
 
 async function existingTicket(
@@ -1560,7 +1737,10 @@ async function existingTicket(
 ) {
   await init(guild);
 
-  for (const entry of cache.values()) {
+  for (
+    const entry of
+    cache.values()
+  ) {
     if (
       entry.state.ownerId !== userId ||
       entry.state.type !== type ||
@@ -1579,9 +1759,6 @@ async function existingTicket(
     }
   }
 
-  // Also recognize recoverable existing
-  // tickets that were missing metadata.
-
   await guild.channels.fetch();
 
   for (
@@ -1596,7 +1773,9 @@ async function existingTicket(
     }
 
     const parsed =
-      parseTicketName(channel.name);
+      parseTicketName(
+        channel.name
+      );
 
     if (
       !parsed ||
@@ -1606,18 +1785,21 @@ async function existingTicket(
       continue;
     }
 
-    if (cache.has(channel.id)) {
+    if (
+      cache.has(channel.id)
+    ) {
       continue;
     }
 
-    const entry =
-      await recoverExistingTicket(channel)
-        .catch(() => null);
+    const recovered =
+      await recoverExistingTicket(
+        channel
+      ).catch(() => null);
 
     if (
-      entry &&
-      entry.state.ownerId === userId &&
-      entry.state.status === "open"
+      recovered &&
+      recovered.state.ownerId === userId &&
+      recovered.state.status === "open"
     ) {
       return channel;
     }
@@ -1627,22 +1809,56 @@ async function existingTicket(
 }
 
 // ==================================================
-// PRIVATE TICKET PERMISSIONS
+// STRICT PRIVATE TICKET PERMISSIONS
+// ==================================================
+//
+// THIS IS THE SELLER CLAIM FIX.
+//
+// BEFORE CLAIM:
+// Seller and authorized staff roles may
+// see tickets.
+//
+// AFTER CLAIM:
+// Only these users have normal access:
+//
+// 1. Buyer who opened the ticket
+// 2. Exact seller who claimed the ticket
+// 3. Owner user ID
+//
+// Seller role is explicitly denied ViewChannel.
+//
+// The claiming seller is individually allowed.
+//
+// Discord member-specific ALLOW overwrites
+// take priority over role permission denies.
+//
+// Other staff role overwrites are removed.
+//
+// The bot always retains access.
+//
+// Administrators can still bypass permissions.
 // ==================================================
 
 const OPEN_PERMISSIONS = [
   PermissionFlagsBits.ViewChannel,
+
   PermissionFlagsBits.SendMessages,
+
   PermissionFlagsBits.ReadMessageHistory,
+
   PermissionFlagsBits.AttachFiles
 ];
 
 const READ_ONLY_PERMISSIONS = [
   PermissionFlagsBits.ViewChannel,
+
   PermissionFlagsBits.ReadMessageHistory
 ];
 
-function permissionEntry(id, closed) {
+function permissionEntry(
+  id,
+  closed
+) {
   return {
     id,
 
@@ -1655,6 +1871,7 @@ function permissionEntry(id, closed) {
       ? {
           deny: [
             PermissionFlagsBits.SendMessages,
+
             PermissionFlagsBits.AttachFiles
           ]
         }
@@ -1662,90 +1879,101 @@ function permissionEntry(id, closed) {
   };
 }
 
-function permissions(guild, state) {
+function permissions(
+  guild,
+  state
+) {
   const closed =
     state.status === "closed";
 
   const overwrites = [
+    // Hide from everybody by default.
+
     {
-      id: guild.roles.everyone.id,
+      id:
+        guild.roles.everyone.id,
 
       deny: [
         PermissionFlagsBits.ViewChannel
       ]
     },
 
+    // Bot permissions.
+
     {
-      id: guild.client.user.id,
+      id:
+        guild.client.user.id,
 
       allow: [
         ...OPEN_PERMISSIONS,
+
         PermissionFlagsBits.ManageChannels,
+
         PermissionFlagsBits.ManageMessages,
+
         PermissionFlagsBits.ManageRoles
       ]
     }
   ];
 
   // ==================================================
-  // UNCLAIMED TICKETS
+  // BEFORE CLAIM
   // ==================================================
 
   if (!state.claimedBy) {
     for (
       const id of
-      new Set(ACCESS[state.type] || [])
+      new Set(
+        ACCESS[state.type] || []
+      )
     ) {
       if (
-        guild.roles.cache.has(id)
+        guild.roles.cache.has(
+          id
+        )
       ) {
         overwrites.push(
-          permissionEntry(id, closed)
+          permissionEntry(
+            id,
+            closed
+          )
         );
       }
     }
   }
 
   // ==================================================
-  // CLAIMED TICKETS
-  // ==================================================
-  //
-  // CRITICAL:
-  //
-  // No seller role-wide access here.
-  //
-  // Instead:
-  // - Ticket Support role remains allowed
-  // - Buyer is explicitly allowed
-  // - Owner is explicitly allowed
-  // - Claimer is explicitly allowed
-  //
-  // Other sellers have no channel permission.
-  //
-  // We REMOVE the seller role overwrite,
-  // rather than adding an explicit deny.
-  //
-  // This avoids denying Ticket Support users
-  // who might also have the Seller role.
+  // AFTER CLAIM
   // ==================================================
 
   if (state.claimedBy) {
+    // Explicitly deny ViewChannel to
+    // the Seller role.
+
+    // The claiming seller will receive
+    // individual member permissions below.
+
     if (
       guild.roles.cache.has(
-        IDS.support
+        IDS.seller
       )
     ) {
-      overwrites.push(
-        permissionEntry(
-          IDS.support,
-          closed
-        )
-      );
+      overwrites.push({
+        id:
+          IDS.seller,
+
+        deny: [
+          PermissionFlagsBits.ViewChannel
+        ]
+      });
     }
+
+    // No support, mod or admin role-wide
+    // channel overwrites are added here.
   }
 
   // ==================================================
-  // BUYER ALWAYS RETAINS ACCESS
+  // BUYER ACCESS
   // ==================================================
 
   overwrites.push(
@@ -1756,11 +1984,12 @@ function permissions(guild, state) {
   );
 
   // ==================================================
-  // OWNER ALWAYS RETAINS ACCESS
+  // OWNER ACCESS
   // ==================================================
 
   if (
-    IDS.owner !== state.ownerId
+    IDS.owner !==
+    state.ownerId
   ) {
     overwrites.push(
       permissionEntry(
@@ -1771,7 +2000,7 @@ function permissions(guild, state) {
   }
 
   // ==================================================
-  // CLAIMING SELLER RETAINS ACCESS
+  // CLAIMING SELLER ACCESS
   // ==================================================
 
   if (
@@ -1790,17 +2019,27 @@ function permissions(guild, state) {
   return overwrites;
 }
 
+// ==================================================
+// APPLY STRICT PERMISSIONS
+// ==================================================
+
 async function applyPermissions(
   channel,
   state
 ) {
+  // Completely replace the old channel
+  // permission overwrites.
+
+  // This removes role-wide permissions
+  // belonging to other sellers and staff.
+
   await channel.permissionOverwrites.set(
     permissions(
       channel.guild,
       state
     ),
 
-    "Chuppys private ticket permissions"
+    "Chuppys strict private ticket permissions"
   );
 
   if (channel.topic) {
@@ -1813,7 +2052,10 @@ async function applyPermissions(
 // TICKET CATEGORY
 // ==================================================
 
-async function category(guild, type) {
+async function category(
+  guild,
+  type
+) {
   const envName =
     TYPES[type].categoryEnv;
 
@@ -1851,7 +2093,8 @@ async function category(guild, type) {
     ) ||
 
     guild.channels.create({
-      name: `chuppys-${type}`,
+      name:
+        `chuppys-${type}`,
 
       type:
         ChannelType.GuildCategory
@@ -1863,25 +2106,34 @@ async function category(guild, type) {
 // LOG HELPERS
 // ==================================================
 
-async function userInfo(guild, id) {
+async function userInfo(
+  guild,
+  id
+) {
   const user = id
-    ? await guild.client.users.fetch(id)
-        .catch(() => null)
+    ? await guild.client.users.fetch(
+        id
+      ).catch(() => null)
     : null;
 
   return {
-    id: id || "Unknown",
+    id:
+      id || "Unknown",
 
-    mention: id
-      ? `<@${id}>`
-      : "Unknown",
+    mention:
+      id
+        ? `<@${id}>`
+        : "Unknown",
 
     username:
       user?.username || "Unknown"
   };
 }
 
-function logTicketName(state, action) {
+function logTicketName(
+  state,
+  action
+) {
   return ticketName(
     state.type,
     state.number,
@@ -1894,11 +2146,16 @@ function logTicketName(state, action) {
   );
 }
 
-function personDetails(label, person) {
+function personDetails(
+  label,
+  person
+) {
   return (
     `**${label}:** ${person.mention}\n` +
+
     `**${label} Username:** ` +
     `@${safe(person.username, 100)}\n` +
+
     `**${label} ID:** ${person.id}`
   );
 }
@@ -1914,55 +2171,100 @@ async function logEmbed(
   action,
   reason
 ) {
-  const [creator, executor] =
-    await Promise.all([
-      userInfo(guild, state.ownerId),
-      userInfo(guild, executorId)
-    ]);
+  const [
+    creator,
+    executor
+  ] = await Promise.all([
+    userInfo(
+      guild,
+      state.ownerId
+    ),
+
+    userInfo(
+      guild,
+      executorId
+    )
+  ]);
 
   const titles = {
-    opened: "Ticket Created",
-    claimed: "Ticket Claimed",
-    closed: "Ticket Closed",
-    reopened: "Ticket Reopened",
-    deleted: "Ticket Deleted"
+    opened:
+      "Ticket Created",
+
+    claimed:
+      "Ticket Claimed",
+
+    closed:
+      "Ticket Closed",
+
+    reopened:
+      "Ticket Reopened",
+
+    deleted:
+      "Ticket Deleted"
   };
 
   const verbs = {
-    opened: "created",
-    claimed: "claimed",
-    closed: "closed",
-    reopened: "reopened",
-    deleted: "deleted"
+    opened:
+      "created",
+
+    claimed:
+      "claimed",
+
+    closed:
+      "closed",
+
+    reopened:
+      "reopened",
+
+    deleted:
+      "deleted"
   };
 
   const title =
-    titles[action] || "Ticket Updated";
+    titles[action] ||
+    "Ticket Updated";
 
   const verb =
-    verbs[action] || "updated";
+    verbs[action] ||
+    "updated";
 
   const name =
-    logTicketName(state, action);
+    logTicketName(
+      state,
+      action
+    );
 
   const informationTitle = {
-    opened: "Ticket Information",
-    claimed: "Claim Information",
-    closed: "Close Information",
-    reopened: "Reopen Information",
-    deleted: "Delete Information"
+    opened:
+      "Ticket Information",
+
+    claimed:
+      "Claim Information",
+
+    closed:
+      "Close Information",
+
+    reopened:
+      "Reopen Information",
+
+    deleted:
+      "Delete Information"
   }[action] || "Ticket Information";
 
   const infoLines = [
     `**Ticket Name:** ${safe(name, 100)}`,
+
     `**Ticket ID:** ${state.channelId}`
   ];
 
-  if (action === "opened") {
+  if (
+    action === "opened"
+  ) {
     infoLines.push(
       `**Created At:** ${
         discordStamp(
-          state.createdAt || Date.now()
+          state.createdAt ||
+          Date.now()
         )
       }`
     );
@@ -1974,7 +2276,10 @@ async function logEmbed(
   ) {
     infoLines.push(
       `**Reason:** ${
-        safe(reason || "Done", 450)
+        safe(
+          reason || "Done",
+          450
+        )
       }`
     );
   }
@@ -1988,43 +2293,58 @@ async function logEmbed(
     );
   }
 
-  const embed = new EmbedBuilder()
-    .setColor(LOG_COLOR)
-    .setTitle(title)
-    .setDescription(
-      `${executor.mention} ${verb} a ticket.`
-    )
-    .addFields({
-      name: informationTitle,
+  const embed =
+    new EmbedBuilder()
+      .setColor(
+        LOG_COLOR
+      )
+      .setTitle(
+        title
+      )
+      .setDescription(
+        `${executor.mention} ${verb} a ticket.`
+      )
+      .addFields({
+        name:
+          informationTitle,
+
+        value:
+          infoLines.join("\n"),
+
+        inline:
+          false
+      });
+
+  if (
+    action !== "opened"
+  ) {
+    embed.addFields({
+      name:
+        "Creator Information",
 
       value:
-        infoLines.join("\n"),
+        personDetails(
+          "Creator",
+          creator
+        ),
 
-      inline: false
-    });
-
-  if (action !== "opened") {
-    embed.addFields({
-      name: "Creator Information",
-
-      value: personDetails(
-        "Creator",
-        creator
-      ),
-
-      inline: false
+      inline:
+        false
     });
   }
 
   embed.addFields({
-    name: "Executor Information",
+    name:
+      "Executor Information",
 
-    value: personDetails(
-      "Executor",
-      executor
-    ),
+    value:
+      personDetails(
+        "Executor",
+        executor
+      ),
 
-    inline: false
+    inline:
+      false
   });
 
   return embed
@@ -2036,7 +2356,7 @@ async function logEmbed(
 }
 
 // ==================================================
-// SEND ACTIVITY LOG
+// SEND TICKET LOG
 // ==================================================
 
 async function sendLog(
@@ -2082,7 +2402,9 @@ async function sendLog(
     return await logChannel.send({
       content: "",
 
-      embeds: [embed],
+      embeds: [
+        embed
+      ],
 
       components,
 
@@ -2101,10 +2423,12 @@ async function sendLog(
 }
 
 // ==================================================
-// FETCH TRANSCRIPT MESSAGES
+// FETCH ALL TICKET MESSAGES
 // ==================================================
 
-async function allMessages(channel) {
+async function allMessages(
+  channel
+) {
   const result = [];
 
   let before;
@@ -2114,7 +2438,9 @@ async function allMessages(channel) {
       await channel.messages.fetch({
         limit: 100,
 
-        ...(before ? { before } : {})
+        ...(before
+          ? { before }
+          : {})
       });
 
     if (!batch.size) {
@@ -2125,11 +2451,14 @@ async function allMessages(channel) {
       ...batch.values()
     );
 
-    if (batch.size < 100) {
+    if (
+      batch.size < 100
+    ) {
       break;
     }
 
-    before = batch.last().id;
+    before =
+      batch.last().id;
   }
 
   return result.sort(
@@ -2148,120 +2477,135 @@ function transcriptHtml(
   state,
   messages
 ) {
-  const rows = messages.map(message => {
-    const author = html(
-      message.author?.username ||
-      "Unknown"
-    );
+  const rows =
+    messages.map(
+      message => {
+        const author =
+          html(
+            message.author?.username ||
+            "Unknown"
+          );
 
-    const id = html(
-      message.author?.id ||
-      "Unknown"
-    );
+        const id =
+          html(
+            message.author?.id ||
+            "Unknown"
+          );
 
-    const date = html(
-      new Date(
-        message.createdTimestamp
-      ).toLocaleString(
-        "en-US",
-        {
-          timeZone: "UTC",
-          timeZoneName: "short"
-        }
-      )
-    );
+        const date =
+          html(
+            new Date(
+              message.createdTimestamp
+            ).toLocaleString(
+              "en-US",
+              {
+                timeZone:
+                  "UTC",
 
-    const body = message.content
-      ? (
-          `<div class="body">` +
-          `${html(message.content)}` +
-          `</div>`
-        )
-      : "";
+                timeZoneName:
+                  "short"
+              }
+            )
+          );
 
-    const embeds = message.embeds
-      .map(embed => {
-        const fields = (
-          embed.fields || []
-        )
-          .map(field =>
-            `<p>` +
-            `<strong>${html(field.name)}</strong>` +
-            `<br>` +
-            `${html(field.value)}` +
-            `</p>`
+        const body =
+          message.content
+            ? (
+                `<div class="body">` +
+                `${html(message.content)}` +
+                `</div>`
+              )
+            : "";
+
+        const embeds =
+          message.embeds
+            .map(embed => {
+              const fields = (
+                embed.fields || []
+              )
+                .map(
+                  field =>
+                    `<p>` +
+                    `<strong>${html(field.name)}</strong>` +
+                    `<br>` +
+                    `${html(field.value)}` +
+                    `</p>`
+                )
+                .join("");
+
+              return (
+                `<div class="embed">` +
+
+                `<strong>` +
+                `${html(embed.title || "Embed")}` +
+                `</strong>` +
+
+                `<div class="body">` +
+                `${html(embed.description || "")}` +
+                `</div>` +
+
+                `${fields}` +
+
+                `</div>`
+              );
+            })
+            .join("");
+
+        const attachments = [
+          ...message.attachments.values()
+        ]
+          .map(
+            attachment => {
+              const url =
+                String(
+                  attachment.url || ""
+                );
+
+              if (
+                !/^https:\/\//i.test(url)
+              ) {
+                return "";
+              }
+
+              return (
+                `<div class="attachment">` +
+                `📎 ` +
+
+                `<a href="${html(url)}" ` +
+                `target="_blank" ` +
+                `rel="noopener noreferrer">` +
+
+                `${html(
+                  attachment.name ||
+                  "Attachment"
+                )}` +
+
+                `</a></div>`
+              );
+            }
           )
           .join("");
 
         return (
-          `<div class="embed">` +
+          `<article>` +
 
-          `<strong>` +
-          `${html(embed.title || "Embed")}` +
-          `</strong>` +
+          `<div class="author">` +
+          `${author} ` +
 
-          `<div class="body">` +
-          `${html(embed.description || "")}` +
+          `<small>` +
+          `${id} · ${date}` +
+          `</small>` +
+
           `</div>` +
 
-          `${fields}` +
+          `${body}` +
+          `${embeds}` +
+          `${attachments}` +
 
-          `</div>`
+          `</article>`
         );
-      })
-      .join("");
-
-    const attachments = [
-      ...message.attachments.values()
-    ]
-      .map(attachment => {
-        const url = String(
-          attachment.url || ""
-        );
-
-        if (
-          !/^https:\/\//i.test(url)
-        ) {
-          return "";
-        }
-
-        return (
-          `<div class="attachment">` +
-          `📎 ` +
-
-          `<a href="${html(url)}" ` +
-          `target="_blank" ` +
-          `rel="noopener noreferrer">` +
-
-          `${html(
-            attachment.name ||
-            "Attachment"
-          )}` +
-
-          `</a></div>`
-        );
-      })
-      .join("");
-
-    return (
-      `<article>` +
-
-      `<div class="author">` +
-      `${author} ` +
-
-      `<small>` +
-      `${id} · ${date}` +
-      `</small>` +
-
-      `</div>` +
-
-      `${body}` +
-      `${embeds}` +
-      `${attachments}` +
-
-      `</article>`
-    );
-  }).join("\n");
+      }
+    ).join("\n");
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -2373,7 +2717,9 @@ async function saveTranscript(
     );
 
   const messages =
-    await allMessages(channel);
+    await allMessages(
+      channel
+    );
 
   const document =
     transcriptHtml(
@@ -2405,7 +2751,8 @@ async function saveTranscript(
     new AttachmentBuilder(
       buffer,
       {
-        name: filename
+        name:
+          filename
       }
     );
 
@@ -2419,7 +2766,9 @@ async function saveTranscript(
         `Claimed By: ${state.claimedBy || "Nobody"}\n` +
         `Messages: ${messages.length}`,
 
-      files: [attachment],
+      files: [
+        attachment
+      ],
 
       allowedMentions: {
         parse: []
@@ -2427,7 +2776,8 @@ async function saveTranscript(
     });
 
   return {
-    url: message.url,
+    url:
+      message.url,
 
     messageCount:
       messages.length
@@ -2445,7 +2795,8 @@ function ticketForm(type) {
   const modal =
     new ModalBuilder()
       .setCustomId(
-        FORM_PREFIX + type
+        FORM_PREFIX +
+        type
       )
       .setTitle(
         `${settings.name} Ticket`
@@ -2461,13 +2812,20 @@ function ticketForm(type) {
                 `answer_${index}`
               )
               .setLabel(
-                question.slice(0, 45)
+                question.slice(
+                  0,
+                  45
+                )
               )
               .setStyle(
                 TextInputStyle.Short
               )
-              .setRequired(true)
-              .setMaxLength(250)
+              .setRequired(
+                true
+              )
+              .setMaxLength(
+                250
+              )
           )
       );
     }
@@ -2479,9 +2837,12 @@ function ticketForm(type) {
 function closeModal(id) {
   return new ModalBuilder()
     .setCustomId(
-      CLOSE_PREFIX + id
+      CLOSE_PREFIX +
+      id
     )
-    .setTitle("Close Ticket")
+    .setTitle(
+      "Close Ticket"
+    )
     .addComponents(
       new ActionRowBuilder()
         .addComponents(
@@ -2498,8 +2859,12 @@ function closeModal(id) {
             .setStyle(
               TextInputStyle.Paragraph
             )
-            .setRequired(false)
-            .setMaxLength(500)
+            .setRequired(
+              false
+            )
+            .setMaxLength(
+              500
+            )
         )
     );
 }
@@ -2535,8 +2900,11 @@ async function createTicket(
 
     if (already) {
       return {
-        channel: already,
-        existing: true
+        channel:
+          already,
+
+        existing:
+          true
       };
     }
 
@@ -2547,26 +2915,35 @@ async function createTicket(
       );
 
     const number =
-      await nextNumber(guild);
+      await nextNumber(
+        guild
+      );
 
     const state = {
-      channelId: null,
+      channelId:
+        null,
 
       ownerId:
         interaction.user.id,
 
       type,
+
       number,
 
-      status: "open",
+      status:
+        "open",
 
-      claimedBy: null,
+      claimedBy:
+        null,
 
-      controlMessageId: null,
+      controlMessageId:
+        null,
 
-      closeReason: "Done",
+      closeReason:
+        "Done",
 
-      transcriptUrl: null,
+      transcriptUrl:
+        null,
 
       createdAt:
         new Date().toISOString()
@@ -2586,7 +2963,8 @@ async function createTicket(
         parent:
           parent.id,
 
-        topic: null,
+        topic:
+          null,
 
         permissionOverwrites:
           permissions(
@@ -2595,8 +2973,7 @@ async function createTicket(
           ),
 
         reason:
-          `Ticket opened by ` +
-          interaction.user.id
+          `Ticket opened by ${interaction.user.id}`
       });
 
     state.channelId =
@@ -2605,7 +2982,8 @@ async function createTicket(
     const entry = {
       state,
 
-      storageMessageId: null
+      storageMessageId:
+        null
     };
 
     await saveState(
@@ -2631,7 +3009,9 @@ async function createTicket(
     const pingRoles =
       PINGS[type].filter(
         id =>
-          guild.roles.cache.has(id)
+          guild.roles.cache.has(
+            id
+          )
       );
 
     const welcome =
@@ -2640,7 +3020,8 @@ async function createTicket(
           `<@${interaction.user.id}>`,
 
           ...pingRoles.map(
-            id => `<@&${id}>`
+            id =>
+              `<@&${id}>`
           )
         ].join(" "),
 
@@ -2654,7 +3035,7 @@ async function createTicket(
 
             `${details}\n\n` +
 
-            "Please wait for our team to assist you."
+            "Our team will assist you as soon as possible."
           )
         ],
 
@@ -2690,20 +3071,24 @@ async function createTicket(
 
     return {
       channel,
-      existing: false
+
+      existing:
+        false
     };
   });
 }
 
 // ==================================================
-// UPDATE BUTTONS
+// UPDATE CONTROL BUTTONS
 // ==================================================
 
 async function updateControls(
   channel,
   state
 ) {
-  if (!state.controlMessageId) {
+  if (
+    !state.controlMessageId
+  ) {
     return;
   }
 
@@ -2725,6 +3110,24 @@ async function updateControls(
 // ==================================================
 // CLAIM TICKET
 // ==================================================
+//
+// IMPORTANT:
+//
+// Claimed ticket permissions are
+// REPLACED COMPLETELY.
+//
+// Only:
+// - Buyer
+// - Claiming seller
+// - Owner
+//
+// can normally view the claimed ticket.
+//
+// Existing claimed tickets can have
+// their privacy refreshed by the claimer
+// or owner using Claim again.
+//
+// ==================================================
 
 async function claim(
   context,
@@ -2735,7 +3138,10 @@ async function claim(
     entry.state;
 
   if (
-    !canClaim(context, state)
+    !canClaim(
+      context,
+      state
+    )
   ) {
     return reply(
       context,
@@ -2752,22 +3158,49 @@ async function claim(
     );
   }
 
-  if (state.claimedBy) {
+  // ==================================================
+  // ALREADY CLAIMED - REFRESH PRIVACY
+  // ==================================================
+
+  if (
+    state.claimedBy
+  ) {
+    if (
+      state.claimedBy ===
+        context.user.id ||
+      isOwner(context)
+    ) {
+      await applyPermissions(
+        channel,
+        state
+      );
+
+      await saveState(
+        channel,
+        entry
+      );
+
+      return reply(
+        context,
+
+        "Ticket privacy refreshed successfully!\n\n" +
+
+        "Only the buyer, claiming seller, " +
+        "and owner have normal access."
+      );
+    }
+
     return reply(
       context,
 
-      state.claimedBy ===
-        context.user.id
-        ? "You already claimed this ticket."
-        : (
-            "This ticket is already claimed by " +
-            `<@${state.claimedBy}>.`
-          )
+      "This ticket is already claimed by " +
+      `<@${state.claimedBy}>.`
     );
   }
 
-  // Save the previous state in memory
-  // in case permissions fail.
+  // ==================================================
+  // NEW CLAIM
+  // ==================================================
 
   const oldClaimer =
     state.claimedBy;
@@ -2776,10 +3209,8 @@ async function claim(
     context.user.id;
 
   try {
-    // Update Discord permissions FIRST.
-    //
-    // Other sellers immediately lose
-    // role-wide channel access.
+    // Immediately replace all old
+    // channel permissions.
 
     await applyPermissions(
       channel,
@@ -2792,24 +3223,30 @@ async function claim(
     throw error;
   }
 
+  // Persist claimer permanently.
+
   await saveState(
     channel,
     entry
   );
+
+  // ==================================================
+  // CLAIM CONFIRMATION
+  // ==================================================
 
   await channel.send({
     embeds: [
       ticketEmbed(
         `${EMOJI} Ticket Claimed`,
 
-        `This ticket has been claimed by ` +
-        `<@${context.user.id}>.\n\n` +
+        `Claimed by <@${context.user.id}>.\n\n` +
 
-        "**Private Ticket Access**\n" +
+        "**Private Ticket Access**\n\n" +
 
-        "• Ticket creator\n" +
-        "• Seller who claimed\n" +
-        "• Ticket Support\n" +
+        "• Buyer who opened the ticket\n" +
+
+        "• Seller who claimed the ticket\n" +
+
         "• Server Owner\n\n" +
 
         "Other sellers can no longer view this ticket."
@@ -2830,8 +3267,11 @@ async function claim(
 
   return reply(
     context,
-    "Ticket claimed successfully! " +
-    "Other sellers can no longer view this ticket."
+
+    "Ticket claimed successfully!\n\n" +
+
+    "Other sellers have been removed " +
+    "from this ticket's access permissions."
   );
 }
 
@@ -2858,16 +3298,16 @@ async function close(
   }
 
   if (
-    !canManage(context, state)
+    !canManage(
+      context,
+      state
+    )
   ) {
     return reply(
       context,
       "You cannot close this ticket."
     );
   }
-
-  // Save transcript before locking
-  // the ticket.
 
   const transcript =
     await saveTranscript(
@@ -2884,6 +3324,9 @@ async function close(
 
   state.transcriptUrl =
     transcript.url;
+
+  // Claimed ticket privacy remains
+  // enforced after closing.
 
   await applyPermissions(
     channel,
@@ -2915,8 +3358,12 @@ async function close(
 
         `Closed by <@${context.user.id}>.\n\n` +
 
-        `**Reason:** ` +
-        `${safe(state.closeReason, 450)}\n\n` +
+        `**Reason:** ${
+          safe(
+            state.closeReason,
+            450
+          )
+        }\n\n` +
 
         "This ticket is now closed.\n\n" +
 
@@ -2946,9 +3393,12 @@ async function close(
 
   return reply(
     context,
+
     "Ticket closed successfully. " +
+
     "HTML transcript saved. " +
-    "Use ,delete to delete this ticket."
+
+    "Use ,delete to delete the closed ticket."
   );
 }
 
@@ -2965,7 +3415,10 @@ async function reopen(
     entry.state;
 
   if (
-    !canManage(context, state)
+    !canManage(
+      context,
+      state
+    )
   ) {
     return reply(
       context,
@@ -2985,8 +3438,8 @@ async function reopen(
   state.status =
     "open";
 
-  // Claimed tickets remain claimed.
-  // Their private permissions are preserved.
+  // Private claimer access is preserved
+  // when the ticket is reopened.
 
   await applyPermissions(
     channel,
@@ -3050,7 +3503,10 @@ async function removeTicket(
     entry.state;
 
   if (
-    !canDelete(context, state)
+    !canDelete(
+      context,
+      state
+    )
   ) {
     return reply(
       context,
@@ -3067,8 +3523,6 @@ async function removeTicket(
     );
   }
 
-  // Save a final transcript.
-
   const transcript =
     await saveTranscript(
       channel,
@@ -3082,8 +3536,6 @@ async function removeTicket(
     channel,
     entry
   );
-
-  // Log deletion BEFORE deleting channel.
 
   await sendLog(
     channel.guild,
@@ -3115,7 +3567,7 @@ async function removeTicket(
 }
 
 // ==================================================
-// PANEL COMMAND
+// PANEL SLASH COMMAND
 // ==================================================
 
 async function panel(interaction) {
@@ -3128,7 +3580,7 @@ async function panel(interaction) {
   ) {
     return reply(
       interaction,
-      "You need Manage Server permission."
+      "You need Manage Server permission to update the panel."
     );
   }
 
@@ -3178,15 +3630,11 @@ async function panel(interaction) {
   return reply(
     interaction,
 
-    `Ticket panel ` +
-
-    `${
+    `Ticket panel ${
       existing
         ? "updated"
         : "posted"
-    }` +
-
-    ` in <#${IDS.panel}>.`
+    } in <#${IDS.panel}>.`
   );
 }
 
@@ -3200,7 +3648,9 @@ async function select(interaction) {
       interaction.values[0] || ""
     ).toLowerCase();
 
-  if (!TYPES[type]) {
+  if (
+    !TYPES[type]
+  ) {
     return reply(
       interaction,
       "Please select a valid category."
@@ -3242,7 +3692,7 @@ async function select(interaction) {
 }
 
 // ==================================================
-// PURCHASE / CASHOUT FORM
+// PURCHASE AND CASHOUT FORMS
 // ==================================================
 
 async function form(interaction) {
@@ -3337,7 +3787,7 @@ function actionFor(customId) {
 }
 
 // ==================================================
-// BUTTON ACTION HANDLER
+// BUTTON HANDLER
 // ==================================================
 
 async function action(
@@ -3349,6 +3799,7 @@ async function action(
   ) {
     return reply(
       interaction,
+
       "Only authorized ticket staff can manage tickets."
     );
   }
@@ -3357,20 +3808,28 @@ async function action(
     interaction.channel;
 
   const entry =
-    await loadState(channel);
+    await loadState(
+      channel
+    );
 
   if (!entry) {
     return reply(
       interaction,
+
       "This is not a recognized Chuppys ticket. " +
-      "The original welcome message or ticket data " +
-      "could not be verified."
+
+      "The original ticket welcome message " +
+
+      "or saved metadata could not be verified."
     );
   }
 
   if (
     name === "claim" &&
-    !canClaim(interaction, entry.state)
+    !canClaim(
+      interaction,
+      entry.state
+    )
   ) {
     return reply(
       interaction,
@@ -3380,15 +3839,21 @@ async function action(
 
   if (
     name !== "claim" &&
-    !canManage(interaction, entry.state)
+    !canManage(
+      interaction,
+      entry.state
+    )
   ) {
     return reply(
       interaction,
 
-      "Only the claimer, Ticket Support, " +
-      "or owner can manage this claimed ticket."
+      "Only the claimer or owner can manage " +
+
+      "this claimed ticket."
     );
   }
+
+  // Close button shows a reason modal.
 
   if (
     name === "close"
@@ -3403,7 +3868,9 @@ async function action(
     }
 
     return interaction.showModal(
-      closeModal(channel.id)
+      closeModal(
+        channel.id
+      )
     );
   }
 
@@ -3413,7 +3880,9 @@ async function action(
 
   return queued(async () => {
     const latest =
-      await loadState(channel);
+      await loadState(
+        channel
+      );
 
     if (!latest) {
       return reply(
@@ -3440,6 +3909,7 @@ async function action(
     ) {
       return reply(
         interaction,
+
         "You cannot manage this claimed ticket."
       );
     }
@@ -3488,6 +3958,7 @@ async function closeForm(
   ) {
     return reply(
       interaction,
+
       "This close form belongs to another ticket."
     );
   }
@@ -3514,6 +3985,7 @@ async function closeForm(
     if (!entry) {
       return reply(
         interaction,
+
         "Ticket data could not be found."
       );
     }
@@ -3526,6 +3998,7 @@ async function closeForm(
     ) {
       return reply(
         interaction,
+
         "You cannot close this claimed ticket."
       );
     }
@@ -3548,9 +4021,12 @@ async function closeForm(
 // ,close reason here
 // ,reopen
 // ,delete
+//
 // ==================================================
 
-async function handlePrefixCommand(message) {
+async function handlePrefixCommand(
+  message
+) {
   if (
     !message.guild ||
     message.author.bot ||
@@ -3576,7 +4052,10 @@ async function handlePrefixCommand(message) {
   const name = (
     space === -1
       ? raw
-      : raw.slice(0, space)
+      : raw.slice(
+          0,
+          space
+        )
   ).toLowerCase();
 
   const supported = [
@@ -3595,10 +4074,14 @@ async function handlePrefixCommand(message) {
   const suppliedReason =
     space === -1
       ? ""
-      : raw.slice(space).trim();
+      : raw.slice(
+          space
+        ).trim();
 
   const context =
-    messageContext(message);
+    messageContext(
+      message
+    );
 
   if (
     !isManager(context)
@@ -3622,12 +4105,16 @@ async function handlePrefixCommand(message) {
 
   return queued(async () => {
     const entry =
-      await loadState(channel);
+      await loadState(
+        channel
+      );
 
     if (!entry) {
       return context.reply(
         "This is not a recognized Chuppys ticket. " +
+
         "The original ticket welcome message " +
+
         "or saved metadata could not be verified."
       );
     }
@@ -3643,7 +4130,10 @@ async function handlePrefixCommand(message) {
       name === "claim"
     ) {
       if (
-        !canClaim(context, state)
+        !canClaim(
+          context,
+          state
+        )
       ) {
         return context.reply(
           "You cannot claim this ticket."
@@ -3658,15 +4148,19 @@ async function handlePrefixCommand(message) {
     }
 
     // ==============================================
-    // CHECK CLAIMED ACCESS
+    // CHECK CLAIM PERMISSIONS
     // ==============================================
 
     if (
-      !canManage(context, state)
+      !canManage(
+        context,
+        state
+      )
     ) {
       return context.reply(
-        "Only the seller who claimed this ticket, " +
-        "Ticket Support, or the owner can manage it."
+        "Only the seller who claimed this ticket " +
+
+        "or the owner can manage it."
       );
     }
 
@@ -3682,13 +4176,17 @@ async function handlePrefixCommand(message) {
       ) {
         return context.reply(
           "This ticket is already closed. " +
+
           "Use ,delete to delete it."
         );
       }
 
       const reason =
         suppliedReason
-          ? suppliedReason.slice(0, 500)
+          ? suppliedReason.slice(
+              0,
+              500
+            )
           : "No further action required.";
 
       return close(
@@ -3725,6 +4223,7 @@ async function handlePrefixCommand(message) {
       ) {
         return context.reply(
           "You must close this ticket first.\n\n" +
+
           "Use ,close before using ,delete."
         );
       }
@@ -3751,18 +4250,22 @@ async function oldTranscript(
   ) {
     return reply(
       interaction,
+
       "Transcript buttons only work in ticket logs."
     );
   }
 
   const allowed =
     isOwner(interaction) ||
+
     isAdmin(interaction) ||
+
     isSupport(interaction);
 
   if (!allowed) {
     return reply(
       interaction,
+
       "Only authorized ticket staff can access transcripts."
     );
   }
@@ -3775,8 +4278,13 @@ async function oldTranscript(
         ) &&
 
         (
-          item.name.endsWith(".txt") ||
-          item.name.endsWith(".html")
+          item.name.endsWith(
+            ".txt"
+          ) ||
+
+          item.name.endsWith(
+            ".html"
+          )
         )
     );
 
@@ -3790,7 +4298,9 @@ async function oldTranscript(
         )
       : (
           "This older transcript button has " +
+
           "no attached transcript. " +
+
           "Check the original log message."
         )
   );
@@ -3814,65 +4324,67 @@ function setupTickets(client) {
   // READY
   // ================================================
 
-  const onReady = async () => {
-    try {
-      if (
-        !process.env.DISCORD_GUILD_ID
-      ) {
-        throw new Error(
-          "DISCORD_GUILD_ID is missing."
+  const onReady =
+    async () => {
+      try {
+        if (
+          !process.env.DISCORD_GUILD_ID
+        ) {
+          throw new Error(
+            "DISCORD_GUILD_ID is missing."
+          );
+        }
+
+        const guild =
+          await client.guilds.fetch(
+            process.env.DISCORD_GUILD_ID
+          );
+
+        await init(
+          guild
+        );
+
+        console.log(
+          "[TICKETS] Chuppys ticket system ready."
+        );
+
+        console.log(
+          `[TICKETS] Next ticket: #${globalCounter + 1}`
+        );
+
+        console.log(
+          `[TICKETS] Seller role: ${IDS.seller}`
+        );
+
+        console.log(
+          `[TICKETS] Owner: ${IDS.owner}`
+        );
+
+        console.log(
+          "[TICKETS] Claimed tickets: buyer + claimer + owner."
+        );
+
+        console.log(
+          "[TICKETS] Commands: ,claim, ,close, ,reopen, ,delete"
+        );
+      } catch (error) {
+        console.error(
+          "[TICKETS] Initialization failed:",
+          error
         );
       }
-
-      const guild =
-        await client.guilds.fetch(
-          process.env.DISCORD_GUILD_ID
-        );
-
-      await init(guild);
-
-      console.log(
-        "[TICKETS] Chuppys ticket system ready."
-      );
-
-      console.log(
-        `[TICKETS] Next ticket: #${globalCounter + 1}`
-      );
-
-      console.log(
-        `[TICKETS] Seller role: ${IDS.seller}`
-      );
-
-      console.log(
-        `[TICKETS] Support role: ${IDS.support}`
-      );
-
-      console.log(
-        `[TICKETS] Owner: ${IDS.owner}`
-      );
-
-      console.log(
-        "[TICKETS] Commands: " +
-        ",claim, ,close, ,reopen, ,delete"
-      );
-    } catch (error) {
-      console.error(
-        "[TICKETS] Initialization failed:",
-        error
-      );
-    }
-  };
+    };
 
   client.once(
     Events.ClientReady,
     onReady
   );
 
-  // Support installation after client
-  // has already become ready.
-
-  if (client.isReady()) {
-    onReady().catch(console.error);
+  if (
+    client.isReady()
+  ) {
+    onReady()
+      .catch(console.error);
   }
 
   // ================================================
@@ -3900,6 +4412,7 @@ function setupTickets(client) {
           await message.channel.send({
             content:
               "Ticket error: " +
+
               safe(
                 error.message,
                 900
@@ -3980,29 +4493,38 @@ function setupTickets(client) {
         ) {
           return reply(
             interaction,
+
             "Tickets only work inside the server."
           );
         }
 
-        if (isPanel) {
+        if (
+          isPanel
+        ) {
           return await panel(
             interaction
           );
         }
 
-        if (isSelect) {
+        if (
+          isSelect
+        ) {
           return await select(
             interaction
           );
         }
 
-        if (isForm) {
+        if (
+          isForm
+        ) {
           return await form(
             interaction
           );
         }
 
-        if (isClose) {
+        if (
+          isClose
+        ) {
           return await closeForm(
             interaction
           );
@@ -4016,7 +4538,9 @@ function setupTickets(client) {
           );
         }
 
-        if (buttonAction) {
+        if (
+          buttonAction
+        ) {
           return await action(
             interaction,
             buttonAction
@@ -4032,6 +4556,7 @@ function setupTickets(client) {
           interaction,
 
           "Ticket error: " +
+
           safe(
             error.message,
             900
