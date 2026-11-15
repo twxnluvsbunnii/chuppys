@@ -22,9 +22,10 @@
 // - Purchase tickets
 // - Cashout tickets
 // - Giveaway tickets
-// - Partnership tickets
+// - Partnership tickets WITH 2 QUESTIONS
 // - Support tickets without a modal
 // - ONLY role 1550322075208646766 qualifies as Seller
+// - All 11 seller user IDs included
 // - Other sellers lose access after a claim
 // - Individual seller who claimed keeps access
 // - Buyer, Owner and Mod retain access
@@ -38,6 +39,7 @@
 // - Existing categories, no duplicates
 // - Single handler installation
 // - Duplicate event protection
+// - Seller privacy verification
 //
 // IMPORTANT:
 // - Enable Message Content Intent
@@ -84,6 +86,34 @@ const IDS = Object.freeze({
   // THE ONLY SELLER ROLE
   seller: "1550322075208646766"
 });
+
+// ============================================================
+// ALL 11 SELLER USER IDS
+// ============================================================
+//
+// These are USER IDs, not role IDs.
+//
+// A member still needs the Seller role
+// to claim Purchase or Cashout tickets.
+//
+// These IDs help the bot remove individual
+// sellers from claimed tickets.
+//
+// ============================================================
+
+const SELLER_USER_IDS = new Set([
+  "1192248188409749684", // Services Seller
+  "1079241163455873074",
+  "1032693136163622993",
+  "1320199904219496530",
+  "952566845939023892",
+  "1473335012769267807",
+  "1472856287527309313",
+  "1269188505935024141",
+  "1427118849215692920",
+  "1328450205774909441",
+  "1475237851414401105"
+]);
 
 // ============================================================
 // SETTINGS
@@ -224,7 +254,13 @@ const TYPES = Object.freeze({
     ],
 
     description:
-      "Please explain your partnership request."
+      "Please provide your partnership details.",
+
+    // Partnership questions requested.
+    questions: [
+      "How many vouches?",
+      "How many server members?"
+    ]
   },
 
   support: {
@@ -456,6 +492,13 @@ function isSeller(member) {
   );
 }
 
+function isTradingTicket(state) {
+  return (
+    state.type === "purchase" ||
+    state.type === "cashout"
+  );
+}
+
 // ============================================================
 // CLAIM AUTHORIZATION
 // ============================================================
@@ -486,8 +529,7 @@ function canClaim(member, state) {
   }
 
   if (
-    state.type === "purchase" ||
-    state.type === "cashout"
+    isTradingTicket(state)
   ) {
     return isSeller(member);
   }
@@ -941,7 +983,9 @@ async function init(guild) {
               storageMessageId:
                 inData
                   ? message.id
-                  : null
+                  : null,
+
+              recovered: false
             }
           );
         }
@@ -1675,26 +1719,51 @@ const READ_ONLY_PERMISSIONS = [
   PermissionFlagsBits.ReadMessageHistory
 ];
 
+const HIDDEN_PERMISSIONS = [
+  PermissionFlagsBits.ViewChannel,
+  PermissionFlagsBits.SendMessages,
+  PermissionFlagsBits.ReadMessageHistory,
+  PermissionFlagsBits.AttachFiles
+];
+
 // ============================================================
 // ROLE AND MEMBER OVERWRITES
 // ============================================================
 //
-// Important:
+// FIXED SELLER CLAIMING SYSTEM
 //
-// The claimant remains a member of
-// the Seller role.
+// BEFORE CLAIM:
 //
-// Before claim:
-// Seller role receives ViewChannel.
+// - All sellers can view Purchase/Cashout
+// - Buyer can view
+// - Owner can view
+// - Mod can view
 //
-// After claim:
-// Seller role no longer receives ViewChannel.
+// AFTER CLAIM:
 //
-// The exact claiming user's ID receives
-// an individual member-specific allow.
+// - The claiming seller can view
+// - Buyer can view
+// - Owner can view
+// - Mod can view
+// - Other listed sellers are individually denied
+// - Other staff role access is removed
 //
-// This lets that seller stay in the ticket
-// without allowing other sellers in.
+// WHY THIS WORKS:
+//
+// Discord may allow a seller access through
+// a second role or another channel overwrite.
+//
+// Instead of relying only on removing the
+// Seller role's allow, we also add individual
+// permission denies for the other sellers.
+//
+// Individual member denies take precedence
+// over role permissions.
+//
+// We do NOT deny Owner/Mod members.
+//
+// Administrator permissions cannot be denied
+// through ticket channel overwrites.
 //
 // ============================================================
 
@@ -1723,9 +1792,58 @@ function permissionEntry(
   };
 }
 
-function permissions(guild, state) {
+// ============================================================
+// FETCH SELLER MEMBERS
+// ============================================================
+//
+// Fetch the current member roles so the bot
+// does not accidentally deny Owners or Mods.
+//
+// ============================================================
+
+async function fetchListedSellers(guild) {
+  const members = new Map();
+
+  for (const id of SELLER_USER_IDS) {
+    try {
+      const member =
+        await guild.members.fetch({
+          user: id,
+          force: true
+        });
+
+      members.set(
+        id,
+        member
+      );
+    } catch (error) {
+      // Unknown or departed members do not
+      // need a permission overwrite.
+      //
+      // Do not silently ignore other errors.
+      if (
+        error?.code === 10007 ||
+        error?.rawError?.code === 10007
+      ) {
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  return members;
+}
+
+// ============================================================
+// BUILD TICKET PERMISSIONS
+// ============================================================
+
+async function permissions(guild, state) {
   const closed =
     state.status === "closed";
+
+  await guild.roles.fetch();
 
   const role = id =>
     permissionEntry(
@@ -1826,8 +1944,7 @@ function permissions(guild, state) {
 
   if (!state.claimedBy) {
     const staffRoles =
-      state.type === "purchase" ||
-      state.type === "cashout"
+      isTradingTicket(state)
         ? [
             IDS.seller,
             IDS.support,
@@ -1851,37 +1968,288 @@ function permissions(guild, state) {
   }
 
   // ==========================================================
-  // AFTER CLAIM
+  // AFTER CLAIM: REMOVE OTHER SELLERS
   // ==========================================================
   //
-  // Nothing here grants the Seller role
-  // access to a claimed ticket.
+  // We do not give the Seller role a
+  // ViewChannel allow after a claim.
   //
-  // This removes access for other sellers,
-  // while the individual claimer is allowed
-  // below.
+  // Individual denies are added for
+  // each supplied seller user ID.
   //
-  // We intentionally do not add a
-  // Seller-role deny, so a member with
-  // Seller + Mod can still use Mod access.
+  // This blocks ordinary additional
+  // staff role permissions as well.
   //
   // ==========================================================
 
-  // Ticket creator.
+  if (
+    state.claimedBy &&
+    isTradingTicket(state)
+  ) {
+    const listedMembers =
+      await fetchListedSellers(guild);
+
+    for (
+      const [id, sellerMember] of
+      listedMembers
+    ) {
+      // Never block the claimer.
+      if (
+        id === state.claimedBy
+      ) {
+        continue;
+      }
+
+      // Never block the ticket creator.
+      if (
+        id === state.ownerId
+      ) {
+        continue;
+      }
+
+      // Never block the configured owner
+      // or actual server owner.
+      if (
+        id === IDS.owner ||
+        id === guild.ownerId
+      ) {
+        continue;
+      }
+
+      // Keep Owner and Mod access.
+      if (
+        isOwner(sellerMember) ||
+        isMod(sellerMember)
+      ) {
+        continue;
+      }
+
+      // Explicit member-level DENY.
+      //
+      // This wins over channel role
+      // allows from ordinary roles.
+      add({
+        id,
+
+        type:
+          OverwriteType.Member,
+
+        deny:
+          HIDDEN_PERMISSIONS
+      });
+    }
+  }
+
+  // ==========================================================
+  // TICKET CREATOR ALWAYS ALLOWED
+  // ==========================================================
+
   add(
     member(state.ownerId)
   );
 
-  // Individual claiming seller.
+  // ==========================================================
+  // EXACT CLAIMING MEMBER ALLOWED
+  // ==========================================================
+
   if (state.claimedBy) {
     add(
       member(state.claimedBy)
     );
   }
 
+  // ==========================================================
+  // CHANNEL OVERWRITE LIMIT
+  // ==========================================================
+
+  if (
+    result.size > 100
+  ) {
+    throw new Error(
+      "Discord allows a maximum of 100 " +
+      "permission overwrites per channel."
+    );
+  }
+
   return [
     ...result.values()
   ];
+}
+
+// ============================================================
+// VERIFY CLAIMED TICKET PRIVACY
+// ============================================================
+//
+// After overwrites are applied:
+//
+// - Confirm the claimer has ViewChannel
+// - Check each other listed seller
+// - Warn about Administrator bypasses
+// - Report unexpected visibility
+//
+// The log is private to Render.
+//
+// ============================================================
+
+async function verifyClaimPrivacy(
+  channel,
+  state
+) {
+  if (
+    !state.claimedBy ||
+    !isTradingTicket(state)
+  ) {
+    return;
+  }
+
+  const guild =
+    channel.guild;
+
+  const fresh =
+    await guild.channels.fetch(
+      channel.id,
+      {
+        force: true
+      }
+    );
+
+  if (!fresh) {
+    throw new Error(
+      "Could not verify ticket channel permissions."
+    );
+  }
+
+  // ==========================================================
+  // VERIFY CLAIMING SELLER
+  // ==========================================================
+
+  const claimer =
+    await guild.members.fetch({
+      user: state.claimedBy,
+      force: true
+    });
+
+  const claimerCanView =
+    fresh.permissionsFor(
+      claimer
+    )?.has(
+      PermissionFlagsBits.ViewChannel
+    );
+
+  if (!claimerCanView) {
+    throw new Error(
+      "Ticket privacy error: The claiming " +
+      "seller does not have ViewChannel."
+    );
+  }
+
+  // ==========================================================
+  // VERIFY TICKET CREATOR
+  // ==========================================================
+
+  const buyer =
+    await guild.members.fetch({
+      user: state.ownerId,
+      force: true
+    }).catch(() => null);
+
+  if (
+    buyer &&
+    !fresh.permissionsFor(buyer)?.has(
+      PermissionFlagsBits.ViewChannel
+    )
+  ) {
+    throw new Error(
+      "Ticket privacy error: The ticket " +
+      "creator lost channel access."
+    );
+  }
+
+  // ==========================================================
+  // VERIFY OTHER SELLERS
+  // ==========================================================
+
+  const visibleSellers = [];
+  const administratorSellers = [];
+
+  const listedMembers =
+    await fetchListedSellers(guild);
+
+  for (
+    const [id, sellerMember] of
+    listedMembers
+  ) {
+    // Allowed exceptions.
+    if (
+      id === state.claimedBy ||
+      id === state.ownerId ||
+      id === IDS.owner ||
+      id === guild.ownerId
+    ) {
+      continue;
+    }
+
+    if (
+      isOwner(sellerMember) ||
+      isMod(sellerMember)
+    ) {
+      continue;
+    }
+
+    // Discord Administrator bypass.
+    if (
+      sellerMember.permissions.has(
+        PermissionFlagsBits.Administrator
+      )
+    ) {
+      administratorSellers.push(id);
+
+      continue;
+    }
+
+    const canView =
+      fresh.permissionsFor(
+        sellerMember
+      )?.has(
+        PermissionFlagsBits.ViewChannel
+      );
+
+    if (canView) {
+      visibleSellers.push(id);
+    }
+  }
+
+  if (
+    administratorSellers.length
+  ) {
+    console.warn(
+      `[TICKETS] Administrator sellers can ` +
+      `still see ticket ${channel.id}: ` +
+      administratorSellers.join(", ")
+    );
+  }
+
+  if (
+    visibleSellers.length
+  ) {
+    console.error(
+      `[TICKETS] PRIVACY FAILURE in ` +
+      `${channel.name}. Sellers still ` +
+      `have ViewChannel: ` +
+      visibleSellers.join(", ")
+    );
+
+    throw new Error(
+      "Claim privacy check failed. " +
+      "Other sellers can still view the ticket. " +
+      "Check Render logs for their user IDs."
+    );
+  }
+
+  console.log(
+    `[TICKETS] Claim privacy verified: ` +
+    `${channel.name}, claimer ${state.claimedBy}`
+  );
 }
 
 // ============================================================
@@ -1893,18 +2261,30 @@ async function applyPermissions(
   state
 ) {
   const overwrites =
-    permissions(
+    await permissions(
       channel.guild,
       state
     );
 
-  // Replaces all existing overwrites.
-  // Removes role-wide Seller access
-  // after a ticket is claimed.
+  // Replaces all existing overwrites,
+  // including old Seller-role permissions
+  // and outdated individual permissions.
   await channel.permissionOverwrites.set(
     overwrites,
     "Chuppys private ticket permissions"
   );
+
+  // Verify the permissions immediately
+  // after changing a claimed ticket.
+  if (
+    state.claimedBy &&
+    isTradingTicket(state)
+  ) {
+    await verifyClaimPrivacy(
+      channel,
+      state
+    );
+  }
 
   if (channel.topic) {
     await channel.setTopic(null)
@@ -2330,7 +2710,16 @@ async function saveTranscript(
 }
 
 // ============================================================
-// PURCHASE / CASHOUT FORM
+// PURCHASE / CASHOUT / PARTNERSHIP FORM
+// ============================================================
+//
+// Purchase: 4 questions
+// Cashout: 4 questions
+// Partnership: 2 questions
+//
+// Partnership proof is uploaded inside
+// the ticket after the form is submitted.
+//
 // ============================================================
 
 function ticketForm(type) {
@@ -2348,24 +2737,36 @@ function ticketForm(type) {
 
   config.questions.forEach(
     (question, index) => {
+      const input =
+        new TextInputBuilder()
+          .setCustomId(
+            `answer_${index}`
+          )
+          .setLabel(
+            question.slice(
+              0,
+              45
+            )
+          )
+          .setStyle(
+            TextInputStyle.Short
+          )
+          .setRequired(true)
+          .setMaxLength(250);
+
+      if (
+        type === "partnership" &&
+        index === 0
+      ) {
+        input.setPlaceholder(
+          "Enter amount; upload proof in ticket"
+        );
+      }
+
       modal.addComponents(
         new ActionRowBuilder()
           .addComponents(
-            new TextInputBuilder()
-              .setCustomId(
-                `answer_${index}`
-              )
-              .setLabel(
-                question.slice(
-                  0,
-                  45
-                )
-              )
-              .setStyle(
-                TextInputStyle.Short
-              )
-              .setRequired(true)
-              .setMaxLength(250)
+            input
           )
       );
     }
@@ -2480,6 +2881,10 @@ async function createTicket(
         new Date().toISOString()
     };
 
+    // ========================================================
+    // CREATE PRIVATE CHANNEL
+    // ========================================================
+
     const channel =
       await guild.channels.create({
         name:
@@ -2497,8 +2902,10 @@ async function createTicket(
         topic:
           null,
 
+        // Updated permissions() is async,
+        // so await it before creation.
         permissionOverwrites:
-          permissions(
+          await permissions(
             guild,
             state
           ),
@@ -2525,6 +2932,10 @@ async function createTicket(
       entry
     );
 
+    // ========================================================
+    // DISPLAY ANSWERS
+    // ========================================================
+
     const details =
       config.questions?.length &&
       answers.length
@@ -2540,6 +2951,22 @@ async function createTicket(
             .join("\n\n")
         : config.description;
 
+    // ========================================================
+    // PARTNERSHIP PROOF INSTRUCTION
+    // ========================================================
+
+    const proofInstruction =
+      type === "partnership"
+        ? (
+            "\n\n**Please show us proof " +
+            "of your vouches in this ticket!**"
+          )
+        : "";
+
+    // ========================================================
+    // STAFF PINGS
+    // ========================================================
+
     const pingRoles = (
       type === "purchase" ||
       type === "cashout"
@@ -2554,6 +2981,10 @@ async function createTicket(
       id =>
         guild.roles.cache.has(id)
     );
+
+    // ========================================================
+    // SEND TICKET WELCOME
+    // ========================================================
 
     const welcome =
       await channel.send({
@@ -2572,7 +3003,9 @@ async function createTicket(
 
             `Welcome <@${interaction.user.id}>!\n\n` +
 
-            `${details}\n\n` +
+            `${details}` +
+
+            `${proofInstruction}\n\n` +
 
             "Our team will assist you as soon as possible."
           )
@@ -2655,12 +3088,12 @@ async function updateControls(
 //
 // AFTER CLAIM:
 //
-// - Seller role-wide permission removed
+// - Other listed sellers individually denied
 // - Claimer user ID explicitly allowed
 // - Ticket creator explicitly allowed
 // - Owner and Mod allowed
-//
-// Other sellers cannot see the ticket.
+// - Old staff role access removed
+// - Claimed privacy verified
 //
 // ============================================================
 
@@ -2732,6 +3165,7 @@ async function claim(
 
       isMod(member)
     ) {
+      // Reapply and verify all privacy rules.
       await applyPermissions(
         channel,
         state
@@ -2781,14 +3215,18 @@ async function claim(
     context.user.id;
 
   try {
-    // IMPORTANT:
+    // Apply the complete privacy setup.
     //
-    // Replace permission overwrites
-    // before logging claim success.
+    // All old permission overwrites
+    // are replaced.
     //
-    // The claiming seller receives their
-    // own individual member overwrite.
+    // Other listed sellers receive
+    // member-specific denies.
     //
+    // The individual claimer receives
+    // a member-specific allow.
+    //
+    // The bot then verifies privacy.
     await applyPermissions(
       channel,
       state
@@ -2800,7 +3238,10 @@ async function claim(
     throw error;
   }
 
-  // Persist claim state.
+  // ==========================================================
+  // SAVE THE CLAIM
+  // ==========================================================
+
   await saveState(
     channel,
     entry
@@ -3204,8 +3645,9 @@ async function panelCommand(
 //
 // Purchase/Cashout show forms.
 //
-// Support/Giveaway/Partnership
-// open directly.
+// Partnership shows 2 questions.
+//
+// Support/Giveaway open directly.
 //
 // ============================================================
 
@@ -3226,14 +3668,21 @@ async function selectTicket(
     );
   }
 
+  // ==========================================================
+  // SHOW MODAL IF QUESTIONS EXIST
+  // ==========================================================
+
   if (
-    type === "purchase" ||
-    type === "cashout"
+    TYPES[type].questions?.length
   ) {
     return interaction.showModal(
       ticketForm(type)
     );
   }
+
+  // ==========================================================
+  // SUPPORT/GIVEAWAY OPEN DIRECTLY
+  // ==========================================================
 
   await interaction.deferReply({
     flags: EPHEMERAL
@@ -3279,7 +3728,13 @@ async function selectTicket(
 }
 
 // ============================================================
-// PURCHASE/CASHOUT FORM SUBMISSION
+// TICKET FORM SUBMISSION
+// ============================================================
+//
+// Purchase
+// Cashout
+// Partnership
+//
 // ============================================================
 
 async function submitForm(
@@ -3311,20 +3766,34 @@ async function submitForm(
     flags: EPHEMERAL
   });
 
-  const result =
-    await createTicket(
+  try {
+    const result =
+      await createTicket(
+        interaction,
+        type,
+        answers
+      );
+
+    return reply(
       interaction,
-      type,
-      answers
+
+      result.existing
+        ? `You already have an open ticket: ${result.channel}`
+        : `Your ${TYPES[type].label} ticket is ready: ${result.channel}`
+    );
+  } catch (error) {
+    console.error(
+      `[TICKETS] Form submission failed:`,
+      error
     );
 
-  return reply(
-    interaction,
+    return reply(
+      interaction,
 
-    result.existing
-      ? `You already have an open ticket: ${result.channel}`
-      : `Your ${TYPES[type].label} ticket is ready: ${result.channel}`
-  );
+      `Could not open your ${TYPES[type].label} ` +
+      `ticket: ${safe(error.message, 500)}`
+    );
+  }
 }
 
 // ============================================================
@@ -3759,7 +4228,19 @@ function setupTickets(client) {
       );
 
       console.log(
+        `[TICKETS] Listed seller IDs: ${SELLER_USER_IDS.size}`
+      );
+
+      console.log(
         "[TICKETS] Only the configured Seller role authorizes seller claims."
+      );
+
+      console.log(
+        "[TICKETS] Individual seller privacy protection enabled."
+      );
+
+      console.log(
+        "[TICKETS] Partnership questions enabled."
       );
 
       console.log(
