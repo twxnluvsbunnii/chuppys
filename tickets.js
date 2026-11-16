@@ -22,31 +22,33 @@
 // - Purchase tickets
 // - Cashout tickets
 // - Giveaway tickets
-// - Partnership tickets WITH 2 QUESTIONS
+// - Partnership tickets with 2 questions
 // - Support tickets without a modal
-// - ONLY role 1550322075208646766 qualifies as Seller
-// - All 11 seller user IDs included
-// - Other sellers lose access after a claim
-// - Individual seller who claimed keeps access
-// - Buyer, Owner and Mod retain access
+// - Seller role 1550322075208646766 can claim
+// - All 11 supplied seller user IDs included
+// - Other sellers lose access after claiming
+// - Claiming seller keeps access
+// - Buyer, Owner and Mods keep access
+// - Mods can delete OPEN or CLOSED tickets
 // - Owner-only forceclaim
-// - Simple white logs
+// - Simple white ticket logs
 // - White Ticket Claimed embed
 // - White Ticket Closed embed
 // - Private HTML transcripts
-// - Existing global counter and V3 metadata
+// - Existing global ticket counter
+// - Existing V3 metadata
 // - Legacy ticket recovery
 // - Existing categories, no duplicates
 // - Single handler installation
 // - Duplicate event protection
-// - Seller privacy verification
+// - Claim privacy verification
 //
 // IMPORTANT:
 // - Enable Message Content Intent
 // - Bot needs Manage Channels and Manage Roles
 // - Run only ONE Render instance
 // - Remove old ticket handlers from other files
-// - Administrator members bypass channel privacy
+// - Discord Administrator bypasses channel privacy
 //
 // ============================================================
 
@@ -88,16 +90,16 @@ const IDS = Object.freeze({
 });
 
 // ============================================================
-// ALL 11 SELLER USER IDS
+// SELLER USER IDS
 // ============================================================
 //
-// These are USER IDs, not role IDs.
+// These IDs are used for privacy protection.
 //
-// A member still needs the Seller role
-// to claim Purchase or Cashout tickets.
+// They do not replace the Seller role.
 //
-// These IDs help the bot remove individual
-// sellers from claimed tickets.
+// Anyone claiming Purchase or Cashout
+// must have the Seller role, unless
+// they are Owner or Mod.
 //
 // ============================================================
 
@@ -256,7 +258,6 @@ const TYPES = Object.freeze({
     description:
       "Please provide your partnership details.",
 
-    // Partnership questions requested.
     questions: [
       "How many vouches?",
       "How many server members?"
@@ -435,15 +436,6 @@ async function textChannel(
 // ============================================================
 // MEMBER ROLE CHECKS
 // ============================================================
-//
-// Every important permission check
-// fetches the current guild member.
-//
-// Seller authorization uses ONLY:
-//
-// 1550322075208646766
-//
-// ============================================================
 
 async function getMember(context) {
   if (
@@ -516,11 +508,10 @@ function isTradingTicket(state) {
 // - Owner
 // - Mod
 //
-// No verified-role seller authorization.
-//
 // ============================================================
 
 function canClaim(member, state) {
+  // Owner and Mod always allowed.
   if (
     isOwner(member) ||
     isMod(member)
@@ -528,12 +519,15 @@ function canClaim(member, state) {
     return true;
   }
 
+  // Purchase and Cashout:
+  // The configured Seller role can claim.
   if (
     isTradingTicket(state)
   ) {
     return isSeller(member);
   }
 
+  // Other ticket categories.
   return (
     hasRole(member, IDS.support) ||
     hasRole(member, IDS.admin)
@@ -559,6 +553,43 @@ function canManage(member, state) {
   }
 
   return canClaim(
+    member,
+    state
+  );
+}
+
+// ============================================================
+// DELETE AUTHORIZATION — UPDATED
+// ============================================================
+//
+// Owner and Mod may delete ANY ticket.
+//
+// This includes:
+// - Open tickets
+// - Closed tickets
+// - Claimed tickets
+// - Unclaimed tickets
+//
+// Other authorized staff must close
+// the ticket before deleting it.
+//
+// ============================================================
+
+function canDelete(member, state) {
+  if (
+    isOwner(member) ||
+    isMod(member)
+  ) {
+    return true;
+  }
+
+  if (
+    state.status !== "closed"
+  ) {
+    return false;
+  }
+
+  return canManage(
     member,
     state
   );
@@ -665,7 +696,13 @@ function controls(state) {
         .setEmoji("🔒")
         .setStyle(
           ButtonStyle.Danger
-        )
+        ),
+
+      // Mods can delete open tickets
+      // using the prefix command.
+      //
+      // The Delete button appears
+      // automatically after closing.
     );
   }
 
@@ -1610,12 +1647,6 @@ async function existingTicket(
 // ============================================================
 // EXISTING CATEGORY LOOKUP
 // ============================================================
-//
-// Support accepts common category names.
-//
-// No duplicate categories are created.
-//
-// ============================================================
 
 async function category(
   guild,
@@ -1727,43 +1758,55 @@ const HIDDEN_PERMISSIONS = [
 ];
 
 // ============================================================
-// ROLE AND MEMBER OVERWRITES
+// ROLE AND MEMBER OVERWRITES — UPDATED
 // ============================================================
-//
-// FIXED SELLER CLAIMING SYSTEM
 //
 // BEFORE CLAIM:
 //
-// - All sellers can view Purchase/Cashout
+// - Seller role can view Purchase/Cashout
 // - Buyer can view
 // - Owner can view
-// - Mod can view
+// - Mod role can view
 //
 // AFTER CLAIM:
 //
-// - The claiming seller can view
-// - Buyer can view
-// - Owner can view
-// - Mod can view
-// - Other listed sellers are individually denied
-// - Other staff role access is removed
+// - Seller role's channel access is removed
+// - Other listed sellers get member DENY
+// - Claimer gets member ALLOW
+// - Buyer gets member ALLOW
+// - Owner retains access
+// - Mod role retains access
 //
-// WHY THIS WORKS:
+// IMPORTANT PRIVACY DETAIL:
 //
-// Discord may allow a seller access through
-// a second role or another channel overwrite.
+// We do not explicitly DENY the Seller
+// ROLE after a claim.
 //
-// Instead of relying only on removing the
-// Seller role's allow, we also add individual
-// permission denies for the other sellers.
+// Reason:
 //
-// Individual member denies take precedence
-// over role permissions.
+// Discord combines role overwrites.
 //
-// We do NOT deny Owner/Mod members.
+// If someone has both Seller and Mod,
+// a Seller-role deny could override
+// the Mod-role allow.
 //
-// Administrator permissions cannot be denied
-// through ticket channel overwrites.
+// Instead:
+//
+// - @everyone ViewChannel is denied
+// - Seller role ViewChannel allow is removed
+// - Support/Admin allow is removed
+// - Only Owner/Mod role allows remain
+// - Other listed sellers receive
+//   individual member-specific denies
+//
+// This keeps Mods who also have Seller
+// able to view and manage tickets.
+//
+// Member-specific denies block ordinary
+// role allows for listed sellers.
+//
+// Discord Administrator still bypasses
+// all channel overwrites.
 //
 // ============================================================
 
@@ -1796,8 +1839,10 @@ function permissionEntry(
 // FETCH SELLER MEMBERS
 // ============================================================
 //
-// Fetch the current member roles so the bot
-// does not accidentally deny Owners or Mods.
+// Retrieve listed sellers to check
+// whether any are Owner or Mod.
+//
+// Seller ID lookup is for privacy only.
 //
 // ============================================================
 
@@ -1817,14 +1862,11 @@ async function fetchListedSellers(guild) {
         member
       );
     } catch (error) {
-      // Unknown or departed members do not
-      // need a permission overwrite.
-      //
-      // Do not silently ignore other errors.
       if (
         error?.code === 10007 ||
         error?.rawError?.code === 10007
       ) {
+        // Seller no longer in guild.
         continue;
       }
 
@@ -1913,9 +1955,13 @@ async function permissions(guild, state) {
       IDS.owner
     )
   ) {
-    add(role(IDS.owner));
+    add(
+      role(IDS.owner)
+    );
   } else {
-    add(member(IDS.owner));
+    add(
+      member(IDS.owner)
+    );
   }
 
   // Actual server owner.
@@ -1923,7 +1969,9 @@ async function permissions(guild, state) {
     guild.ownerId &&
     guild.ownerId !== IDS.owner
   ) {
-    add(member(guild.ownerId));
+    add(
+      member(guild.ownerId)
+    );
   }
 
   // ==========================================================
@@ -1935,7 +1983,9 @@ async function permissions(guild, state) {
       IDS.mod
     )
   ) {
-    add(role(IDS.mod));
+    add(
+      role(IDS.mod)
+    );
   }
 
   // ==========================================================
@@ -1946,9 +1996,7 @@ async function permissions(guild, state) {
     const staffRoles =
       isTradingTicket(state)
         ? [
-            IDS.seller,
-            IDS.support,
-            IDS.admin
+            IDS.seller
           ]
         : [
             IDS.support,
@@ -1962,23 +2010,26 @@ async function permissions(guild, state) {
       if (
         guild.roles.cache.has(id)
       ) {
-        add(role(id));
+        add(
+          role(id)
+        );
       }
     }
   }
 
   // ==========================================================
-  // AFTER CLAIM: REMOVE OTHER SELLERS
+  // AFTER CLAIM: INDIVIDUAL SELLER DENIES
   // ==========================================================
   //
-  // We do not give the Seller role a
-  // ViewChannel allow after a claim.
+  // All supplied sellers are checked.
   //
-  // Individual denies are added for
-  // each supplied seller user ID.
+  // Other sellers are individually denied.
   //
-  // This blocks ordinary additional
-  // staff role permissions as well.
+  // Exceptions:
+  // - Claimer
+  // - Buyer
+  // - Owner
+  // - Mod
   //
   // ==========================================================
 
@@ -1993,22 +2044,22 @@ async function permissions(guild, state) {
       const [id, sellerMember] of
       listedMembers
     ) {
-      // Never block the claimer.
+      // Claiming seller stays.
       if (
         id === state.claimedBy
       ) {
         continue;
       }
 
-      // Never block the ticket creator.
+      // Ticket creator stays.
       if (
         id === state.ownerId
       ) {
         continue;
       }
 
-      // Never block the configured owner
-      // or actual server owner.
+      // Configured owner and actual
+      // Discord guild owner stay.
       if (
         id === IDS.owner ||
         id === guild.ownerId
@@ -2016,7 +2067,8 @@ async function permissions(guild, state) {
         continue;
       }
 
-      // Keep Owner and Mod access.
+      // Mods always retain access,
+      // even when they are Sellers.
       if (
         isOwner(sellerMember) ||
         isMod(sellerMember)
@@ -2024,10 +2076,7 @@ async function permissions(guild, state) {
         continue;
       }
 
-      // Explicit member-level DENY.
-      //
-      // This wins over channel role
-      // allows from ordinary roles.
+      // Block this individual seller.
       add({
         id,
 
@@ -2049,7 +2098,7 @@ async function permissions(guild, state) {
   );
 
   // ==========================================================
-  // EXACT CLAIMING MEMBER ALLOWED
+  // EXACT CLAIMING SELLER ALLOWED
   // ==========================================================
 
   if (state.claimedBy) {
@@ -2080,14 +2129,15 @@ async function permissions(guild, state) {
 // VERIFY CLAIMED TICKET PRIVACY
 // ============================================================
 //
-// After overwrites are applied:
+// Confirms:
 //
-// - Confirm the claimer has ViewChannel
-// - Check each other listed seller
-// - Warn about Administrator bypasses
-// - Report unexpected visibility
+// - Claiming seller can view
+// - Buyer can view
+// - Other listed sellers cannot view
+// - Mods remain allowed
 //
-// The log is private to Render.
+// Administrator exceptions are reported
+// in Render logs.
 //
 // ============================================================
 
@@ -2116,6 +2166,26 @@ async function verifyClaimPrivacy(
   if (!fresh) {
     throw new Error(
       "Could not verify ticket channel permissions."
+    );
+  }
+
+  // ==========================================================
+  // VERIFY SELLER ROLE NO LONGER HAS ALLOW
+  // ==========================================================
+
+  const sellerOverwrite =
+    fresh.permissionOverwrites.cache.get(
+      IDS.seller
+    );
+
+  if (
+    sellerOverwrite?.allow.has(
+      PermissionFlagsBits.ViewChannel
+    )
+  ) {
+    throw new Error(
+      "Claim privacy error: Seller role " +
+      "still has ViewChannel allowed."
     );
   }
 
@@ -2166,10 +2236,11 @@ async function verifyClaimPrivacy(
   }
 
   // ==========================================================
-  // VERIFY OTHER SELLERS
+  // VERIFY OTHER LISTED SELLERS
   // ==========================================================
 
   const visibleSellers = [];
+
   const administratorSellers = [];
 
   const listedMembers =
@@ -2179,7 +2250,6 @@ async function verifyClaimPrivacy(
     const [id, sellerMember] of
     listedMembers
   ) {
-    // Allowed exceptions.
     if (
       id === state.claimedBy ||
       id === state.ownerId ||
@@ -2189,6 +2259,7 @@ async function verifyClaimPrivacy(
       continue;
     }
 
+    // Owner and Mod exceptions.
     if (
       isOwner(sellerMember) ||
       isMod(sellerMember)
@@ -2196,7 +2267,7 @@ async function verifyClaimPrivacy(
       continue;
     }
 
-    // Discord Administrator bypass.
+    // Administrator bypass.
     if (
       sellerMember.permissions.has(
         PermissionFlagsBits.Administrator
@@ -2219,35 +2290,45 @@ async function verifyClaimPrivacy(
     }
   }
 
+  // ==========================================================
+  // ADMINISTRATOR WARNINGS
+  // ==========================================================
+
   if (
     administratorSellers.length
   ) {
     console.warn(
-      `[TICKETS] Administrator sellers can ` +
-      `still see ticket ${channel.id}: ` +
+      `[TICKETS] Administrator bypass in ` +
+      `${channel.name}: ` +
       administratorSellers.join(", ")
     );
   }
+
+  // ==========================================================
+  // PRIVACY FAILURE
+  // ==========================================================
 
   if (
     visibleSellers.length
   ) {
     console.error(
-      `[TICKETS] PRIVACY FAILURE in ` +
-      `${channel.name}. Sellers still ` +
-      `have ViewChannel: ` +
+      `[TICKETS] PRIVACY FAILURE: ` +
+      `${channel.name}`
+    );
+
+    console.error(
+      `[TICKETS] Sellers still visible: ` +
       visibleSellers.join(", ")
     );
 
     throw new Error(
-      "Claim privacy check failed. " +
-      "Other sellers can still view the ticket. " +
-      "Check Render logs for their user IDs."
+      "Other sellers can still view this ticket. " +
+      "Check Render logs."
     );
   }
 
   console.log(
-    `[TICKETS] Claim privacy verified: ` +
+    `[TICKETS] Privacy verified: ` +
     `${channel.name}, claimer ${state.claimedBy}`
   );
 }
@@ -2266,16 +2347,19 @@ async function applyPermissions(
       state
     );
 
-  // Replaces all existing overwrites,
-  // including old Seller-role permissions
-  // and outdated individual permissions.
+  // Replace all old channel overwrites.
+  //
+  // This removes:
+  // - Old Seller role permissions
+  // - Old Support/Admin permissions
+  // - Old individual grants
+  //
+  // Then applies the current ticket state.
   await channel.permissionOverwrites.set(
     overwrites,
     "Chuppys private ticket permissions"
   );
 
-  // Verify the permissions immediately
-  // after changing a claimed ticket.
   if (
     state.claimedBy &&
     isTradingTicket(state)
@@ -2418,8 +2502,6 @@ async function syncExistingTickets(guild) {
 // Ticket Claimed
 // Ticket Closed
 // Ticket Deleted
-//
-// No transcript links or long information.
 //
 // ============================================================
 
@@ -2881,10 +2963,6 @@ async function createTicket(
         new Date().toISOString()
     };
 
-    // ========================================================
-    // CREATE PRIVATE CHANNEL
-    // ========================================================
-
     const channel =
       await guild.channels.create({
         name:
@@ -2902,8 +2980,6 @@ async function createTicket(
         topic:
           null,
 
-        // Updated permissions() is async,
-        // so await it before creation.
         permissionOverwrites:
           await permissions(
             guild,
@@ -2932,10 +3008,6 @@ async function createTicket(
       entry
     );
 
-    // ========================================================
-    // DISPLAY ANSWERS
-    // ========================================================
-
     const details =
       config.questions?.length &&
       answers.length
@@ -2951,10 +3023,6 @@ async function createTicket(
             .join("\n\n")
         : config.description;
 
-    // ========================================================
-    // PARTNERSHIP PROOF INSTRUCTION
-    // ========================================================
-
     const proofInstruction =
       type === "partnership"
         ? (
@@ -2963,16 +3031,10 @@ async function createTicket(
           )
         : "";
 
-    // ========================================================
-    // STAFF PINGS
-    // ========================================================
-
     const pingRoles = (
-      type === "purchase" ||
-      type === "cashout"
+      isTradingTicket(state)
         ? [
-            IDS.seller,
-            IDS.support
+            IDS.seller
           ]
         : [
             IDS.support
@@ -2981,10 +3043,6 @@ async function createTicket(
       id =>
         guild.roles.cache.has(id)
     );
-
-    // ========================================================
-    // SEND TICKET WELCOME
-    // ========================================================
 
     const welcome =
       await channel.send({
@@ -3083,17 +3141,16 @@ async function updateControls(
 // CLAIM TICKET
 // ============================================================
 //
-// The seller who claims still has
-// the Seller role.
+// A Seller with role 1550322075208646766
+// can claim Purchase/Cashout tickets.
 //
 // AFTER CLAIM:
 //
-// - Other listed sellers individually denied
-// - Claimer user ID explicitly allowed
-// - Ticket creator explicitly allowed
-// - Owner and Mod allowed
-// - Old staff role access removed
-// - Claimed privacy verified
+// - Other sellers lose channel access
+// - Exact claimer retains access
+// - Buyer retains access
+// - Owner retains access
+// - Mods retain access
 //
 // ============================================================
 
@@ -3165,7 +3222,6 @@ async function claim(
 
       isMod(member)
     ) {
-      // Reapply and verify all privacy rules.
       await applyPermissions(
         channel,
         state
@@ -3215,18 +3271,6 @@ async function claim(
     context.user.id;
 
   try {
-    // Apply the complete privacy setup.
-    //
-    // All old permission overwrites
-    // are replaced.
-    //
-    // Other listed sellers receive
-    // member-specific denies.
-    //
-    // The individual claimer receives
-    // a member-specific allow.
-    //
-    // The bot then verifies privacy.
     await applyPermissions(
       channel,
       state
@@ -3234,6 +3278,20 @@ async function claim(
   } catch (error) {
     state.claimedBy =
       previousClaimer;
+
+    // Restore the previous permission state
+    // if applying or verifying privacy failed.
+    try {
+      await applyPermissions(
+        channel,
+        state
+      );
+    } catch (restoreError) {
+      console.error(
+        "[TICKETS] Failed to restore permissions:",
+        restoreError
+      );
+    }
 
     throw error;
   }
@@ -3253,12 +3311,7 @@ async function claim(
   );
 
   // ==========================================================
-  // SHORT WHITE CLAIM EMBED
-  // ==========================================================
-  //
-  // No Private Ticket Access section.
-  // No extra privacy explanation.
-  //
+  // WHITE CLAIMED EMBED
   // ==========================================================
 
   await channel.send({
@@ -3282,7 +3335,6 @@ async function claim(
     context.user.id
   );
 
-  // No second public prefix message.
   if (
     context.kind === "prefix"
   ) {
@@ -3300,13 +3352,6 @@ async function claim(
 
 // ============================================================
 // CLOSE TICKET
-// ============================================================
-//
-// Keep the white Ticket Closed embed.
-//
-// Do not mention the transcript.
-// Do not mention ,delete.
-//
 // ============================================================
 
 async function closeTicket(
@@ -3358,7 +3403,6 @@ async function closeTicket(
   state.transcriptUrl =
     transcriptUrl;
 
-  // Keep private access after closing.
   await applyPermissions(
     channel,
     state
@@ -3381,10 +3425,6 @@ async function closeTicket(
     channel,
     state
   );
-
-  // ==========================================================
-  // WHITE TICKET CLOSED EMBED
-  // ==========================================================
 
   await channel.send({
     embeds: [
@@ -3414,8 +3454,6 @@ async function closeTicket(
     context.user.id
   );
 
-  // No extra public confirmation
-  // when using ,close.
   if (
     context.kind === "prefix"
   ) {
@@ -3496,7 +3534,20 @@ async function reopenTicket(
 }
 
 // ============================================================
-// DELETE TICKET
+// DELETE TICKET — MOD PERMISSION FIX
+// ============================================================
+//
+// OWNER:
+// Can delete open or closed tickets.
+//
+// MOD:
+// Can delete open or closed tickets.
+//
+// OTHER AUTHORIZED STAFF:
+// Ticket must be closed before deletion.
+//
+// Transcript is saved before deleting.
+//
 // ============================================================
 
 async function deleteTicket(
@@ -3510,26 +3561,53 @@ async function deleteTicket(
   const state =
     entry.state;
 
+  // ==========================================================
+  // CHECK DELETE AUTHORIZATION
+  // ==========================================================
+
   if (
-    !canManage(
+    !canDelete(
       member,
       state
     )
   ) {
+    if (
+      state.status !== "closed" &&
+      canManage(member, state)
+    ) {
+      return reply(
+        context,
+        "Close this ticket first."
+      );
+    }
+
     return reply(
       context,
-      "You cannot delete this ticket."
+      "You do not have permission to delete this ticket."
     );
   }
 
+  // ==========================================================
+  // MOD/OWNER CAN DELETE OPEN TICKETS
+  // ==========================================================
+
+  const isPrivileged =
+    isOwner(member) ||
+    isMod(member);
+
   if (
-    state.status !== "closed"
+    state.status !== "closed" &&
+    !isPrivileged
   ) {
     return reply(
       context,
       "Close this ticket first."
     );
   }
+
+  // ==========================================================
+  // SAVE PRIVATE TRANSCRIPT
+  // ==========================================================
 
   state.transcriptUrl =
     await saveTranscript(
@@ -3542,12 +3620,20 @@ async function deleteTicket(
     entry
   );
 
+  // ==========================================================
+  // LOG DELETION
+  // ==========================================================
+
   await logTicket(
     channel.guild,
     state,
     "deleted",
     context.user.id
   );
+
+  // ==========================================================
+  // INTERACTION RESPONSE
+  // ==========================================================
 
   if (
     context.kind !== "prefix"
@@ -3557,6 +3643,10 @@ async function deleteTicket(
       "Ticket deleted successfully."
     );
   }
+
+  // ==========================================================
+  // DELETE CHANNEL
+  // ==========================================================
 
   await channel.delete(
     `Ticket deleted by ${context.user.id}`
@@ -3645,7 +3735,7 @@ async function panelCommand(
 //
 // Purchase/Cashout show forms.
 //
-// Partnership shows 2 questions.
+// Partnership shows two questions.
 //
 // Support/Giveaway open directly.
 //
@@ -3668,10 +3758,6 @@ async function selectTicket(
     );
   }
 
-  // ==========================================================
-  // SHOW MODAL IF QUESTIONS EXIST
-  // ==========================================================
-
   if (
     TYPES[type].questions?.length
   ) {
@@ -3679,10 +3765,6 @@ async function selectTicket(
       ticketForm(type)
     );
   }
-
-  // ==========================================================
-  // SUPPORT/GIVEAWAY OPEN DIRECTLY
-  // ==========================================================
 
   await interaction.deferReply({
     flags: EPHEMERAL
@@ -3729,12 +3811,6 @@ async function selectTicket(
 
 // ============================================================
 // TICKET FORM SUBMISSION
-// ============================================================
-//
-// Purchase
-// Cashout
-// Partnership
-//
 // ============================================================
 
 async function submitForm(
@@ -4117,24 +4193,18 @@ async function handlePrefix(message) {
       );
     }
 
-    return deleteTicket(
-      context,
-      message.channel,
-      entry
-    );
+    if (name === "delete") {
+      return deleteTicket(
+        context,
+        message.channel,
+        entry
+      );
+    }
   });
 }
 
 // ============================================================
 // SINGLE HANDLER INSTALLATION
-// ============================================================
-//
-// Prevents THIS module from registering
-// twice on the same Discord client.
-//
-// Cannot disable a separate older handler
-// or another running Render process.
-//
 // ============================================================
 
 function setupTickets(client) {
@@ -4232,11 +4302,19 @@ function setupTickets(client) {
       );
 
       console.log(
-        "[TICKETS] Only the configured Seller role authorizes seller claims."
+        "[TICKETS] Sellers can claim Purchase/Cashout tickets."
       );
 
       console.log(
-        "[TICKETS] Individual seller privacy protection enabled."
+        "[TICKETS] Claiming seller retains individual access."
+      );
+
+      console.log(
+        "[TICKETS] Other listed sellers lose access after a claim."
+      );
+
+      console.log(
+        "[TICKETS] Mods can delete open and closed tickets."
       );
 
       console.log(
