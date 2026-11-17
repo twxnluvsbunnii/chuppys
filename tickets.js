@@ -1,10 +1,11 @@
+
 "use strict";
 
 // ============================================================
 // CHUPPYS TICKET SYSTEM — DISCORD.JS V14 / RENDER
 // ============================================================
 //
-// INSTALL IN INDEX.JS:
+// INSTALL:
 // require("./tickets")(client);
 //
 // SLASH COMMAND:
@@ -25,27 +26,31 @@
 // Purchase, Cash Out, Giveaway, Partnership,
 // Support, Verification
 //
-// FEATURES:
-// - Private tickets
+// VERIFICATION CATEGORY:
+// - Automatically creates "chuppys-verification"
+// - Reuses the category if it already exists
+// - Does not use the Support category as fallback
+// - Does not require a Render category ID
+// - Keeps verification off the main ticket dropdown
+//
+// PRESERVED:
 // - Global ticket numbering
-// - Existing V3 metadata compatibility
+// - Private V3 metadata
 // - Legacy ticket recovery
 // - Duplicate ticket prevention
-// - Seller claiming
-// - Claim privacy
-// - Support and owner access
-// - Close and reopen
-// - HTML transcripts
-// - Activity logs
-// - Verification ticket button integration
+// - Seller claiming and privacy
+// - Ticket Support access
+// - Ticket control buttons
+// - Private HTML transcripts
+// - Simple white ticket activity logs
 // - Independent ticket action queues
 //
 // IMPORTANT:
-// Run only one Render instance.
+// Run only one Render bot instance.
 // Enable Guild Members and Message Content intents.
-// Bot needs Manage Channels, View Channel,
+// The bot needs Manage Channels, View Channel,
 // Send Messages, Read Message History,
-// Embed Links and Attach Files.
+// Embed Links, and Attach Files.
 //
 // ============================================================
 
@@ -77,21 +82,14 @@ const {
 
 const IDS = Object.freeze({
   panel: "1530811385678790716",
-
   logs: "1570913954333728808",
-
   transcripts: "1571112508922531870",
-
   data: "1571112668037644388",
 
   owner: "1530988662970650865",
-
   admin: "1531800870444994641",
-
   mod: "1531800784700706887",
-
   support: "1563003884656398406",
-
   seller: "1550322075208646766",
 
   verify: "1528716328985301052"
@@ -99,12 +97,6 @@ const IDS = Object.freeze({
 
 // ============================================================
 // SELLER USER IDS
-// ============================================================
-//
-// Seller-role membership controls claiming.
-// These IDs are retained for compatibility
-// and startup diagnostics.
-//
 // ============================================================
 
 const SELLER_USER_IDS = new Set([
@@ -137,7 +129,7 @@ const EPHEMERAL = MessageFlags.Ephemeral;
 const PREFIX = ",";
 
 // ============================================================
-// VERIFICATION
+// VERIFICATION SETTINGS
 // ============================================================
 
 const VERIFY_TICKET_BUTTON_ID =
@@ -145,6 +137,11 @@ const VERIFY_TICKET_BUTTON_ID =
 
 const VERIFIED_ROLE_ID =
   "1550230619127021568";
+
+// Automatically created category name.
+
+const VERIFICATION_CATEGORY_NAME =
+  "chuppys-verification";
 
 // ============================================================
 // PRIVATE STORAGE PREFIXES
@@ -183,18 +180,16 @@ const SELECT_IDS = new Set([
   "ticket_create"
 ]);
 
-const FORM_PREFIX = "chuppys_ticket_form:";
+const FORM_PREFIX =
+  "chuppys_ticket_form:";
 
 const CLOSE_PREFIX =
   "chuppys_ticket_close_modal:";
 
 const BUTTONS = Object.freeze({
   claim: "chuppys_ticket_claim",
-
   close: "chuppys_ticket_close",
-
   reopen: "chuppys_ticket_reopen",
-
   delete: "chuppys_ticket_delete"
 });
 
@@ -209,6 +204,7 @@ const TYPES = Object.freeze({
     env: "PURCHASE_TICKET_CATEGORY_ID",
 
     categories: [
+      "chuppys-purchase",
       "Purchasing tickets",
       "Purchase tickets"
     ],
@@ -230,6 +226,7 @@ const TYPES = Object.freeze({
     env: "CASHOUT_TICKET_CATEGORY_ID",
 
     categories: [
+      "chuppys-cashout",
       "Cashout tickets",
       "Cash Out tickets"
     ],
@@ -251,6 +248,7 @@ const TYPES = Object.freeze({
     env: "GIVEAWAY_TICKET_CATEGORY_ID",
 
     categories: [
+      "chuppys-giveaway",
       "Giveaway tickets"
     ],
 
@@ -264,6 +262,7 @@ const TYPES = Object.freeze({
     env: "PARTNERSHIP_TICKET_CATEGORY_ID",
 
     categories: [
+      "chuppys-partnership",
       "Partnership tickets"
     ],
 
@@ -282,6 +281,7 @@ const TYPES = Object.freeze({
     env: "SUPPORT_TICKET_CATEGORY_ID",
 
     categories: [
+      "chuppys-support",
       "Support tickets",
       "Support ticket",
       "Support",
@@ -296,9 +296,12 @@ const TYPES = Object.freeze({
   verification: {
     label: "Verification",
 
+    // No environment variable is required.
+
     env: "VERIFICATION_TICKET_CATEGORY_ID",
 
     categories: [
+      VERIFICATION_CATEGORY_NAME,
       "Verification tickets",
       "Verification ticket",
       "Verification",
@@ -334,11 +337,9 @@ const command = new SlashCommandBuilder()
 const tickets = new Map();
 
 let initialization = null;
-
 let initialized = false;
 
 let globalCounter = 0;
-
 let counterMessageId = null;
 
 let creationQueue = Promise.resolve();
@@ -346,6 +347,10 @@ let creationQueue = Promise.resolve();
 const ticketQueues = new Map();
 
 const transcriptJobs = new Map();
+
+// Prevent concurrent verification category creation.
+
+const verificationCategoryJobs = new Map();
 
 // ============================================================
 // GLOBAL CREATION QUEUE
@@ -434,6 +439,12 @@ function ticketName(type, number, closed = false) {
     `${closed ? "closed-" : ""}` +
     `${type}-${numberText(number)}`
   ).slice(0, 100);
+}
+
+function normalizeCategoryName(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
 }
 
 // ============================================================
@@ -623,7 +634,6 @@ function canManage(member, state) {
     return true;
   }
 
-  // Ticket Support retains management access.
   if (isSupport(member)) {
     return true;
   }
@@ -663,6 +673,7 @@ async function reply(context, content) {
   if (context.kind === "prefix") {
     return context.message.reply({
       content,
+
       allowedMentions: {
         parse: [],
         repliedUser: false
@@ -817,11 +828,9 @@ function normalizeState(data) {
 
   return {
     channelId: String(data.channelId),
-
     ownerId: String(data.ownerId),
 
     type: data.type,
-
     number,
 
     status:
@@ -1072,13 +1081,11 @@ async function init(guild) {
       }
     }
 
-    // Load private storage.
     await scan(
       data,
       message => processMessage(message, true)
     );
 
-    // Recover legacy data from activity logs.
     if (logs.id !== data.id) {
       await scan(
         logs,
@@ -1089,7 +1096,6 @@ async function init(guild) {
     await guild.channels.fetch();
     await guild.roles.fetch();
 
-    // Protect existing ticket numbers.
     for (const channel of guild.channels.cache.values()) {
       const parsed = parseTicketName(channel.name);
 
@@ -1375,7 +1381,6 @@ async function recoverTicket(channel) {
         },
 
         storageMessageId: null,
-
         recovered: true
       };
 
@@ -1493,6 +1498,162 @@ async function existingTicket(guild, userId, type) {
 }
 
 // ============================================================
+// NEW — AUTOMATIC VERIFICATION CATEGORY
+// ============================================================
+//
+// 1. Check for existing "chuppys-verification".
+// 2. Recognize compatible legacy category names.
+// 3. If missing, create "chuppys-verification".
+// 4. Hide the category from @everyone.
+// 5. Allow the bot, owners, moderators,
+//    administrators and Ticket Support.
+// 6. Never fall back to the Support category.
+// 7. Prevent concurrent duplicate creation.
+//
+// The individual ticket channel has its own
+// private permissions, including its creator.
+//
+// ============================================================
+
+async function ensureVerificationCategory(guild) {
+  const running = verificationCategoryJobs.get(
+    guild.id
+  );
+
+  if (running) {
+    return running;
+  }
+
+  const job = (async () => {
+    await guild.channels.fetch();
+
+    const categories = [
+      ...guild.channels.cache.values()
+    ].filter(
+      channel =>
+        channel.type === ChannelType.GuildCategory
+    );
+
+    // Prefer the exact new category name.
+
+    let existing = categories.find(
+      channel =>
+        normalizeCategoryName(channel.name) ===
+        normalizeCategoryName(
+          VERIFICATION_CATEGORY_NAME
+        )
+    );
+
+    // Recognize existing verification categories
+    // so the bot does not make duplicates.
+
+    if (!existing) {
+      const validNames = TYPES.verification.categories
+        .map(normalizeCategoryName);
+
+      existing = categories.find(
+        channel =>
+          validNames.includes(
+            normalizeCategoryName(channel.name)
+          )
+      );
+    }
+
+    if (existing) {
+      console.log(
+        `[TICKETS] Reusing verification category: ` +
+        `${existing.name} (${existing.id})`
+      );
+
+      return existing;
+    }
+
+    // Ensure role cache is available.
+
+    await guild.roles.fetch();
+
+    const permissionOverwrites = [
+      {
+        id: guild.roles.everyone.id,
+        type: OverwriteType.Role,
+        deny: [
+          PermissionFlagsBits.ViewChannel
+        ]
+      },
+      {
+        id: guild.client.user.id,
+        type: OverwriteType.Member,
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.ManageChannels,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ReadMessageHistory
+        ]
+      }
+    ];
+
+    const staffRoles = [
+      IDS.owner,
+      IDS.admin,
+      IDS.mod,
+      IDS.support
+    ];
+
+    for (const roleId of staffRoles) {
+      if (guild.roles.cache.has(roleId)) {
+        permissionOverwrites.push({
+          id: roleId,
+          type: OverwriteType.Role,
+          allow: [
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.ReadMessageHistory,
+            PermissionFlagsBits.SendMessages
+          ]
+        });
+      }
+    }
+
+    console.log(
+      `[TICKETS] Creating category: ` +
+      VERIFICATION_CATEGORY_NAME
+    );
+
+    const created = await guild.channels.create({
+      name: VERIFICATION_CATEGORY_NAME,
+
+      type: ChannelType.GuildCategory,
+
+      permissionOverwrites,
+
+      reason:
+        "Automatically created Chuppys verification ticket category"
+    });
+
+    console.log(
+      `[TICKETS] Verification category created: ` +
+      `${created.name} (${created.id})`
+    );
+
+    return created;
+  })();
+
+  verificationCategoryJobs.set(
+    guild.id,
+    job
+  );
+
+  try {
+    return await job;
+  } finally {
+    if (
+      verificationCategoryJobs.get(guild.id) === job
+    ) {
+      verificationCategoryJobs.delete(guild.id);
+    }
+  }
+}
+
+// ============================================================
 // CATEGORY LOOKUP
 // ============================================================
 
@@ -1504,6 +1665,18 @@ async function category(guild, type) {
       `Invalid ticket type: ${type}`
     );
   }
+
+  // Verification ALWAYS uses its own category.
+  //
+  // No Support category fallback.
+  // No Render category ID required.
+
+  if (type === "verification") {
+    return ensureVerificationCategory(guild);
+  }
+
+  // Existing categories preserve their
+  // environment-variable configuration.
 
   const configuredId = process.env[config.env];
 
@@ -1522,7 +1695,8 @@ async function category(guild, type) {
     }
 
     console.warn(
-      `[TICKETS] Invalid ${config.env}; trying category names.`
+      `[TICKETS] Invalid ${config.env}; ` +
+      "trying category names."
     );
   }
 
@@ -1535,60 +1709,15 @@ async function category(guild, type) {
       channel.type === ChannelType.GuildCategory
   );
 
-  const normalize = value =>
-    String(value || "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "");
-
   for (const name of config.categories) {
     const found = categories.find(
       channel =>
-        normalize(channel.name) === normalize(name)
+        normalizeCategoryName(channel.name) ===
+        normalizeCategoryName(name)
     );
 
     if (found) {
       return found;
-    }
-  }
-
-  // Verification falls back to Support category.
-  if (type === "verification") {
-    const supportCategoryId =
-      process.env.SUPPORT_TICKET_CATEGORY_ID;
-
-    if (supportCategoryId) {
-      const supportCategory =
-        guild.channels.cache.get(supportCategoryId) ||
-        await guild.channels.fetch(
-          supportCategoryId
-        ).catch(() => null);
-
-      if (
-        supportCategory?.type ===
-        ChannelType.GuildCategory
-      ) {
-        return supportCategory;
-      }
-    }
-
-    const supportNames =
-      TYPES.support.categories.map(normalize);
-
-    const supportCategory =
-      categories.find(
-        channel =>
-          supportNames.includes(
-            normalize(channel.name)
-          )
-      ) ||
-      categories.find(
-        channel =>
-          channel.name.toLowerCase()
-            .includes("support")
-      );
-
-    if (supportCategory) {
-      return supportCategory;
     }
   }
 
@@ -1673,7 +1802,9 @@ function permissionEntry(id, type, closed) {
 // have another authorized role.
 //
 // OTHER TICKETS:
-// Buyer, Support, Admin, Mod, Owner.
+// Creator, Support, Admin, Mod, Owner.
+//
+// This includes Verification tickets.
 //
 // Administrator permission bypasses
 // Discord channel overwrites.
@@ -1704,6 +1835,7 @@ function permissions(guild, state) {
   }
 
   // Hide from everyone.
+
   add({
     id: guild.roles.everyone.id,
     type: OverwriteType.Role,
@@ -1714,6 +1846,7 @@ function permissions(guild, state) {
   });
 
   // Bot access.
+
   add({
     id: guild.client.user.id,
     type: OverwriteType.Member,
@@ -1727,27 +1860,31 @@ function permissions(guild, state) {
   });
 
   // Owner role.
+
   if (guild.roles.cache.has(IDS.owner)) {
     add(role(IDS.owner));
   }
 
-  // Actual server owner.
-  // Never treat a missing role ID as a user ID.
+  // Actual Discord server owner.
+
   if (guild.ownerId) {
     add(member(guild.ownerId));
   }
 
   // Moderators.
+
   if (guild.roles.cache.has(IDS.mod)) {
     add(role(IDS.mod));
   }
 
-  // Ticket Support always retains access.
+  // Ticket Support.
+
   if (guild.roles.cache.has(IDS.support)) {
     add(role(IDS.support));
   }
 
   // Non-trading tickets also allow admins.
+
   if (
     !isTradingTicket(state) &&
     guild.roles.cache.has(IDS.admin)
@@ -1757,6 +1894,7 @@ function permissions(guild, state) {
 
   // Unclaimed trading tickets:
   // sellers can see and claim.
+
   if (
     isTradingTicket(state) &&
     !state.claimedBy &&
@@ -1767,6 +1905,7 @@ function permissions(guild, state) {
 
   // Claimed trading tickets:
   // deny general seller-role visibility.
+
   if (
     isTradingTicket(state) &&
     state.claimedBy &&
@@ -1780,9 +1919,11 @@ function permissions(guild, state) {
   }
 
   // Ticket creator.
+
   add(member(state.ownerId));
 
   // Exact claiming staff member.
+
   if (state.claimedBy) {
     add(member(state.claimedBy));
   }
@@ -1856,8 +1997,6 @@ async function applyPermissions(channel, state) {
     }
   }
 
-  // Clean up legacy topics only after metadata
-  // has already been saved.
   if (
     channel.topic?.startsWith("chuppys-ticket:")
   ) {
@@ -2295,11 +2434,10 @@ async function createTicket(
       );
     }
 
-    // Make sure roles are available before
-    // constructing private permission overwrites.
     await init(guild);
 
     // Prevent duplicate open tickets.
+
     const existing = await existingTicket(
       guild,
       interaction.user.id,
@@ -2313,10 +2451,13 @@ async function createTicket(
       };
     }
 
-    // Find existing category.
+    // Verification automatically creates its
+    // own category when missing.
+
     const parent = await category(guild, type);
 
     // Reserve global number.
+
     const number = await nextNumber(guild);
 
     const state = {
@@ -2341,7 +2482,8 @@ async function createTicket(
       createdAt: new Date().toISOString()
     };
 
-    // Create private channel.
+    // Create private ticket channel.
+
     const channel = await guild.channels.create({
       name: ticketName(type, number),
 
@@ -2367,9 +2509,9 @@ async function createTicket(
     };
 
     // Store initial state immediately.
+
     await saveState(channel, entry);
 
-    // Build ticket answers.
     const details =
       config.questions?.length && answers.length
         ? config.questions.map(
@@ -2387,7 +2529,8 @@ async function createTicket(
           )
         : "";
 
-    // Ping staff.
+    // Staff role pings.
+
     const pingRoles = (
       isTradingTicket(state)
         ? [IDS.seller, IDS.support]
@@ -2396,7 +2539,8 @@ async function createTicket(
       id => guild.roles.cache.has(id)
     );
 
-    // Verification-specific text.
+    // Verification-specific welcome message.
+
     const welcomeDescription =
       type === "verification"
         ? (
@@ -2423,7 +2567,6 @@ async function createTicket(
             "Our team will assist you as soon as possible."
           );
 
-    // Send ticket message and buttons.
     const welcome = await channel.send({
       content: [
         `<@${interaction.user.id}>`,
@@ -2454,7 +2597,8 @@ async function createTicket(
 
     await saveState(channel, entry);
 
-    // Activity logging does not block response.
+    // Do not block the response on activity logs.
+
     void logTicket(
       guild,
       { ...state },
@@ -2469,7 +2613,8 @@ async function createTicket(
 
     console.log(
       `[TICKETS] Created ${channel.name} ` +
-      `for ${interaction.user.id}`
+      `for ${interaction.user.id} ` +
+      `under ${parent.name}`
     );
 
     return {
@@ -2483,8 +2628,11 @@ async function createTicket(
 // VERIFICATION TICKET EXPORT
 // ============================================================
 //
-// index.js handles the verification button
-// and has already deferred the interaction.
+// index.js handles the purple button.
+// tickets.js creates the ticket.
+//
+// The interaction is already deferred
+// by index.js before this function runs.
 //
 // ============================================================
 
@@ -2581,7 +2729,6 @@ async function claim(
 
   const state = entry.state;
 
-  // Owner-only force claim.
   if (force && !isOwner(member)) {
     return reply(
       context,
@@ -2642,10 +2789,8 @@ async function claim(
   state.claimedBy = member.id;
 
   try {
-    // Update privacy.
     await applyPermissions(channel, state);
 
-    // Save claimer.
     await saveState(channel, entry);
   } catch (error) {
     state.claimedBy = previousClaimer;
@@ -2662,13 +2807,11 @@ async function claim(
     throw error;
   }
 
-  // Update buttons.
   void updateControls(
     channel,
     { ...state }
   ).catch(console.error);
 
-  // Ticket claim notification.
   void channel.send({
     embeds: [
       whiteEmbed(
@@ -2687,7 +2830,6 @@ async function claim(
     );
   });
 
-  // Activity log.
   void logTicket(
     channel.guild,
     { ...state },
@@ -2768,7 +2910,6 @@ async function closeTicket(
     throw error;
   }
 
-  // Rename channel.
   const renameJob = channel.setName(
     ticketName(
       state.type,
@@ -2782,7 +2923,6 @@ async function closeTicket(
     );
   });
 
-  // Closed embed.
   await channel.send({
     embeds: [
       whiteEmbed(
@@ -2814,7 +2954,6 @@ async function closeTicket(
     { ...state }
   ).catch(console.error);
 
-  // Transcript job.
   const transcriptState = { ...state };
 
   const transcriptJob = (async () => {
@@ -2965,7 +3104,6 @@ async function deleteTicket(
     "Deleting ticket and saving transcript..."
   );
 
-  // Wait for pending close transcript.
   const pendingTranscript =
     transcriptJobs.get(channel.id);
 
@@ -2980,7 +3118,6 @@ async function deleteTicket(
     }
   }
 
-  // Save deletion transcript.
   let logMessage;
 
   try {
@@ -3114,14 +3251,12 @@ async function selectTicket(interaction) {
     );
   }
 
-  // Purchase, cashout and partnership forms.
   if (TYPES[type].questions?.length) {
     return interaction.showModal(
       ticketForm(type)
     );
   }
 
-  // Support and giveaway tickets.
   await interaction.deferReply({
     flags: EPHEMERAL
   });
@@ -3522,6 +3657,15 @@ function setupTickets(client) {
 
       await init(guild);
 
+      // NEW:
+      // Automatically create the verification
+      // category during bot startup if missing.
+
+      await ensureVerificationCategory(guild);
+
+      // Move previously created verification
+      // tickets into their correct category.
+
       await syncExistingTickets(guild);
 
       console.log(
@@ -3558,6 +3702,14 @@ function setupTickets(client) {
 
       console.log(
         `[TICKETS] Private data: ${IDS.data}`
+      );
+
+      console.log(
+        `[TICKETS] Verification category: ${VERIFICATION_CATEGORY_NAME}`
+      );
+
+      console.log(
+        "[TICKETS] Automatic verification category enabled."
       );
 
       console.log(
@@ -3696,7 +3848,8 @@ function setupTickets(client) {
           : null;
 
       // Verification creation is handled
-      // by index.js, not this listener.
+      // by index.js through the exported
+      // openVerificationTicket function.
 
       if (
         !isPanel &&
