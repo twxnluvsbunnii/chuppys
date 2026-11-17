@@ -2728,7 +2728,7 @@ async function sendNitroServices(channel) {
       `# NITRO ${SERVICE_EMOJI}\n\n` +
       "**1 Month + No War — $7.25**\n\n" +
       "**1 Month + War — $9.25**\n\n" +
-      `${PAYMENT_METHODS_TEXT}\n\n**.gg/chuppys**"
+     `${PAYMENT_METHODS_TEXT}\n\n**.gg/chuppys**`
     )
     .setColor("#FFFFFF");
 
@@ -2787,7 +2787,7 @@ async function sendBoostiesServices(channel) {
           `${BOOST_EMOJI} **${count} • ${price}**`
       ).join("\n") +
 
-      `\n\n${PAYMENT_METHODS_TEXT}\n\n**.gg/chuppys**"
+      `\n\n${PAYMENT_METHODS_TEXT}\n\n**.gg/chuppys**`
     )
     .setColor("#FFFFFF");
 
