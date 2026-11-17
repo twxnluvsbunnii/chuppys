@@ -1,17 +1,11 @@
 import crypto from "crypto";
 import { waitUntil } from "@vercel/functions";
 
-export const config = {
-  api: {
-    bodyParser: false
-  }
-};
+export const config = { api: { bodyParser: false } };
 
 // ==================================================
-// CONFIGURATION
+// CONFIGURATION — EXISTING FEATURES PRESERVED
 // ==================================================
-
-const API = "https://discord.com/api/v10";
 
 const PERSONAL_VOUCH_CHANNEL_ID = "1562227276051910676";
 const VOUCH_CHANNEL_ID = "1530811494168657980";
@@ -28,21 +22,26 @@ const CLIENT_ROLE_BUTTON_ID = "chuppys_client";
 const CLIENT_ROLE_ID = "1550373434301878282";
 
 const QUESTION_CHANNEL_ID = "1566490648549527602";
-const TICKET_PANEL_CHANNEL_ID = "1530811385678790716";
-const TICKET_LOG_CHANNEL_ID = "1570913954333728808";
+const TICKET_CHANNEL_ID = "1530811385678790716";
+const TICKET_SUPPORT_ROLE_ID = "1563003884656398406";
 
 const QUESTION_EMOJI_ID = "1561388594625511514";
+
 const QUESTION_EMOJI_URL =
-  `https://cdn.discordapp.com/emojis/${QUESTION_EMOJI_ID}.png`;
+  `https://cdn.discordapp.com/emojis/${QUESTION_EMOJI_ID}.png?size=128&quality=lossless`;
 
 const QUESTION_EMOJI =
   "<:chuppypayment:1561388594625511514>";
+
+const TICKET_EMOJI =
+  "<:chuppyhi:1561103471325745242>";
 
 const QUESTION_TICKET_CUSTOM_ID = "question_ticket:";
 const QUESTION_REPLY_CUSTOM_ID = "question_reply:";
 const QUESTION_MODAL_CUSTOM_ID = "question_reply_modal:";
 
 const REQUEST_CHANNEL_ID = "1569732416388726834";
+const REQUEST_THUMBNAIL_URL = QUESTION_EMOJI_URL;
 
 const REQUEST_CATEGORIES = new Set([
   "Baddies",
@@ -70,379 +69,47 @@ const PRONOUN_ROLE_IDS = [
 
 const PING_ROLE_IDS = [
   "1531039846871728248",
-  "1568240267344093254",
   "1531084435716571137",
   "1531104789075853472",
   "1531104886630907925",
-  "1551276593425682543",
+  "1531105107586973696",
+  "1551276593425685333",
   "1558913216602706011",
+  "1568240267344093254",
   "1568240367076122634",
   "1568283533879939123",
-  "1568240484206514248"
+  "1568240484206514248",
+  "1569731217799127210",
+  "1569731506706849872"
 ];
 
 const ROLE_GROUPS = {
   chuppys_self_roles: {
     roles: PING_ROLE_IDS,
-    success:
-      "﹕𐔌・your roles have been updated〃・꒱ 🤍"
+    success: "﹕𐔌・your roles have been updated〃・꒱ 🤍"
   },
 
   chuppys_second_roles: {
     roles: AGE_ROLE_IDS,
-    success:
-      "﹕𐔌・your age roles have been updated〃・꒱ 🤍"
+    success: "﹕𐔌・your age roles have been updated〃・꒱ 🤍"
   },
 
   chuppys_pronoun_roles: {
     roles: PRONOUN_ROLE_IDS,
-    success:
-      "﹕𐔌・your pronouns have been updated〃・꒱ 🤍"
+    success: "﹕𐔌・your pronouns have been updated〃・꒱ 🤍"
   }
 };
 
-// ==================================================
-// TICKET ROLES
-// ==================================================
-
-const TICKET_EMOJI =
-  "<:chuppyhi:1561103471325745242>";
-
-const TICKET_EMOJI_ID = "1561103471325745242";
-
-const OWNER_ROLE_ID = "1530988662970650865";
-const ADMIN_ROLE_ID = "1531800870444994641";
-const MOD_ROLE_ID = "1531800784700706887";
-
-const TICKET_SUPPORT_ROLE_ID = "1563003884656398406";
-const SELLER_ROLE_ID = "1550322075208646766";
-
-// Middleman and Converter are completely removed.
-
-const TICKET_MANAGER_ROLE_IDS = [
-  OWNER_ROLE_ID,
-  ADMIN_ROLE_ID,
-  MOD_ROLE_ID,
-  TICKET_SUPPORT_ROLE_ID
-];
-
-// Verified is pinged in Purchase/Cash Out but does
-// not automatically receive access to private tickets.
-
-const TICKET_ACCESS_ROLES = {
-  purchase: [
-    OWNER_ROLE_ID,
-    ADMIN_ROLE_ID,
-    MOD_ROLE_ID,
-    TICKET_SUPPORT_ROLE_ID,
-    SELLER_ROLE_ID
-  ],
-
-  cashout: [
-    OWNER_ROLE_ID,
-    ADMIN_ROLE_ID,
-    MOD_ROLE_ID,
-    TICKET_SUPPORT_ROLE_ID,
-    SELLER_ROLE_ID
-  ],
-
-  support: [
-    OWNER_ROLE_ID,
-    ADMIN_ROLE_ID,
-    MOD_ROLE_ID,
-    TICKET_SUPPORT_ROLE_ID
-  ],
-
-  giveaway: [
-    OWNER_ROLE_ID,
-    ADMIN_ROLE_ID,
-    MOD_ROLE_ID,
-    TICKET_SUPPORT_ROLE_ID
-  ],
-
-  partnership: [
-    OWNER_ROLE_ID,
-    ADMIN_ROLE_ID,
-    MOD_ROLE_ID,
-    TICKET_SUPPORT_ROLE_ID
-  ]
-};
-
-// ==================================================
-// TICKET PINGS
-// ==================================================
-
-const TICKET_PING_ROLES = {
-  purchase: [
-    OWNER_ROLE_ID,
-    CHUPPYS_ROLE_ID,
-    SELLER_ROLE_ID,
-    TICKET_SUPPORT_ROLE_ID
-  ],
-
-  cashout: [
-    OWNER_ROLE_ID,
-    CHUPPYS_ROLE_ID,
-    SELLER_ROLE_ID,
-    TICKET_SUPPORT_ROLE_ID
-  ],
-
-  support: [
-    OWNER_ROLE_ID,
-    ADMIN_ROLE_ID,
-    MOD_ROLE_ID,
-    TICKET_SUPPORT_ROLE_ID
-  ],
-
-  giveaway: [],
-  partnership: []
-};
-
-function getTicketPingRoles(type) {
-  return [...new Set(TICKET_PING_ROLES[type] || [])];
+function getVouchChannelId(sellerId) {
+  return PERSONAL_SELLER_IDS.includes(sellerId)
+    ? PERSONAL_VOUCH_CHANNEL_ID
+    : VOUCH_CHANNEL_ID;
 }
 
-function getTicketAccessRoles(type) {
-  return [...new Set(TICKET_ACCESS_ROLES[type] || [])];
-}
+console.log("[INTERACTIONS DEBUG] api/interactions.js loaded.");
 
 // ==================================================
-// TICKET TYPES
-// ==================================================
-
-const TICKET_TYPES = {
-  purchase: {
-    name: "Purchase",
-    description: "Please provide your purchase details.",
-    env: "PURCHASE_TICKET_CATEGORY_ID",
-
-    questions: [
-      "What are you purchasing?",
-      "Who are you buying from?",
-      "Payment method?",
-      "Roblox user?"
-    ]
-  },
-
-  cashout: {
-    name: "Cash Out",
-    description: "Please provide your cash out details.",
-    env: "CASHOUT_TICKET_CATEGORY_ID",
-
-    questions: [
-      "What are you cashing out?",
-      "How much are you looking for?",
-      "Payment method?",
-      "Roblox user?"
-    ]
-  },
-
-  giveaway: {
-    name: "Giveaway",
-    description:
-      "Please provide details of the giveaway you won.",
-    env: "GIVEAWAY_TICKET_CATEGORY_ID"
-  },
-
-  partnership: {
-    name: "Partnership",
-    description:
-      "Please provide your partnership information.",
-    env: "PARTNERSHIP_TICKET_CATEGORY_ID"
-  },
-
-  support: {
-    name: "Support",
-    description:
-      "Please explain what you need help with.",
-    env: "SUPPORT_TICKET_CATEGORY_ID"
-  }
-};
-
-const TICKET_SELECT_IDS = new Set([
-  "chuppys_ticket_select",
-  "chuppys_ticket_category",
-  "chuppys_tickets",
-  "ticket_select",
-  "ticket_category",
-  "ticket_open",
-  "ticket_create"
-]);
-
-const TICKET_MODAL_PREFIX = "chuppys_ticket_form:";
-const TRANSCRIPT_BUTTON_PREFIX = "chuppys_transcript:";
-
-// ==================================================
-// GLOBAL TICKET COUNTER / PRIVATE METADATA
-// ==================================================
-
-const GLOBAL_COUNTER_PREFIX =
-  "CHUPPYS_GLOBAL_TICKET_COUNTER_V1:";
-
-const OLD_COUNTER_PREFIX =
-  "CHUPPYS_TICKET_COUNTERS_V1:";
-
-const TICKET_METADATA_PREFIX =
-  "CHUPPYS_PRIVATE_TICKET_METADATA_V2:";
-
-const LEGACY_TOPIC_PREFIX =
-  "chuppys-ticket:";
-
-// ==================================================
-// PERMISSIONS
-// ==================================================
-
-const VIEW_CHANNEL = 1024n;
-const SEND_MESSAGES = 2048n;
-const READ_HISTORY = 65536n;
-const ATTACH_FILES = 32768n;
-
-const ADMINISTRATOR = 8n;
-const MANAGE_GUILD = 32n;
-const MANAGE_MESSAGES = 8192n;
-
-const TICKET_ALLOW = String(
-  VIEW_CHANNEL |
-  SEND_MESSAGES |
-  READ_HISTORY |
-  ATTACH_FILES
-);
-
-const TICKET_READ_ONLY = String(
-  VIEW_CHANNEL |
-  READ_HISTORY
-);
-
-const TICKET_DENY = String(VIEW_CHANNEL);
-
-// ==================================================
-// BASIC HELPERS
-// ==================================================
-
-function getUserId(i) {
-  return i.member?.user?.id || i.user?.id;
-}
-
-function memberHasRole(i, ids) {
-  return (i.member?.roles || [])
-    .some(id => ids.includes(id));
-}
-
-function hasStaffPermission(i) {
-  const permissions = BigInt(
-    i.member?.permissions || "0"
-  );
-
-  return memberHasRole(
-    i,
-    TICKET_MANAGER_ROLE_IDS
-  ) || (
-    permissions &
-    (
-      ADMINISTRATOR |
-      MANAGE_GUILD |
-      MANAGE_MESSAGES
-    )
-  ) !== 0n;
-}
-
-function canManageTicket(i) {
-  const permissions = BigInt(
-    i.member?.permissions || "0"
-  );
-
-  return memberHasRole(
-    i,
-    TICKET_MANAGER_ROLE_IDS
-  ) || (
-    permissions & ADMINISTRATOR
-  ) !== 0n;
-}
-
-function canViewTranscript(i) {
-  const permissions = BigInt(
-    i.member?.permissions || "0"
-  );
-
-  return memberHasRole(i, [
-    OWNER_ROLE_ID,
-    TICKET_SUPPORT_ROLE_ID
-  ]) || (
-    permissions & ADMINISTRATOR
-  ) !== 0n;
-}
-
-function safeText(value) {
-  return String(value ?? "")
-    .replace(/@/g, "＠");
-}
-
-function ticketChannelName(
-  type,
-  number,
-  closed = false
-) {
-  return (
-    `${closed ? "closed-" : ""}${type}-` +
-    String(number).padStart(4, "0")
-  ).slice(0, 100);
-}
-
-function ticketEmbed(title, description) {
-  return {
-    color: 0xffffff,
-    title,
-    description,
-    footer: {
-      text: ".gg/chuppys | Ticket System"
-    },
-    timestamp: new Date().toISOString()
-  };
-}
-
-function ticketButtons(closed = false) {
-  const button = (id, label, style) => ({
-    type: 2,
-    custom_id: id,
-    label,
-    style,
-    emoji: {
-      id: TICKET_EMOJI_ID
-    }
-  });
-
-  return [{
-    type: 1,
-    components: closed
-      ? [
-          button(
-            "chuppys_ticket_reopen",
-            "Reopen",
-            3
-          ),
-          button(
-            "chuppys_ticket_delete",
-            "Delete",
-            4
-          )
-        ]
-      : [
-          button(
-            "chuppys_ticket_claim",
-            "Claim",
-            1
-          ),
-          button(
-            "chuppys_ticket_close",
-            "Close",
-            4
-          )
-        ]
-  }];
-}
-
-// ==================================================
-// RAW REQUEST AND SIGNATURE VERIFICATION
+// DISCORD SIGNATURE VALIDATION
 // ==================================================
 
 async function getRawBody(req) {
@@ -470,9 +137,11 @@ function verifyDiscordSignature(
 ) {
   try {
     if (
-      !/^[0-9a-f]{128}$/i.test(signature || "") ||
-      !/^[0-9a-f]{64}$/i.test(publicKeyHex || "") ||
-      typeof timestamp !== "string"
+      typeof signature !== "string" ||
+      typeof timestamp !== "string" ||
+      !/^[0-9a-f]{128}$/i.test(signature) ||
+      typeof publicKeyHex !== "string" ||
+      !/^[0-9a-f]{64}$/i.test(publicKeyHex)
     ) {
       return false;
     }
@@ -492,13 +161,18 @@ function verifyDiscordSignature(
     return crypto.verify(
       null,
       Buffer.concat([
-        Buffer.from(timestamp),
+        Buffer.from(timestamp, "utf8"),
         body
       ]),
       key,
       Buffer.from(signature, "hex")
     );
-  } catch {
+  } catch (error) {
+    console.error(
+      "[INTERACTIONS DEBUG] Signature error:",
+      error.message
+    );
+
     return false;
   }
 }
@@ -512,7 +186,7 @@ async function discordFetch(url, options = {}) {
 
   const timeout = setTimeout(
     () => controller.abort(),
-    12000
+    8000
   );
 
   try {
@@ -523,12 +197,14 @@ async function discordFetch(url, options = {}) {
 
     const text = await response.text();
 
-    let data;
+    let data = null;
 
-    try {
-      data = text ? JSON.parse(text) : null;
-    } catch {
-      data = text;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
     }
 
     return {
@@ -536,46 +212,45 @@ async function discordFetch(url, options = {}) {
       status: response.status,
       data
     };
+  } catch (error) {
+    throw new Error(
+      error.name === "AbortError"
+        ? "Discord API request timed out after 8 seconds."
+        : `Discord API network error: ${error.message}`
+    );
   } finally {
     clearTimeout(timeout);
   }
 }
 
 function botHeaders() {
-  if (!process.env.DISCORD_BOT_TOKEN) {
+  const token = process.env.DISCORD_BOT_TOKEN;
+
+  if (!token) {
     throw new Error(
-      "DISCORD_BOT_TOKEN is missing."
+      "DISCORD_BOT_TOKEN is missing from Vercel Environment Variables."
     );
   }
 
   return {
-    Authorization:
-      `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+    Authorization: `Bot ${token}`,
     "Content-Type": "application/json"
   };
 }
 
-async function botRequest(
-  method,
-  path,
-  body
-) {
+async function postChannelMessage(channelId, payload) {
   const result = await discordFetch(
-    `${API}${path}`,
+    `https://discord.com/api/v10/channels/${channelId}/messages`,
     {
-      method,
+      method: "POST",
       headers: botHeaders(),
-      ...(body !== undefined
-        ? {
-            body: JSON.stringify(body)
-          }
-        : {})
+      body: JSON.stringify(payload)
     }
   );
 
   if (!result.ok) {
     throw new Error(
-      `Discord HTTP ${result.status}: ` +
+      `Could not send message: HTTP ${result.status} ` +
       JSON.stringify(result.data)
     );
   }
@@ -583,55 +258,75 @@ async function botRequest(
   return result.data;
 }
 
-async function postChannelMessage(
-  channelId,
-  payload
-) {
-  return botRequest(
-    "POST",
-    `/channels/${channelId}/messages`,
-    payload
-  );
-}
-
-async function getMemberRoles(
-  guildId,
-  userId
-) {
-  const member = await botRequest(
-    "GET",
-    `/guilds/${guildId}/members/${userId}`
-  );
-
-  return member.roles || [];
-}
-
-async function updateOriginalResponse(
-  i,
-  payload
-) {
+async function getMemberRoles(guildId, userId, botToken) {
   const result = await discordFetch(
-    `${API}/webhooks/${i.application_id}/${i.token}/messages/@original`,
+    `https://discord.com/api/v10/guilds/${guildId}/members/${userId}`,
     {
-      method: "PATCH",
+      method: "GET",
       headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(
-        typeof payload === "string"
-          ? {
-              content: payload
-            }
-          : payload
-      )
+        Authorization: `Bot ${botToken}`
+      }
     }
   );
 
   if (!result.ok) {
     throw new Error(
-      `Could not update response: ${result.status}`
+      `Could not retrieve member roles: HTTP ${result.status} ` +
+      JSON.stringify(result.data)
     );
   }
+
+  return result.data.roles || [];
+}
+
+async function updateOriginalResponse(
+  interaction,
+  contentOrPayload
+) {
+  const payload =
+    typeof contentOrPayload === "string"
+      ? { content: contentOrPayload }
+      : contentOrPayload;
+
+  const result = await discordFetch(
+    `https://discord.com/api/v10/webhooks/${interaction.application_id}/${interaction.token}/messages/@original`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    }
+  );
+
+  if (!result.ok) {
+    throw new Error(
+      `Could not update interaction response: HTTP ${result.status} ` +
+      JSON.stringify(result.data)
+    );
+  }
+}
+
+function hasStaffPermission(interaction) {
+  const member = interaction.member;
+
+  if (!member) return false;
+
+  if (
+    (member.roles || []).includes(TICKET_SUPPORT_ROLE_ID)
+  ) {
+    return true;
+  }
+
+  const permissions = BigInt(
+    member.permissions || "0"
+  );
+
+  return (
+    (permissions & 8n) === 8n ||
+    (permissions & 32n) === 32n ||
+    (permissions & 8192n) === 8192n
+  );
 }
 
 function ephemeral(content) {
@@ -654,533 +349,2067 @@ function deferEphemeral(res, task) {
 
   waitUntil(
     Promise.resolve(task).catch(error => {
-      console.error(
-        "[BACKGROUND]",
-        error
-      );
+      console.error("[ASYNC TASK]", error);
     })
   );
 }
 
-function optionsMap(i) {
+function optionsMap(interaction) {
   return Object.fromEntries(
-    (i.data?.options || [])
-      .map(option => [
-        option.name,
-        option.value
-      ])
+    (interaction.data?.options || []).map(option => [
+      option.name,
+      option.value
+    ])
   );
 }
 
-function getVouchChannelId(sellerId) {
-  return PERSONAL_SELLER_IDS.includes(
-    sellerId
-  )
-    ? PERSONAL_VOUCH_CHANNEL_ID
-    : VOUCH_CHANNEL_ID;
-}
-
 // ==================================================
-// LEGACY TICKET TOPIC SUPPORT
+// ROLE MENU HANDLER
 // ==================================================
 
-function decodeLegacyTicketTopic(topic) {
-  if (
-    !topic?.startsWith(
-      LEGACY_TOPIC_PREFIX
+async function changeRoles(interaction, group) {
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  const guildId = interaction.guild_id;
+
+  const userId =
+    interaction.member?.user?.id ||
+    interaction.user?.id;
+
+  if (!botToken || !guildId || !userId) {
+    throw new Error(
+      "Missing bot token, server ID, or member ID."
+    );
+  }
+
+  const selectedRoles = new Set(
+    interaction.data.values || []
+  );
+
+  for (const roleId of selectedRoles) {
+    if (!group.roles.includes(roleId)) {
+      throw new Error(
+        `Unexpected role ID: ${roleId}`
+      );
+    }
+  }
+
+  const currentRoles = new Set(
+    await getMemberRoles(
+      guildId,
+      userId,
+      botToken
     )
-  ) {
-    return null;
-  }
+  );
 
-  try {
-    return JSON.parse(
-      topic.slice(
-        LEGACY_TOPIC_PREFIX.length
-      )
+  for (const roleId of group.roles) {
+    const shouldHaveRole =
+      selectedRoles.has(roleId);
+
+    if (
+      shouldHaveRole === currentRoles.has(roleId)
+    ) {
+      continue;
+    }
+
+    const result = await discordFetch(
+      `https://discord.com/api/v10/guilds/${guildId}/members/${userId}/roles/${roleId}`,
+      {
+        method: shouldHaveRole
+          ? "PUT"
+          : "DELETE",
+
+        headers: {
+          Authorization: `Bot ${botToken}`
+        }
+      }
     );
-  } catch {
-    return null;
+
+    if (!result.ok) {
+      throw new Error(
+        `Role ${roleId} failed: HTTP ${result.status} ` +
+        JSON.stringify(result.data)
+      );
+    }
+
+    console.log(
+      `[ROLE DEBUG] ${shouldHaveRole ? "Added" : "Removed"} ${roleId} for ${userId}`
+    );
+  }
+}
+
+async function processRoleInteraction(
+  interaction,
+  group
+) {
+  try {
+    await changeRoles(
+      interaction,
+      group
+    );
+
+    await updateOriginalResponse(
+      interaction,
+      group.success
+    );
+  } catch (error) {
+    console.error(
+      "[ROLE DEBUG] Failed:",
+      error
+    );
+
+    await updateOriginalResponse(
+      interaction,
+      "﹕𐔌・role update failed. Please contact staff.〃・꒱ 🤍"
+    ).catch(console.error);
   }
 }
 
 // ==================================================
-// PRIVATE TICKET METADATA
-// Stored in ticket logs, NOT channel description.
+// CLIENT ROLE BUTTON HANDLER
 // ==================================================
 
-function encodeTicketMetadata(channelId, ticket) {
-  return TICKET_METADATA_PREFIX +
-    JSON.stringify({
-      channelId,
-      ...ticket
-    });
-}
-
-function decodeTicketMetadata(content) {
-  if (
-    !content?.startsWith(
-      TICKET_METADATA_PREFIX
-    )
-  ) {
-    return null;
-  }
-
+async function processClientRole(interaction) {
   try {
-    return JSON.parse(
-      content.slice(
-        TICKET_METADATA_PREFIX.length
-      )
-    );
-  } catch {
-    return null;
-  }
-}
+    const botToken = process.env.DISCORD_BOT_TOKEN;
+    const guildId = interaction.guild_id;
 
-async function findTicketMetadata(channelId) {
-  let before;
+    const userId =
+      interaction.member?.user?.id ||
+      interaction.user?.id;
 
-  while (true) {
-    const query = before
-      ? `?limit=100&before=${before}`
-      : "?limit=100";
+    if (!botToken || !guildId || !userId) {
+      throw new Error(
+        "Missing bot token, server ID, or member ID."
+      );
+    }
 
-    const messages = await botRequest(
-      "GET",
-      `/channels/${TICKET_LOG_CHANNEL_ID}/messages${query}`
+    const roles = await getMemberRoles(
+      guildId,
+      userId,
+      botToken
     );
 
-    for (const message of messages) {
-      const ticket = decodeTicketMetadata(
-        message.content
+    if (roles.includes(CLIENT_ROLE_ID)) {
+      await updateOriginalResponse(
+        interaction,
+        "﹕𐔌・you already have the client role! you're ready to vouch. 🤍"
       );
 
-      if (
-        ticket?.channelId === channelId
-      ) {
-        return {
-          message,
-          ticket
-        };
+      return;
+    }
+
+    const result = await discordFetch(
+      `https://discord.com/api/v10/guilds/${guildId}/members/${userId}/roles/${CLIENT_ROLE_ID}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bot ${botToken}`
+        }
       }
+    );
+
+    if (!result.ok) {
+      throw new Error(
+        `Could not grant client role: HTTP ${result.status} ` +
+        JSON.stringify(result.data)
+      );
     }
 
-    if (messages.length < 100) {
-      break;
-    }
+    await updateOriginalResponse(
+      interaction,
+      "﹕𐔌・you now have the client role! you can successfully submit a vouch. thank you for shopping at .gg/chuppys! 🤍"
+    );
+  } catch (error) {
+    console.error(
+      "[CLIENT DEBUG] Failed:",
+      error
+    );
 
-    before = messages[
-      messages.length - 1
-    ].id;
+    await updateOriginalResponse(
+      interaction,
+      "Your client role could not be added. Please contact staff."
+    ).catch(console.error);
   }
-
-  return null;
 }
 
-async function saveTicketMetadata(
-  channelId,
-  ticket,
-  existingMessageId = null
-) {
-  const content = encodeTicketMetadata(
-    channelId,
-    ticket
-  );
+// ==================================================
+// VERIFICATION BUTTON HANDLER
+// ==================================================
 
-  if (existingMessageId) {
-    return botRequest(
-      "PATCH",
-      `/channels/${TICKET_LOG_CHANNEL_ID}/messages/${existingMessageId}`,
+async function processVerification(interaction) {
+  try {
+    const botToken = process.env.DISCORD_BOT_TOKEN;
+    const guildId = interaction.guild_id;
+
+    const userId =
+      interaction.member?.user?.id ||
+      interaction.user?.id;
+
+    if (!botToken || !guildId || !userId) {
+      throw new Error(
+        "Missing bot token, server ID, or member ID."
+      );
+    }
+
+    const roles = new Set(
+      await getMemberRoles(
+        guildId,
+        userId,
+        botToken
+      )
+    );
+
+    if (roles.has(CHUPPYS_ROLE_ID)) {
+      await updateOriginalResponse(
+        interaction,
+        "﹕𐔌・you are already verified! welcome to .gg/chuppys 🤍"
+      );
+
+      return;
+    }
+
+    const hasAgeRole =
+      AGE_ROLE_IDS.some(id => roles.has(id));
+
+    const hasPronounRole =
+      PRONOUN_ROLE_IDS.some(id => roles.has(id));
+
+    const pingRoleCount =
+      PING_ROLE_IDS.filter(id => roles.has(id)).length;
+
+    if (
+      !hasAgeRole ||
+      !hasPronounRole ||
+      pingRoleCount < 2
+    ) {
+      await updateOriginalResponse(
+        interaction,
+        `Please select your roles in <#${ROLES_CHANNEL_ID}> before verifying to gain full access to .gg/chuppys. 🤍`
+      );
+
+      return;
+    }
+
+    const result = await discordFetch(
+      `https://discord.com/api/v10/guilds/${guildId}/members/${userId}/roles/${CHUPPYS_ROLE_ID}`,
       {
-        content,
+        method: "PUT",
+        headers: {
+          Authorization: `Bot ${botToken}`
+        }
+      }
+    );
+
+    if (!result.ok) {
+      throw new Error(
+        `Could not grant Chuppys role: HTTP ${result.status} ` +
+        JSON.stringify(result.data)
+      );
+    }
+
+    await updateOriginalResponse(
+      interaction,
+      "﹕𐔌・you are now verified! welcome to .gg/chuppys 🤍"
+    );
+  } catch (error) {
+    console.error(
+      "[VERIFY DEBUG] Verification failed:",
+      error
+    );
+
+    await updateOriginalResponse(
+      interaction,
+      "Verification failed. Please contact staff for help."
+    ).catch(console.error);
+  }
+}
+
+// ==================================================
+// /VOUCH
+// ==================================================
+
+async function processVouchInteraction(interaction) {
+  try {
+    console.log(
+      "[VOUCH DEBUG] Processing /vouch."
+    );
+
+    const botToken = process.env.DISCORD_BOT_TOKEN;
+
+    if (!botToken) {
+      throw new Error(
+        "DISCORD_BOT_TOKEN is missing from Vercel Environment Variables."
+      );
+    }
+
+    if (!interaction.guild_id) {
+      throw new Error(
+        "Use /vouch inside your Discord server."
+      );
+    }
+
+    const buyerId =
+      interaction.member?.user?.id ||
+      interaction.user?.id;
+
+    if (!buyerId) {
+      throw new Error(
+        "Could not identify the buyer."
+      );
+    }
+
+    const buyerRoles = await getMemberRoles(
+      interaction.guild_id,
+      buyerId,
+      botToken
+    );
+
+    if (!buyerRoles.includes(CLIENT_ROLE_ID)) {
+      await updateOriginalResponse(
+        interaction,
+        "You need the client role before submitting a vouch! Please click the **client** button in the client-role message in .gg/chuppys. 🤍"
+      );
+
+      return;
+    }
+
+    const options = optionsMap(interaction);
+    const resolved = interaction.data.resolved || {};
+
+    const sellerId = options.seller;
+    const rating = options.rating;
+    const order = options.order?.trim();
+
+    const proof =
+      resolved.attachments?.[options.proof];
+
+    const seller =
+      resolved.users?.[sellerId];
+
+    if (!sellerId || !buyerId) {
+      throw new Error(
+        "Could not identify the buyer or seller."
+      );
+    }
+
+    if (seller?.bot) {
+      throw new Error(
+        "You cannot vouch for a bot."
+      );
+    }
+
+    if (sellerId === buyerId) {
+      throw new Error(
+        "You cannot vouch for yourself."
+      );
+    }
+
+    if (
+      !Number.isInteger(rating) ||
+      rating < 1 ||
+      rating > 5
+    ) {
+      throw new Error(
+        "Rating must be between 1 and 5."
+      );
+    }
+
+    if (!order) {
+      throw new Error(
+        "Please enter what you purchased."
+      );
+    }
+
+    if (order.length > 500) {
+      throw new Error(
+        "Your order description must be 500 characters or fewer."
+      );
+    }
+
+    if (!proof) {
+      throw new Error(
+        "Please attach proof of your purchase."
+      );
+    }
+
+    const isImage =
+      proof.content_type?.startsWith("image/") ||
+      /\.(png|jpe?g|gif|webp)$/i.test(
+        proof.filename || ""
+      );
+
+    if (!isImage) {
+      throw new Error(
+        "Proof must be a PNG, JPG, GIF, or WEBP image."
+      );
+    }
+
+    const embed = {
+      color: 0xffffff,
+
+      title: "NEW VOUCH",
+
+      thumbnail: {
+        url: VOUCH_EMOJI_URL
+      },
+
+      description:
+        `**seller:** <@${sellerId}>\n` +
+        `**buyer:** <@${buyerId}>\n` +
+        `**items purchased:** ${order}\n` +
+        `**rating:** ${rating}/5\n` +
+        `**proof:** 📎 ${proof.filename || "Purchase proof"}\n\n` +
+        "*thank you for vouching! shop again ♡*",
+
+      image: {
+        url: proof.url
+      },
+
+      timestamp: new Date().toISOString()
+    };
+
+    const targetChannelId =
+      getVouchChannelId(sellerId);
+
+    const result = await postChannelMessage(
+      targetChannelId,
+      {
+        embeds: [embed],
+
+        allowed_mentions: {
+          parse: [],
+          users: [sellerId, buyerId]
+        }
+      }
+    );
+
+    console.log(
+      `[VOUCH DEBUG] Posted ${result?.id || "unknown"} to ${targetChannelId}`
+    );
+
+    await updateOriginalResponse(
+      interaction,
+      "Your vouch was submitted successfully! ♡"
+    );
+  } catch (error) {
+    console.error(
+      "[VOUCH DEBUG] /vouch failed:",
+      error
+    );
+
+    await updateOriginalResponse(
+      interaction,
+      `❌ ${error.message || "Your vouch could not be submitted."}`
+    ).catch(console.error);
+  }
+}
+
+// ==================================================
+// /QUESTION
+// ==================================================
+
+async function processQuestionInteraction(interaction) {
+  try {
+    if (!interaction.guild_id) {
+      throw new Error(
+        "Use /question inside your Discord server."
+      );
+    }
+
+    if (
+      interaction.channel_id !== QUESTION_CHANNEL_ID
+    ) {
+      await updateOriginalResponse(
+        interaction,
+        `Please use /question in <#${QUESTION_CHANNEL_ID}>.`
+      );
+
+      return;
+    }
+
+    const options = optionsMap(interaction);
+
+    const questionText =
+      options.question?.trim();
+
+    const picture = options.picture
+      ? interaction.data.resolved?.attachments?.[
+          options.picture
+        ]
+      : null;
+
+    if (!questionText) {
+      throw new Error(
+        "Please enter your question."
+      );
+    }
+
+    if (
+      picture &&
+      !(
+        picture.content_type?.startsWith("image/") ||
+        /\.(png|jpe?g|gif|webp)$/i.test(
+          picture.filename || ""
+        )
+      )
+    ) {
+      await updateOriginalResponse(
+        interaction,
+        "Please attach an image file for the picture option."
+      );
+
+      return;
+    }
+
+    const askerId =
+      interaction.member?.user?.id ||
+      interaction.user?.id;
+
+    if (!askerId) {
+      throw new Error(
+        "Could not identify the member."
+      );
+    }
+
+    const embed = {
+      title:
+        `Question from @${interaction.member?.user?.username || interaction.user?.username || "Member"}`,
+
+      color: 0xffffff,
+
+      description:
+        `**Question**\n${questionText}`,
+
+      thumbnail: {
+        url: QUESTION_EMOJI_URL
+      },
+
+      footer: {
+        text:
+          `.gg/chuppys • Question User ID: ${askerId}`
+      },
+
+      timestamp: new Date().toISOString()
+    };
+
+    if (picture?.url) {
+      embed.image = {
+        url: picture.url
+      };
+    }
+
+    const components = [{
+      type: 1,
+
+      components: [
+        {
+          type: 2,
+          style: 2,
+          label: "Make a Support Ticket",
+
+          custom_id:
+            `${QUESTION_TICKET_CUSTOM_ID}${askerId}`
+        },
+
+        {
+          type: 2,
+          style: 1,
+          label: "Reply to Question",
+
+          custom_id:
+            `${QUESTION_REPLY_CUSTOM_ID}${askerId}`
+        }
+      ]
+    }];
+
+    await postChannelMessage(
+      QUESTION_CHANNEL_ID,
+      {
+        embeds: [embed],
+        components,
+
         allowed_mentions: {
           parse: []
         }
       }
     );
-  }
 
-  return postChannelMessage(
-    TICKET_LOG_CHANNEL_ID,
-    {
-      content,
-      allowed_mentions: {
-        parse: []
-      }
+    await updateOriginalResponse(
+      interaction,
+      "Your question was sent to Chuppys staff! ♡"
+    );
+  } catch (error) {
+    console.error(
+      "[QUESTION DEBUG] Failed:",
+      error
+    );
+
+    await updateOriginalResponse(
+      interaction,
+      `Your question could not be sent: ${error.message}`
+    ).catch(console.error);
+  }
+}
+
+// ==================================================
+// /REQUEST
+// ==================================================
+
+async function processRequestInteraction(interaction) {
+  try {
+    if (!interaction.guild_id) {
+      throw new Error(
+        "Use /request inside the Chuppys server."
+      );
     }
-  );
-}
 
-// ==================================================
-// LOAD TICKET DATA
-// ==================================================
+    if (
+      interaction.channel_id !== REQUEST_CHANNEL_ID
+    ) {
+      await updateOriginalResponse(
+        interaction,
+        `Please use /request in <#${REQUEST_CHANNEL_ID}>.`
+      );
 
-async function loadTicketData(channel) {
-  const found = await findTicketMetadata(
-    channel.id
-  );
+      return;
+    }
 
-  if (found) {
-    return {
-      ticket: found.ticket,
-      metadataMessageId: found.message.id
+    const options = optionsMap(interaction);
+
+    const category = options.category;
+
+    const items =
+      typeof options.items === "string"
+        ? options.items.trim()
+        : "";
+
+    if (!REQUEST_CATEGORIES.has(category)) {
+      throw new Error(
+        "Please select a valid request category."
+      );
+    }
+
+    if (!items || items.length > 1000) {
+      throw new Error(
+        "Enter what you want (up to 1000 characters)."
+      );
+    }
+
+    const requesterId =
+      interaction.member?.user?.id ||
+      interaction.user?.id;
+
+    if (!requesterId) {
+      throw new Error(
+        "Could not identify the requester."
+      );
+    }
+
+    const embed = {
+      title: `${category} Request`,
+
+      color: 0xffffff,
+
+      description:
+        `**Requested by:** <@${requesterId}>\n\n` +
+        "**What they'd like Chuppys to stock up on:**\n" +
+        items,
+
+      thumbnail: {
+        url: REQUEST_THUMBNAIL_URL
+      },
+
+      footer: {
+        text: ".gg/chuppys"
+      },
+
+      timestamp: new Date().toISOString()
     };
-  }
 
-  // Support tickets created before this update.
-  const legacy = decodeLegacyTicketTopic(
-    channel.topic
-  );
-
-  if (legacy) {
-    const saved = await saveTicketMetadata(
-      channel.id,
-      legacy
-    );
-
-    // Clear the old visible channel description.
-    await botRequest(
-      "PATCH",
-      `/channels/${channel.id}`,
+    await postChannelMessage(
+      REQUEST_CHANNEL_ID,
       {
-        topic: null
+        embeds: [embed],
+
+        allowed_mentions: {
+          parse: []
+        }
       }
     );
 
-    return {
-      ticket: legacy,
-      metadataMessageId: saved.id
-    };
-  }
+    await updateOriginalResponse(
+      interaction,
+      `Your **${category}** request has been submitted! Thank you for helping Chuppys decide what to stock.`
+    );
+  } catch (error) {
+    console.error(
+      "[REQUEST DEBUG] Failed:",
+      error
+    );
 
-  throw new Error(
-    "This channel is not a Chuppys ticket."
-  );
+    await updateOriginalResponse(
+      interaction,
+      `Your request could not be submitted: ${error.message}`
+    ).catch(console.error);
+  }
 }
 
-async function getTicketChannel(i) {
-  const channel = await botRequest(
-    "GET",
-    `/channels/${i.channel_id}`
-  );
+// ==================================================
+// /HELP
+// ==================================================
 
-  const data = await loadTicketData(
-    channel
-  );
-
-  if (
-    !TICKET_TYPES[data.ticket.type]
-  ) {
-    throw new Error(
-      "Invalid ticket category."
-    );
-  }
-
+function makeHelpEmbed() {
   return {
-    channel,
-    ...data
+    title: ".gg/chuppys Bot Commands",
+
+    color: 0xffffff,
+
+    description:
+      "Here is a list of available commands and what they do.\n\n" +
+      "Use the commands below to access the bot's features.",
+
+    fields: [
+      {
+        name: "General Commands",
+
+        value:
+          "`/help` — Displays this command menu.\n" +
+          "`/question` — Submit a question to the Chuppys team.\n" +
+          "`/request` — Request items for Chuppys to stock up on.\n" +
+          "`/vouch` — Submit a vouch for a completed transaction.\n" +
+          "`,afk [reason]` — Set your AFK status.\n" +
+          "`,pay` — Displays available payment methods.\n" +
+          "`,client` — Posts or updates the client-role message."
+      },
+
+      {
+        name: "Support Commands",
+
+        value:
+          "`,r @user c` — Gives a member the Chuppys role.\n" +
+          "`,r @user r` — Sends a member a vouch reminder.\n" +
+          "`,partner` — Displays partnership instructions.\n" +
+          "`,mod` — Displays moderator responsibilities.\n" +
+          "`,seller` — Displays seller application information.\n" +
+          "`,promoter` — Displays promoter responsibilities and application questions."
+      },
+
+      {
+        name: "Service Commands",
+
+        value:
+          "`,nitro` / `!nitro` — Updates the Nitro price list.\n" +
+          "`,decor` / `!decor` — Updates the Decor price list.\n" +
+          "`,boosties` / `!boosties` — Updates the Boosties price list.\n" +
+          "`,sellers` / `!sellers` — Posts the seller list.\n" +
+          "`,staff` / `!staff` — Posts the staff list."
+      },
+
+      {
+        name: "Additional Commands",
+
+        value:
+          "`!vouchtut` — Posts the vouch tutorial.\n" +
+          "`!ranked` — Posts the ranked roles list.\n" +
+          "`!robuxcashout` — Posts Robux cashout rates.\n" +
+          "`!testwelcome` — Tests the welcome embed.\n" +
+          "`!testgoodbye` — Tests the goodbye embed."
+      }
+    ],
+
+    thumbnail: {
+      url:
+        "https://cdn.discordapp.com/emojis/1569039366880235560.png"
+    },
+
+    footer: {
+      text: ".gg/chuppys"
+    }
   };
 }
 
 // ==================================================
-// GLOBAL TICKET COUNTER
+// QUESTION BUTTONS AND PRIVATE STAFF REPLIES
 // ==================================================
 
-async function findGlobalCounterMessage() {
-  let before;
+function handleQuestionTicketButton() {
+  return {
+    type: 4,
 
-  while (true) {
-    const query = before
-      ? `?limit=100&before=${before}`
-      : "?limit=100";
+    data: {
+      flags: 64,
 
-    const messages = await botRequest(
-      "GET",
-      `/channels/${TICKET_LOG_CHANNEL_ID}/messages${query}`
-    );
+      embeds: [{
+        color: 0xffffff,
 
-    for (const message of messages) {
-      if (
-        message.content?.startsWith(
-          GLOBAL_COUNTER_PREFIX
-        )
-      ) {
-        const number = Number(
-          message.content.slice(
-            GLOBAL_COUNTER_PREFIX.length
-          )
-        );
+        description:
+          "This question requires a support ticket.\n\n" +
+          `Please make one in <#${TICKET_CHANNEL_ID}> ` +
+          "and @ Ticket Support for assistance.\n\n" +
+          "Thank you! <:uppyty:1561094713153429746>",
 
-        if (
-          Number.isSafeInteger(number) &&
-          number >= 0
-        ) {
-          return {
-            message,
-            number
-          };
-        }
-      }
-    }
-
-    if (messages.length < 100) {
-      break;
-    }
-
-    before = messages[
-      messages.length - 1
-    ].id;
-  }
-
-  return null;
-}
-
-async function findOldTicketCounters() {
-  let before;
-
-  while (true) {
-    const query = before
-      ? `?limit=100&before=${before}`
-      : "?limit=100";
-
-    const messages = await botRequest(
-      "GET",
-      `/channels/${TICKET_LOG_CHANNEL_ID}/messages${query}`
-    );
-
-    for (const message of messages) {
-      if (
-        !message.content?.startsWith(
-          OLD_COUNTER_PREFIX
-        )
-      ) {
-        continue;
-      }
-
-      try {
-        const counters = JSON.parse(
-          message.content.slice(
-            OLD_COUNTER_PREFIX.length
-          )
-        );
-
-        const values = Object.values(
-          counters
-        );
-
-        if (
-          values.every(value =>
-            Number.isSafeInteger(value) &&
-            value >= 0
-          )
-        ) {
-          return values.reduce(
-            (sum, value) => sum + value,
-            0
-          );
-        }
-      } catch {
-        // Ignore invalid counter messages.
-      }
-    }
-
-    if (messages.length < 100) {
-      break;
-    }
-
-    before = messages[
-      messages.length - 1
-    ].id;
-  }
-
-  return 0;
-}
-
-async function nextTicketNumber(guildId) {
-  const found =
-    await findGlobalCounterMessage();
-
-  let number = found?.number || 0;
-
-  if (!found) {
-    const oldTotal =
-      await findOldTicketCounters();
-
-    number = Math.max(
-      number,
-      oldTotal
-    );
-
-    const channels = await botRequest(
-      "GET",
-      `/guilds/${guildId}/channels`
-    );
-
-    for (const channel of channels) {
-      const legacy = decodeLegacyTicketTopic(
-        channel.topic
-      );
-
-      if (
-        Number.isSafeInteger(
-          legacy?.number
-        )
-      ) {
-        number = Math.max(
-          number,
-          legacy.number
-        );
-      }
-
-      const match = channel.name?.match(
-        /^(?:closed-)?(?:purchase|cashout|support|giveaway|partnership)-(\d+)$/
-      );
-
-      if (match) {
-        number = Math.max(
-          number,
-          Number(match[1])
-        );
-      }
-    }
-  }
-
-  number++;
-
-  const content =
-    GLOBAL_COUNTER_PREFIX + number;
-
-  if (found) {
-    await botRequest(
-      "PATCH",
-      `/channels/${TICKET_LOG_CHANNEL_ID}/messages/${found.message.id}`,
-      {
-        content
-      }
-    );
-  } else {
-    await postChannelMessage(
-      TICKET_LOG_CHANNEL_ID,
-      {
-        content,
-        allowed_mentions: {
-          parse: []
-        }
-      }
-    );
-  }
-
-  return number;
-}
-
-// ==================================================
-// TICKET CATEGORY
-// ==================================================
-
-async function getTicketCategory(
-  guildId,
-  type
-) {
-  const settings = TICKET_TYPES[type];
-
-  if (!settings) {
-    throw new Error(
-      "Invalid ticket category."
-    );
-  }
-
-  const configuredId =
-    process.env[settings.env];
-
-  if (configuredId) {
-    const channel = await botRequest(
-      "GET",
-      `/channels/${configuredId}`
-    );
-
-    if (
-      channel.type !== 4 ||
-      channel.guild_id !== guildId
-    ) {
-      throw new Error(
-        `${settings.env} is not a valid category.`
-      );
-    }
-
-    return channel.id;
-  }
-
-  const channels = await botRequest(
-    "GET",
-    `/guilds/${guildId}/channels`
-  );
-
-  const existing = channels.find(
-    channel =>
-      channel.type === 4 &&
-      channel.name ===
-        `chuppys-${type}`
-  );
-
-  if (existing) {
-    return existing.id;
-  }
-
-  const category = await botRequest(
-    "POST",
-    `/guilds/${guildId}/channels`,
-    {
-      name: `chuppys-${type}`,
-      type: 4,
-
-      permission_overwrites: [
-        {
-          id: guildId,
-          type: 0,
-          deny: TICKET_DENY
+        thumbnail: {
+          url: QUESTION_EMOJI_URL
         },
 
-        ...getTicketAccessRoles(type).map(
-          id => ({
-            id,
-            type: 0,
-            allow: TICKET_ALLOW
-          })
-        )
-      ]
-    }
-  );
+        footer: {
+          text: ".gg/chuppys"
+        }
+      }],
 
-  return category.id;
+      allowed_mentions: {
+        parse: []
+      }
+    }
+  };
 }
 
-// ==================================================
-// PURCHASE / CASH OUT MODALS
-// ==================================================
+function handleQuestionReplyButton(interaction) {
+  if (!hasStaffPermission(interaction)) {
+    return ephemeral(
+      "Only the owner, administrators, moderators, or Ticket Support can reply to questions."
+    );
+  }
 
-function ticketForm(type) {
-  const settings = TICKET_TYPES[type];
+  const askerId =
+    interaction.data.custom_id.slice(
+      QUESTION_REPLY_CUSTOM_ID.length
+    );
+
+  if (!/^\d{17,20}$/.test(askerId)) {
+    return ephemeral(
+      "This question button is invalid."
+    );
+  }
 
   return {
     type: 9,
 
     data: {
       custom_id:
-        `${TICKET_MODAL_PREFIX}${type}`,
+        `${QUESTION_MODAL_CUSTOM_ID}${askerId}:${interaction.message.id}`,
 
+      title: "Reply to Question",
+
+      components: [{
+        type: 1,
+
+        components: [{
+          type: 4,
+
+          custom_id: "question_reply_text",
+
+          label: "Your response",
+
+          style: 2,
+          min_length: 1,
+          max_length: 2000,
+
+          placeholder:
+            "Type your answer to the member...",
+
+          required: true
+        }]
+      }]
+    }
+  };
+}
+
+async function processQuestionReply(interaction) {
+  try {
+    if (!hasStaffPermission(interaction)) {
+      throw new Error(
+        "Only authorized staff can answer questions."
+      );
+    }
+
+    const match =
+      interaction.data.custom_id.match(
+        /^question_reply_modal:(\d{17,20}):(\d{17,20})$/
+      );
+
+    if (!match) {
+      throw new Error(
+        "Invalid question reply form."
+      );
+    }
+
+    const askerId = match[1];
+    const originalMessageId = match[2];
+
+    const actionRow =
+      interaction.data.components?.find(
+        component => component.type === 1
+      );
+
+    const answerText =
+      actionRow?.components?.find(
+        component =>
+          component.custom_id === "question_reply_text"
+      )?.value?.trim();
+
+    if (!answerText) {
+      throw new Error(
+        "Please enter a response."
+      );
+    }
+
+    const staffId =
+      interaction.member?.user?.id ||
+      interaction.user?.id;
+
+    if (!staffId) {
+      throw new Error(
+        "Could not identify the staff member."
+      );
+    }
+
+    const dmResult = await discordFetch(
+      "https://discord.com/api/v10/users/@me/channels",
+      {
+        method: "POST",
+
+        headers: botHeaders(),
+
+        body: JSON.stringify({
+          recipient_id: askerId
+        })
+      }
+    );
+
+    if (!dmResult.ok || !dmResult.data?.id) {
+      throw new Error(
+        "I couldn't open a DM with the member. They may have direct messages disabled."
+      );
+    }
+
+    const replyEmbed = {
+      title: "Response to Your Question",
+
+      color: 0xffffff,
+
+      description:
+        `${QUESTION_EMOJI} **Replied by:** <@${staffId}>\n\n` +
+        `**Response:**\n${answerText}`,
+
+      thumbnail: {
+        url: QUESTION_EMOJI_URL
+      },
+
+      footer: {
+        text: ".gg/chuppys"
+      },
+
+      timestamp: new Date().toISOString()
+    };
+
+    await postChannelMessage(
+      dmResult.data.id,
+      {
+        embeds: [replyEmbed],
+
+        allowed_mentions: {
+          parse: []
+        }
+      }
+    );
+
+    try {
+      await postChannelMessage(
+        QUESTION_CHANNEL_ID,
+        {
+          content:
+            `A response was sent privately by <@${staffId}>.`,
+
+          message_reference: {
+            message_id: originalMessageId,
+            fail_if_not_exists: false
+          },
+
+          allowed_mentions: {
+            parse: [],
+            users: [staffId]
+          }
+        }
+      );
+    } catch (error) {
+      console.warn(
+        "[QUESTION DEBUG] Could not post staff reply notice:",
+        error
+      );
+    }
+
+    await updateOriginalResponse(
+      interaction,
+      "Your response was sent to the member privately."
+    );
+  } catch (error) {
+    console.error(
+      "[QUESTION DEBUG] Could not send staff response:",
+      error
+    );
+
+    await updateOriginalResponse(
+      interaction,
+      `Could not send the response: ${error.message}`
+    ).catch(console.error);
+  }
+}
+
+// ==================================================
+// TICKET ENDPOINT — RENDER TICKETS.JS V3
+// ==================================================
+
+// HTTP interactions arrive at Vercel when the
+// Discord Interactions Endpoint URL is configured.
+//
+// Prefix commands still reach tickets.js on Render.
+//
+// Both runtimes use the V3 private metadata channel.
+
+const TC = Object.freeze({
+  data: "1571112668037644388",
+  logs: "1570913954333728808",
+
+  owner: "1530988662970650865",
+  admin: "1531800870444994641",
+  mod: "1531800784700706887",
+
+  support: "1563003884656398406",
+  seller: "1550322075208646766",
+
+  verified: CHUPPYS_ROLE_ID,
+
+  verifyButton:
+    "chuppys_create_verification_ticket"
+});
+
+const STATE_V3 =
+  "CHUPPYS_PRIVATE_TICKET_METADATA_V3:";
+
+const LEGACY_STATES = [
+  STATE_V3,
+  "CHUPPYS_PRIVATE_TICKET_METADATA_V2:",
+  "CHUPPYS_TICKET_STATE_V4:",
+  "CHUPPYS_TICKET_STATE_V3:",
+  "CHUPPYS_TICKET_STATE_V2:"
+];
+
+const COUNTER_V1 =
+  "CHUPPYS_GLOBAL_TICKET_COUNTER_V1:";
+
+// ==================================================
+// TICKET PERMISSIONS
+// ==================================================
+
+const PERM = {
+  view: 1024n,
+  send: 2048n,
+  attach: 32768n,
+  history: 65536n,
+
+  manageChannels: 16n,
+  manageMessages: 8192n,
+
+  administrator: 8n
+};
+
+const FULL_P = String(
+  PERM.view |
+  PERM.send |
+  PERM.attach |
+  PERM.history
+);
+
+const READ_P = String(
+  PERM.view |
+  PERM.history
+);
+
+const HIDE_P = String(
+  PERM.view |
+  PERM.send |
+  PERM.attach |
+  PERM.history
+);
+
+// ==================================================
+// TICKET TYPES
+// ==================================================
+
+const T_TYPES = {
+  purchase: {
+    label: "Purchase",
+
+    env: "PURCHASE_TICKET_CATEGORY_ID",
+
+    names: [
+      "chuppys-purchase",
+      "Purchasing tickets",
+      "Purchase tickets"
+    ],
+
+    questions: [
+      "What are you purchasing?",
+      "Who are you buying from?",
+      "Payment method?",
+      "Roblox user?"
+    ]
+  },
+
+  cashout: {
+    label: "Cash Out",
+
+    env: "CASHOUT_TICKET_CATEGORY_ID",
+
+    names: [
+      "chuppys-cashout",
+      "Cashout tickets",
+      "Cash Out tickets"
+    ],
+
+    questions: [
+      "What are you cashing out?",
+      "How much are you looking for?",
+      "Payment method?",
+      "Roblox user?"
+    ]
+  },
+
+  giveaway: {
+    label: "Giveaway",
+
+    env: "GIVEAWAY_TICKET_CATEGORY_ID",
+
+    names: [
+      "chuppys-giveaway",
+      "Giveaway tickets"
+    ],
+
+    description:
+      "Please explain the giveaway you won."
+  },
+
+  partnership: {
+    label: "Partnership",
+
+    env: "PARTNERSHIP_TICKET_CATEGORY_ID",
+
+    names: [
+      "chuppys-partnership",
+      "Partnership tickets"
+    ],
+
+    questions: [
+      "How many vouches?",
+      "How many server members?"
+    ]
+  },
+
+  support: {
+    label: "Support",
+
+    env: "SUPPORT_TICKET_CATEGORY_ID",
+
+    names: [
+      "chuppys-support",
+      "Support tickets",
+      "Support ticket",
+      "Support",
+      "Support-tickets",
+      "Help and Support"
+    ],
+
+    description:
+      "Please explain what you need help with."
+  },
+
+  verification: {
+    label: "Verification",
+
+    names: [
+      "chuppys-verification",
+      "Verification tickets",
+      "Verification ticket",
+      "Verification",
+      "Verify tickets",
+      "Verify"
+    ],
+
+    description:
+      "Please explain what you need help with while verifying for **.gg/chuppys**."
+  }
+};
+
+const T_SELECT = new Set([
+  "chuppys_ticket_select",
+  "chuppys_ticket_category",
+  "chuppys_tickets",
+  "ticket_select",
+  "ticket_category",
+  "ticket_open",
+  "ticket_create"
+]);
+
+const T_MODAL = "chuppys_ticket_form:";
+const T_CLOSE = "chuppys_ticket_close_modal:";
+
+const T_BUTTONS = {
+  chuppys_ticket_claim: "claim",
+  chuppys_ticket_close: "close",
+  chuppys_ticket_reopen: "reopen",
+  chuppys_ticket_delete: "delete"
+};
+
+const T_COMPAT = {
+  claim: "claim",
+  close: "close",
+  reopen: "reopen",
+  delete: "delete"
+};
+
+// ==================================================
+// TICKET HELPERS
+// ==================================================
+
+const tUser = i =>
+  i.member?.user?.id ||
+  i.user?.id;
+
+const tRoles = i =>
+  new Set(i.member?.roles || []);
+
+const tMemberHas = (i, id) =>
+  tRoles(i).has(id);
+
+const tOwner = i =>
+  i.member?.user?.id === i.guild_owner_id ||
+  tMemberHas(i, TC.owner);
+
+const tTrading = state =>
+  state.type === "purchase" ||
+  state.type === "cashout";
+
+const tClean = s =>
+  String(s ?? "")
+    .replace(/@/g, "＠")
+    .slice(0, 1000);
+
+const tNormalize = s =>
+  String(s || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+
+const tName = s =>
+  `${s.status === "closed" ? "closed-" : ""}` +
+  `${s.type}-${String(s.number).padStart(4, "0")}`;
+
+const tEmbed = (title, description) => ({
+  title,
+  description,
+
+  color: 0xffffff,
+
+  footer: {
+    text: ".gg/chuppys"
+  }
+});
+
+// ==================================================
+// TICKET API
+// ==================================================
+
+async function tApi(method, path, body) {
+  const r = await discordFetch(
+    `https://discord.com/api/v10${path}`,
+    {
+      method,
+      headers: botHeaders(),
+
+      ...(body === undefined
+        ? {}
+        : {
+            body: JSON.stringify(body)
+          })
+    }
+  );
+
+  if (!r.ok) {
+    throw new Error(
+      `Discord API ${r.status}: ` +
+      JSON.stringify(r.data).slice(0, 500)
+    );
+  }
+
+  return r.data;
+}
+
+// ==================================================
+// PAGINATE TICKET MESSAGES
+// ==================================================
+
+async function tPages(
+  channelId,
+  maxPages = 150
+) {
+  const all = [];
+  let before;
+
+  for (
+    let page = 0;
+    page < maxPages;
+    page++
+  ) {
+    const batch = await tApi(
+      "GET",
+      `/channels/${channelId}/messages?limit=100` +
+      `${before ? `&before=${before}` : ""}`
+    );
+
+    all.push(...batch);
+
+    if (batch.length < 100) {
+      break;
+    }
+
+    before = batch[
+      batch.length - 1
+    ].id;
+  }
+
+  return all;
+}
+
+// ==================================================
+// DECODE PRIVATE TICKET METADATA
+// ==================================================
+
+function tDecode(msg) {
+  const prefix = LEGACY_STATES.find(
+    p => msg.content?.startsWith(p)
+  );
+
+  if (!prefix) {
+    return null;
+  }
+
+  try {
+    const state = JSON.parse(
+      msg.content.slice(prefix.length)
+    );
+
+    if (
+      !state.channelId ||
+      !state.ownerId ||
+      !T_TYPES[state.type]
+    ) {
+      return null;
+    }
+
+    return state;
+  } catch {
+    return null;
+  }
+}
+
+// ==================================================
+// LOAD ALL TICKET STATES
+// ==================================================
+
+async function tAllStates() {
+  const rows = await tPages(TC.data);
+
+  const found = new Map();
+
+  for (const row of rows) {
+    const state = tDecode(row);
+
+    if (
+      state &&
+      !found.has(state.channelId)
+    ) {
+      found.set(
+        state.channelId,
+        {
+          state,
+          messageId: row.id
+        }
+      );
+    }
+  }
+
+  return {
+    found,
+    rows
+  };
+}
+
+// ==================================================
+// SAVE PRIVATE V3 METADATA
+// ==================================================
+
+async function tSave(
+  state,
+  messageId = null
+) {
+  const payload = {
+    content:
+      STATE_V3 + JSON.stringify(state),
+
+    allowed_mentions: {
+      parse: []
+    }
+  };
+
+  if (messageId) {
+    return tApi(
+      "PATCH",
+      `/channels/${TC.data}/messages/${messageId}`,
+      payload
+    );
+  }
+
+  return tApi(
+    "POST",
+    `/channels/${TC.data}/messages`,
+    payload
+  );
+}
+
+// ==================================================
+// GET TICKET STATE
+// ==================================================
+
+async function tStateFor(channelId) {
+  const { found } = await tAllStates();
+
+  if (found.has(channelId)) {
+    return found.get(channelId);
+  }
+
+  // Import older V2 metadata from private logs.
+
+  const oldRows = await tPages(
+    TC.logs
+  ).catch(() => []);
+
+  for (const msg of oldRows) {
+    const old = tDecode(msg);
+
+    if (
+      old?.channelId === channelId
+    ) {
+      const saved = await tSave(old);
+
+      return {
+        state: old,
+        messageId: saved.id
+      };
+    }
+  }
+
+  // Legacy channel-topic compatibility.
+
+  const ch = await tApi(
+    "GET",
+    `/channels/${channelId}`
+  );
+
+  if (
+    ch.topic?.startsWith("chuppys-ticket:")
+  ) {
+    const s = JSON.parse(
+      ch.topic.slice(
+        "chuppys-ticket:".length
+      )
+    );
+
+    if (
+      s.ownerId &&
+      T_TYPES[s.type]
+    ) {
+      s.channelId = channelId;
+
+      const saved = await tSave(s);
+
+      return {
+        state: s,
+        messageId: saved.id
+      };
+    }
+  }
+
+  throw new Error(
+    "This channel has no recognized ticket metadata."
+  );
+}
+
+// ==================================================
+// GLOBAL TICKET COUNTER
+// ==================================================
+
+async function tCounter(guildId, rows) {
+  let highest = 0;
+  let record = null;
+
+  for (const row of rows) {
+    if (
+      row.content?.startsWith(COUNTER_V1)
+    ) {
+      const n = Number(
+        row.content.slice(
+          COUNTER_V1.length
+        )
+      );
+
+      if (Number.isSafeInteger(n)) {
+        highest = Math.max(
+          highest,
+          n
+        );
+
+        if (!record) {
+          record = row;
+        }
+      }
+    }
+
+    const s = tDecode(row);
+
+    if (s) {
+      highest = Math.max(
+        highest,
+        Number(s.number) || 0
+      );
+    }
+  }
+
+  if (!record) {
+    const guildChannels = await tApi(
+      "GET",
+      `/guilds/${guildId}/channels`
+    );
+
+    for (const channel of guildChannels) {
+      const match = (
+        channel.name || ""
+      ).match(
+        /^(?:closed-)?(?:purchase|purchasing|cashout|cash-out|support|giveaway|partnership|verification)-(\d+)$/i
+      );
+
+      if (match) {
+        highest = Math.max(
+          highest,
+          Number(match[1])
+        );
+      }
+    }
+  }
+
+  const next = highest + 1;
+
+  if (record) {
+    await tApi(
+      "PATCH",
+      `/channels/${TC.data}/messages/${record.id}`,
+      {
+        content: COUNTER_V1 + next
+      }
+    );
+  } else {
+    await tApi(
+      "POST",
+      `/channels/${TC.data}/messages`,
+      {
+        content: COUNTER_V1 + next
+      }
+    );
+  }
+
+  return next;
+}
+
+// ==================================================
+// TICKET CATEGORY
+// ==================================================
+
+async function tCategory(guildId, type) {
+  const cfg = T_TYPES[type];
+
+  const channels = await tApi(
+    "GET",
+    `/guilds/${guildId}/channels`
+  );
+
+  const valid = channels.filter(
+    c => c.type === 4
+  );
+
+  // Verification tickets get their own category.
+
+  if (type === "verification") {
+    const match =
+      valid.find(
+        c =>
+          tNormalize(c.name) ===
+          "chuppysverification"
+      ) ||
+      valid.find(
+        c =>
+          cfg.names
+            .map(tNormalize)
+            .includes(
+              tNormalize(c.name)
+            )
+      );
+
+    if (match) {
+      return match.id;
+    }
+
+    const created = await tApi(
+      "POST",
+      `/guilds/${guildId}/channels`,
+      {
+        name: "chuppys-verification",
+
+        type: 4,
+
+        permission_overwrites: [
+          {
+            id: guildId,
+            type: 0,
+            deny: String(PERM.view)
+          },
+
+          ...[
+            TC.owner,
+            TC.admin,
+            TC.mod,
+            TC.support
+          ].map(id => ({
+            id,
+            type: 0,
+            allow: FULL_P
+          }))
+        ]
+      }
+    );
+
+    return created.id;
+  }
+
+  const specified =
+    process.env[cfg.env];
+
+  if (
+    specified &&
+    valid.some(c => c.id === specified)
+  ) {
+    return specified;
+  }
+
+  const match = valid.find(
+    c =>
+      cfg.names
+        .map(tNormalize)
+        .includes(
+          tNormalize(c.name)
+        )
+  );
+
+  if (match) {
+    return match.id;
+  }
+
+  throw new Error(
+    `No ${cfg.label} category. Set ${cfg.env} on Vercel.`
+  );
+}
+
+// ==================================================
+// TICKET CONTROL BUTTONS
+// ==================================================
+
+function tControls(state) {
+  const button = (
+    id,
+    label,
+    style,
+    disabled = false
+  ) => ({
+    type: 2,
+    custom_id: id,
+    label,
+    style,
+    disabled,
+
+    emoji: {
+      name:
+        label === "Delete"
+          ? "🗑️"
+          : label === "Close"
+            ? "🔒"
+            : label === "Reopen"
+              ? "🔓"
+              : "🙋"
+    }
+  });
+
+  return [{
+    type: 1,
+
+    components:
+      state.status === "closed"
+        ? [
+            button(
+              "chuppys_ticket_reopen",
+              "Reopen",
+              3
+            ),
+
+            button(
+              "chuppys_ticket_delete",
+              "Delete",
+              4
+            )
+          ]
+        : [
+            button(
+              "chuppys_ticket_claim",
+              state.claimedBy
+                ? "Claimed"
+                : "Claim",
+              1,
+              !!state.claimedBy
+            ),
+
+            button(
+              "chuppys_ticket_close",
+              "Close",
+              4
+            ),
+
+            button(
+              "chuppys_ticket_delete",
+              "Delete",
+              2
+            )
+          ]
+  }];
+}
+
+// ==================================================
+// TICKET PRIVACY PERMISSIONS
+// ==================================================
+
+async function tPermissions(
+  guildId,
+  state
+) {
+  const closed =
+    state.status === "closed";
+
+  const allowed =
+    closed ? READ_P : FULL_P;
+
+  const base = new Map();
+
+  const add = (
+    id,
+    type,
+    allow = "0",
+    deny = "0"
+  ) => {
+    base.set(id, {
+      id,
+      type,
+      allow,
+      deny
+    });
+  };
+
+  // Hide the ticket from everyone.
+
+  add(
+    guildId,
+    0,
+    "0",
+    String(PERM.view)
+  );
+
+  const guild = await tApi(
+    "GET",
+    `/guilds/${guildId}?with_counts=false`
+  );
+
+  const serverOwnerId =
+    guild.owner_id;
+
+  const claimedTrading =
+    tTrading(state) &&
+    !!state.claimedBy;
+
+  // Owner and Ticket Support always retain access.
+
+  add(
+    TC.owner,
+    0,
+    allowed
+  );
+
+  add(
+    TC.support,
+    0,
+    allowed
+  );
+
+  // Admin and Moderator access before claim.
+
+  if (!claimedTrading) {
+    add(
+      TC.mod,
+      0,
+      allowed
+    );
+
+    add(
+      TC.admin,
+      0,
+      allowed
+    );
+  }
+
+  // Purchase and Cash Out sellers.
+
+  if (tTrading(state)) {
+    if (claimedTrading) {
+      add(
+        TC.seller,
+        0,
+        "0",
+        HIDE_P
+      );
+    } else {
+      add(
+        TC.seller,
+        0,
+        allowed
+      );
+    }
+  }
+
+  // After a trading ticket is claimed,
+  // only the claiming seller, buyer,
+  // Ticket Support, and owners should see it.
+
+  if (claimedTrading) {
+    let members = [];
+    let after;
+
+    while (true) {
+      const batch = await tApi(
+        "GET",
+        `/guilds/${guildId}/members?limit=1000` +
+        `${after ? `&after=${after}` : ""}`
+      );
+
+      members.push(...batch);
+
+      if (batch.length < 1000) {
+        break;
+      }
+
+      after =
+        batch[batch.length - 1].user.id;
+    }
+
+    for (const m of members) {
+      const roles = new Set(
+        m.roles || []
+      );
+
+      if (!roles.has(TC.seller)) {
+        continue;
+      }
+
+      if (
+        [
+          state.ownerId,
+          state.claimedBy,
+          serverOwnerId
+        ].includes(m.user.id)
+      ) {
+        continue;
+      }
+
+      // Explicit member permissions handle
+      // sellers with multiple staff roles.
+
+      if (
+        roles.has(TC.owner) ||
+        roles.has(TC.support)
+      ) {
+        add(
+          m.user.id,
+          1,
+          allowed
+        );
+      } else {
+        add(
+          m.user.id,
+          1,
+          "0",
+          HIDE_P
+        );
+      }
+    }
+  }
+
+  // Server owner.
+
+  if (serverOwnerId) {
+    add(
+      serverOwnerId,
+      1,
+      allowed
+    );
+  }
+
+  // Ticket opener.
+
+  add(
+    state.ownerId,
+    1,
+    allowed
+  );
+
+  // Claiming staff member.
+
+  if (state.claimedBy) {
+    add(
+      state.claimedBy,
+      1,
+      allowed
+    );
+  }
+
+  if (base.size > 100) {
+    throw new Error(
+      "Ticket privacy exceeds Discord's 100-overwrite limit. Reduce seller membership or use a smaller staff scope."
+    );
+  }
+
+  return [...base.values()];
+}
+
+// ==================================================
+// APPLY TICKET PERMISSIONS
+// ==================================================
+
+async function tApplyPermissions(
+  channelId,
+  guildId,
+  state
+) {
+  const permission_overwrites =
+    await tPermissions(
+      guildId,
+      state
+    );
+
+  await tApi(
+    "PATCH",
+    `/channels/${channelId}`,
+    {
+      permission_overwrites
+    }
+  );
+}
+
+// ==================================================
+// UPDATE TICKET BUTTONS
+// ==================================================
+
+async function tUpdateControls(
+  channelId,
+  state
+) {
+  if (!state.controlMessageId) {
+    return;
+  }
+
+  await tApi(
+    "PATCH",
+    `/channels/${channelId}/messages/${state.controlMessageId}`,
+    {
+      components: tControls(state)
+    }
+  ).catch(error => {
+    console.error(
+      "[TICKET CONTROLS]",
+      error
+    );
+  });
+}
+
+// ==================================================
+// TICKET LOGGING
+// ==================================================
+
+async function tLog(title, state) {
+  await postChannelMessage(
+    TC.logs,
+    {
+      embeds: [
+        tEmbed(
+          title,
+          `\`${tName(state)}\``
+        )
+      ],
+
+      allowed_mentions: {
+        parse: []
+      }
+    }
+  ).catch(error => {
+    console.error(
+      "[TICKET LOG]",
+      error
+    );
+  });
+}
+
+// ==================================================
+// TICKET FORMS
+// ==================================================
+
+function tForm(type) {
+  const cfg = T_TYPES[type];
+
+  return {
+    type: 9,
+
+    data: {
       title:
-        `${settings.name} Ticket`,
+        `${cfg.label} Ticket`,
+
+      custom_id:
+        T_MODAL + type,
 
       components:
-        settings.questions.map(
-          (question, index) => ({
+        cfg.questions.map(
+          (q, n) => ({
             type: 1,
 
             components: [{
               type: 4,
+
               custom_id:
-                `answer_${index}`,
-              label: question,
+                `answer_${n}`,
+
+              label: q,
+
               style: 1,
               min_length: 1,
               max_length: 250,
@@ -1192,646 +2421,474 @@ function ticketForm(type) {
   };
 }
 
-function ticketAnswers(i, type) {
-  const fields = (
-    i.data?.components || []
-  ).flatMap(
-    row => row.components || []
-  );
+// ==================================================
+// CLOSE TICKET MODAL
+// ==================================================
 
-  return TICKET_TYPES[
-    type
-  ].questions.map(
-    (question, index) => {
-      const answer = fields.find(
-        field =>
-          field.custom_id ===
-          `answer_${index}`
-      )?.value?.trim();
+function tCloseForm(channelId) {
+  return {
+    type: 9,
 
-      if (!answer) {
-        throw new Error(
-          `Please answer: ${question}`
-        );
-      }
+    data: {
+      title: "Close Ticket",
 
-      return {
-        question,
-        answer
-      };
+      custom_id:
+        T_CLOSE + channelId,
+
+      components: [{
+        type: 1,
+
+        components: [{
+          type: 4,
+
+          custom_id:
+            "close_reason",
+
+          label:
+            "Reason (optional)",
+
+          style: 2,
+          required: false,
+          max_length: 500
+        }]
+      }]
     }
-  );
+  };
 }
 
 // ==================================================
-// TICKET LOGGING
+// TICKET FORM ANSWERS
 // ==================================================
 
-async function logTicketEvent(
-  title,
-  description
-) {
-  return postChannelMessage(
-    TICKET_LOG_CHANNEL_ID,
-    {
+function tAnswers(i, type) {
+  const fields = (
+    i.data?.components || []
+  ).flatMap(
+    r => r.components || []
+  );
+
+  return T_TYPES[type].questions.map(
+    (q, n) => {
+      const text = fields.find(
+        f =>
+          f.custom_id ===
+          `answer_${n}`
+      )?.value?.trim();
+
+      if (!text) {
+        throw new Error(
+          `Please answer: ${q}`
+        );
+      }
+
+      return (
+        `**${q}**\n` +
+        tClean(text)
+      );
+    }
+  ).join("\n\n");
+}
+
+// ==================================================
+// /TICKETPANEL
+// ==================================================
+
+async function tPanel(i) {
+  try {
+    const perms = BigInt(
+      i.member?.permissions || "0"
+    );
+
+    if (
+      !(perms & 32n) &&
+      !(perms & 8n)
+    ) {
+      throw new Error(
+        "Manage Server is required."
+      );
+    }
+
+    const menu = {
+      type: 1,
+
+      components: [{
+        type: 3,
+
+        custom_id:
+          "chuppys_ticket_select",
+
+        placeholder:
+          "Select a ticket category",
+
+        options:
+          Object.entries(T_TYPES)
+            .filter(
+              ([id]) =>
+                id !== "verification"
+            )
+            .map(
+              ([value, cfg]) => ({
+                label: cfg.label,
+                value,
+
+                description:
+                  `Open a ${cfg.label} ticket`
+              })
+            )
+      }]
+    };
+
+    const payload = {
       embeds: [
-        ticketEmbed(
-          title,
-          description
+        tEmbed(
+          `${TICKET_EMOJI} Chuppys Tickets`,
+
+          "Welcome to Chuppys!\n\n" +
+          "Select a ticket category below.\n\n" +
+          "**Purchase** — Purchase assistance\n" +
+          "**Cash Out** — Cashout assistance\n" +
+          "**Giveaway** — Giveaway claims\n" +
+          "**Partnership** — Partnerships\n" +
+          "**Support** — General support"
         )
       ],
+
+      components: [menu],
 
       allowed_mentions: {
         parse: []
       }
+    };
+
+    const panelId =
+      "1530811385678790716";
+
+    const messages = await tApi(
+      "GET",
+      `/channels/${panelId}/messages?limit=100`
+    );
+
+    const existing = messages.find(
+      m =>
+        m.author?.id === i.application_id &&
+        (m.components || []).some(
+          r =>
+            (r.components || []).some(
+              c =>
+                T_SELECT.has(c.custom_id)
+            )
+        )
+    );
+
+    if (existing) {
+      await tApi(
+        "PATCH",
+        `/channels/${panelId}/messages/${existing.id}`,
+        payload
+      );
+    } else {
+      await postChannelMessage(
+        panelId,
+        payload
+      );
     }
-  );
+
+    await updateOriginalResponse(
+      i,
+      `Ticket panel ${existing ? "updated" : "posted"} successfully.`
+    );
+  } catch (error) {
+    console.error(
+      "[TICKET PANEL]",
+      error
+    );
+
+    await updateOriginalResponse(
+      i,
+      `Could not update ticket panel: ${tClean(error.message)}`
+    ).catch(console.error);
+  }
 }
 
 // ==================================================
 // CREATE TICKET
 // ==================================================
 
-async function processTicketOpen(
+async function tCreate(
   i,
-  formType = null
+  type,
+  answerText
 ) {
   try {
     const guildId = i.guild_id;
-    const userId = getUserId(i);
+    const userId = tUser(i);
 
-    const type = formType ||
-      String(
-        i.data?.values?.[0] || ""
-      ).toLowerCase().trim();
-
-    if (
-      !guildId ||
-      !userId
-    ) {
+    if (!guildId || !userId) {
       throw new Error(
-        "Tickets can only be opened inside the server."
+        "Tickets only work in a server."
       );
     }
 
-    if (!TICKET_TYPES[type]) {
-      throw new Error(
-        "Please select a valid ticket category."
-      );
-    }
+    // Verified users do not need verification tickets.
 
-    const settings =
-      TICKET_TYPES[type];
-
-    const answers =
-      settings.questions
-        ? ticketAnswers(i, type)
-        : [];
-
-    const channels = await botRequest(
-      "GET",
-      `/guilds/${guildId}/channels`
-    );
-
-    for (const existing of channels) {
-      if (
-        existing.type !== 0 ||
-        !/^(?:closed-)?(?:purchase|cashout|support|giveaway|partnership)-\d+$/.test(
-          existing.name || ""
-        )
-      ) {
-        continue;
-      }
-
-      const legacy = decodeLegacyTicketTopic(
-        existing.topic
-      );
-
-      if (
-        legacy?.ownerId === userId &&
-        legacy?.type === type &&
-        legacy?.status !== "closed"
-      ) {
-        return updateOriginalResponse(
-          i,
-          `You already have an open ticket: <#${existing.id}>`
+    if (type === "verification") {
+      const memberRoles =
+        await getMemberRoles(
+          guildId,
+          userId,
+          process.env.DISCORD_BOT_TOKEN
         );
-      }
-
-      const found = await findTicketMetadata(
-        existing.id
-      );
 
       if (
-        found?.ticket?.ownerId === userId &&
-        found.ticket.type === type &&
-        found.ticket.status !== "closed"
+        memberRoles.includes(TC.verified)
       ) {
-        return updateOriginalResponse(
-          i,
-          `You already have an open ticket: <#${existing.id}>`
+        throw new Error(
+          "You are already verified."
         );
       }
     }
 
-    const parentId =
-      await getTicketCategory(
+    // Check for an existing open ticket.
+
+    const {
+      found,
+      rows
+    } = await tAllStates();
+
+    for (const { state } of found.values()) {
+      if (
+        state.ownerId === userId &&
+        state.type === type &&
+        state.status !== "closed"
+      ) {
+        const channel = await tApi(
+          "GET",
+          `/channels/${state.channelId}`
+        ).catch(() => null);
+
+        if (channel) {
+          return updateOriginalResponse(
+            i,
+            `You already have an open ticket: <#${state.channelId}>`
+          );
+        }
+      }
+    }
+
+    const parent =
+      await tCategory(
         guildId,
         type
       );
 
     const number =
-      await nextTicketNumber(guildId);
+      await tCounter(
+        guildId,
+        rows
+      );
 
-    const ticket = {
+    const state = {
+      channelId: null,
       ownerId: userId,
       type,
       number,
+
       status: "open",
-      claimedBy: null
+      claimedBy: null,
+
+      controlMessageId: null,
+
+      closeReason:
+        "No further action required.",
+
+      transcriptUrl: null,
+
+      createdAt:
+        new Date().toISOString()
     };
 
-    // Explicit overwrites keep removed roles out
-    // of the new ticket's channel permissions.
-    const permissionOverwrites = [
-      {
-        id: guildId,
-        type: 0,
-        deny: TICKET_DENY
-      },
+    // Create private ticket channel.
 
-      {
-        id: userId,
-        type: 1,
-        allow: TICKET_ALLOW
-      },
-
-      ...getTicketAccessRoles(type).map(
-        id => ({
-          id,
-          type: 0,
-          allow: TICKET_ALLOW
-        })
-      )
-    ];
-
-    const channel = await botRequest(
+    const ch = await tApi(
       "POST",
       `/guilds/${guildId}/channels`,
       {
-        name: ticketChannelName(
-          type,
-          number
-        ),
+        name: tName(state),
 
         type: 0,
-        parent_id: parentId,
+        parent_id: parent,
 
-        // Blank channel description.
         topic: null,
 
         permission_overwrites:
-          permissionOverwrites
+          await tPermissions(
+            guildId,
+            state
+          )
       }
     );
 
-    // Save metadata privately in ticket logs.
-    const metadataMessage =
-      await saveTicketMetadata(
-        channel.id,
-        ticket
-      );
+    state.channelId = ch.id;
 
-    const answerText =
-      answers.length
-        ? answers.map(
-            answer =>
-              `**${answer.question}**\n` +
-              safeText(answer.answer)
-          ).join("\n\n")
-        : settings.description;
+    // Store private V3 metadata.
 
-    const pingRoles =
-      getTicketPingRoles(type);
+    const saved =
+      await tSave(state);
 
-    const pingContent = [
-      `<@${userId}>`,
-      ...pingRoles.map(
-        id => `<@&${id}>`
-      )
-    ].join(" ");
+    const cfg = T_TYPES[type];
 
-    try {
-      const welcome =
-        await postChannelMessage(
-          channel.id,
-          {
-            content: pingContent,
+    const mentionRoles =
+      tTrading(state)
+        ? [
+            TC.seller,
+            TC.support
+          ]
+        : [
+            TC.support
+          ];
 
-            embeds: [
-              ticketEmbed(
-                `${TICKET_EMOJI} ${settings.name} #${number}`,
+    const welcome =
+      await postChannelMessage(
+        ch.id,
+        {
+          content: [
+            `<@${userId}>`,
 
-                `Welcome to your private **${settings.name}** ticket!\n\n` +
-                `${answerText}\n\n` +
-                `**Opened by:** <@${userId}>\n\n` +
-                "Our team will assist you as soon as possible."
-              )
-            ],
+            ...mentionRoles.map(
+              r => `<@&${r}>`
+            )
+          ].join(" "),
 
-            components:
-              ticketButtons(),
+          embeds: [
+            tEmbed(
+              `${TICKET_EMOJI} ${cfg.label} Ticket #${String(number).padStart(4, "0")}`,
 
-            allowed_mentions: {
-              users: [userId],
-              roles: pingRoles,
-              parse: []
-            }
+              `Welcome <@${userId}>!\n\n` +
+              `${answerText || cfg.description || "Please explain what you need help with."}` +
+              `${type === "partnership" ? "\n\n**Please show proof of your vouches!**" : ""}` +
+              "\n\nOur team will assist you as soon as possible."
+            )
+          ],
+
+          components:
+            tControls(state),
+
+          allowed_mentions: {
+            parse: [],
+            users: [userId],
+            roles: mentionRoles
           }
-        );
-
-      ticket.controlMessageId =
-        welcome.id;
-
-      await saveTicketMetadata(
-        channel.id,
-        ticket,
-        metadataMessage.id
+        }
       );
-    } catch (error) {
-      console.error(
-        "[TICKET WELCOME]",
-        error
-      );
-    }
 
-    await logTicketEvent(
+    state.controlMessageId =
+      welcome.id;
+
+    await tSave(
+      state,
+      saved.id
+    );
+
+    await tLog(
       "Ticket Opened",
-
-      `**Ticket:** ${channel.name}\n` +
-      `**Ticket Number:** #${number}\n` +
-      `**Channel ID:** ${channel.id}\n` +
-      `**Type:** ${settings.name}\n` +
-      `**Opened by:** <@${userId}>`
-    ).catch(console.error);
+      state
+    );
 
     await updateOriginalResponse(
       i,
-      `${TICKET_EMOJI} Your **${settings.name}** ticket #${number} has been created!\n\n<#${channel.id}>`
+      `Your ${cfg.label} ticket is ready: <#${ch.id}>`
     );
   } catch (error) {
     console.error(
-      "[TICKET OPEN]",
+      "[TICKET CREATE]",
       error
     );
 
     await updateOriginalResponse(
       i,
-      `I couldn't create your ticket. ${error.message}`
+      `Could not create ticket: ${tClean(error.message)}`
     ).catch(console.error);
   }
 }
 
 // ==================================================
-// FETCH TICKET MESSAGES
+// TICKET CLAIM PERMISSIONS
 // ==================================================
 
-async function fetchTicketMessages(
-  channelId
-) {
-  const messages = [];
-  let before;
-
-  while (true) {
-    const query = before
-      ? `?limit=100&before=${before}`
-      : "?limit=100";
-
-    const batch = await botRequest(
-      "GET",
-      `/channels/${channelId}/messages${query}`
-    );
-
-    if (!batch.length) {
-      break;
-    }
-
-    messages.push(...batch);
-
-    before = batch[
-      batch.length - 1
-    ].id;
-
-    if (batch.length < 100) {
-      break;
-    }
-  }
-
-  return messages.reverse();
-}
-
-// ==================================================
-// BUILD TRANSCRIPT
-// ==================================================
-
-function buildTranscript(
-  channel,
-  ticket,
-  deletedBy,
-  messages
-) {
-  return [
-    `Ticket: ${channel.name}`,
-    `Channel ID: ${channel.id}`,
-    `Owner ID: ${ticket.ownerId}`,
-    `Category: ${ticket.type}`,
-    `Ticket Number: ${ticket.number || "Legacy"}`,
-    `Deleted by: ${deletedBy}`,
-    `Messages: ${messages.length}`,
-    "",
-
-    ...messages.map(message => {
-      const attachments = (
-        message.attachments || []
-      ).map(
-        attachment =>
-          `${attachment.filename}: ${attachment.url}`
-      ).join("\n");
-
-      const embeds = (
-        message.embeds || []
-      ).map(
-        embed =>
-          `${embed.title || ""}\n` +
-          `${embed.description || ""}`
-      ).join("\n");
-
-      return (
-        `[${message.timestamp}] ` +
-        `${message.author?.username || "Unknown"} ` +
-        `(${message.author?.id || "?"}):\n` +
-        `${message.content || ""}\n` +
-        `${embeds}\n` +
-        `${attachments}`
-      );
-    })
-  ].join("\n\n");
-}
-
-// ==================================================
-// UPLOAD TRANSCRIPT
-// ==================================================
-
-async function uploadTranscriptFile(
-  channelId,
-  filename,
-  transcript,
-  logEmbed
-) {
-  const form = new FormData();
-
-  form.append(
-    "payload_json",
-    JSON.stringify({
-      embeds: [logEmbed],
-      allowed_mentions: {
-        parse: []
-      }
-    })
-  );
-
-  form.append(
-    "files[0]",
-    new Blob(
-      [transcript],
-      {
-        type:
-          "text/plain;charset=utf-8"
-      }
-    ),
-    filename
-  );
-
-  const response = await fetch(
-    `${API}/channels/${channelId}/messages`,
-    {
-      method: "POST",
-
-      headers: {
-        Authorization:
-          `Bot ${process.env.DISCORD_BOT_TOKEN}`
-      },
-
-      body: form
-    }
-  );
-
-  const data = await response.json()
-    .catch(() => null);
+function tCanClaim(i, state) {
+  const roles = tRoles(i);
 
   if (
-    !response.ok ||
-    !data?.attachments?.[0]
+    roles.has(TC.owner) ||
+    roles.has(TC.mod)
   ) {
-    throw new Error(
-      `Could not save transcript: ${response.status}`
+    return true;
+  }
+
+  if (tTrading(state)) {
+    return (
+      roles.has(TC.seller) ||
+      roles.has(TC.support)
     );
   }
 
-  return data;
-}
-
-// ==================================================
-// SAVE TRANSCRIPT
-// ==================================================
-
-async function saveTranscriptLog(
-  channel,
-  ticket,
-  deletedBy,
-  messages
-) {
-  const transcript =
-    buildTranscript(
-      channel,
-      ticket,
-      deletedBy,
-      messages
-    );
-
-  const filename =
-    `transcript-${ticket.type}-` +
-    `${ticket.number || channel.id}.txt`;
-
-  const description =
-    `**Ticket:** ${channel.name}\n` +
-    `**Ticket Number:** #${ticket.number || "Legacy"}\n` +
-    `**Owner:** <@${ticket.ownerId}>\n` +
-    `**Category:** ${ticket.type}\n` +
-    `**Deleted by:** <@${deletedBy}>\n` +
-    `**Messages:** ${messages.length}\n\n` +
-    "Press **View Transcript** to access the conversation.";
-
-  const saved =
-    await uploadTranscriptFile(
-      TICKET_LOG_CHANNEL_ID,
-      filename,
-      transcript,
-      ticketEmbed(
-        "Ticket Deleted",
-        description
-      )
-    );
-
-  await botRequest(
-    "PATCH",
-    `/channels/${TICKET_LOG_CHANNEL_ID}/messages/${saved.id}`,
-    {
-      components: [{
-        type: 1,
-
-        components: [{
-          type: 2,
-          style: 1,
-
-          custom_id:
-            `${TRANSCRIPT_BUTTON_PREFIX}${saved.id}`,
-
-          label:
-            "View Transcript",
-
-          emoji: {
-            name: "📄"
-          }
-        }]
-      }]
-    }
+  return (
+    roles.has(TC.admin) ||
+    roles.has(TC.support)
   );
-
-  return saved;
 }
 
 // ==================================================
-// VIEW TRANSCRIPT
+// TICKET MANAGEMENT PERMISSIONS
 // ==================================================
 
-async function processViewTranscript(i) {
-  try {
-    if (
-      !i.guild_id ||
-      i.channel_id !== TICKET_LOG_CHANNEL_ID ||
-      !canViewTranscript(i)
-    ) {
-      throw new Error(
-        "Only authorized ticket staff can view transcripts."
-      );
-    }
+function tCanManage(i, state) {
+  const roles = tRoles(i);
 
-    const messageId =
-      i.data.custom_id.slice(
-        TRANSCRIPT_BUTTON_PREFIX.length
-      );
-
-    if (
-      !/^\d{17,20}$/.test(messageId) ||
-      i.message?.id !== messageId
-    ) {
-      throw new Error(
-        "Invalid transcript button."
-      );
-    }
-
-    const log = await botRequest(
-      "GET",
-      `/channels/${TICKET_LOG_CHANNEL_ID}/messages/${messageId}`
-    );
-
-    const file =
-      log.attachments?.find(
-        attachment =>
-          attachment.filename?.startsWith(
-            "transcript-"
-          ) &&
-          attachment.filename?.endsWith(
-            ".txt"
-          )
-      );
-
-    if (!file) {
-      throw new Error(
-        "The transcript attachment could not be found."
-      );
-    }
-
-    await updateOriginalResponse(
-      i,
-      {
-        content:
-          "📄 **Ticket Transcript**\n\n" +
-          `[Open ${file.filename}](${file.url})\n\n` +
-          "This response is visible only to you.",
-
-        allowed_mentions: {
-          parse: []
-        }
-      }
-    );
-  } catch (error) {
-    console.error(
-      "[VIEW TRANSCRIPT]",
-      error
-    );
-
-    await updateOriginalResponse(
-      i,
-      `Could not view transcript: ${error.message}`
-    ).catch(console.error);
-  }
-}
-
-// ==================================================
-// UPDATE TICKET CONTROL BUTTONS
-// ==================================================
-
-async function updateTicketControlMessage(
-  channelId,
-  ticket,
-  closed
-) {
-  if (!ticket.controlMessageId) {
-    return;
+  if (
+    roles.has(TC.owner) ||
+    roles.has(TC.support)
+  ) {
+    return true;
   }
 
-  await botRequest(
-    "PATCH",
-    `/channels/${channelId}/messages/${ticket.controlMessageId}`,
-    {
-      components:
-        ticketButtons(closed)
-    }
-  ).catch(console.warn);
+  if (state.claimedBy) {
+    return (
+      state.claimedBy === tUser(i)
+    );
+  }
+
+  return (
+    roles.has(TC.mod) ||
+    roles.has(TC.admin) ||
+    tCanClaim(i, state)
+  );
 }
 
 // ==================================================
 // CLAIM / CLOSE / REOPEN / DELETE
 // ==================================================
 
-async function processTicketAction(
+async function tAction(
   i,
-  action
+  action,
+  closeReason = null
 ) {
   try {
+    const channelId = i.channel_id;
+    const guildId = i.guild_id;
+    const actor = tUser(i);
+
     const {
-      channel,
-      ticket,
-      metadataMessageId
-    } = await getTicketChannel(i);
+      state,
+      messageId
+    } = await tStateFor(
+      channelId
+    );
 
-    const userId = getUserId(i);
-
-    if (!canManageTicket(i)) {
+    if (!T_TYPES[state.type]) {
       throw new Error(
-        "Only authorized staff can manage tickets."
+        "Invalid ticket type."
       );
     }
 
@@ -1840,38 +2897,65 @@ async function processTicketAction(
     // ================================================
 
     if (action === "claim") {
-      if (
-        ticket.status === "closed"
-      ) {
+      if (!tCanClaim(i, state)) {
         throw new Error(
-          "Reopen this ticket before claiming it."
+          "You cannot claim this ticket."
         );
       }
 
-      if (
-        ticket.claimedBy &&
-        ticket.claimedBy !== userId
-      ) {
+      if (state.status !== "open") {
         throw new Error(
-          "This ticket has already been claimed by another staff member."
+          "Reopen this ticket first."
         );
       }
 
-      ticket.claimedBy = userId;
+      if (state.claimedBy) {
+        throw new Error(
+          state.claimedBy === actor
+            ? "You already claimed this ticket."
+            : "Another staff member already claimed this ticket."
+        );
+      }
 
-      await saveTicketMetadata(
-        channel.id,
-        ticket,
-        metadataMessageId
+      const previous = {
+        ...state
+      };
+
+      state.claimedBy = actor;
+
+      try {
+        await tApplyPermissions(
+          channelId,
+          guildId,
+          state
+        );
+
+        await tSave(
+          state,
+          messageId
+        );
+      } catch (error) {
+        await tApplyPermissions(
+          channelId,
+          guildId,
+          previous
+        ).catch(console.error);
+
+        throw error;
+      }
+
+      await tUpdateControls(
+        channelId,
+        state
       );
 
       await postChannelMessage(
-        channel.id,
+        channelId,
         {
           embeds: [
-            ticketEmbed(
-              `${TICKET_EMOJI} Ticket Claimed`,
-              `This ticket has been claimed by <@${userId}>.`
+            tEmbed(
+              "Ticket Claimed",
+              `Claimed by <@${actor}>.`
             )
           ],
 
@@ -1881,13 +2965,10 @@ async function processTicketAction(
         }
       );
 
-      await logTicketEvent(
+      await tLog(
         "Ticket Claimed",
-
-        `**Ticket:** ${channel.name}\n` +
-        `**Ticket Number:** #${ticket.number}\n` +
-        `**Claimed by:** <@${userId}>`
-      ).catch(console.error);
+        state
+      );
 
       return updateOriginalResponse(
         i,
@@ -1895,165 +2976,89 @@ async function processTicketAction(
       );
     }
 
-    // ================================================
-    // CLOSE
-    // ================================================
+    // Other actions require management permissions.
 
-    if (action === "close") {
-      if (
-        ticket.status === "closed"
-      ) {
-        throw new Error(
-          "This ticket is already closed."
-        );
-      }
-
-      ticket.status = "closed";
-
-      await botRequest(
-        "PUT",
-        `/channels/${channel.id}/permissions/${ticket.ownerId}`,
-        {
-          type: 1,
-          allow: TICKET_READ_ONLY,
-          deny: String(SEND_MESSAGES)
-        }
-      );
-
-      await botRequest(
-        "PATCH",
-        `/channels/${channel.id}`,
-        {
-          topic: null,
-
-          name: ticket.number
-            ? ticketChannelName(
-                ticket.type,
-                ticket.number,
-                true
-              )
-            : `closed-${ticket.type}-${ticket.ownerId}`.slice(
-                0,
-                100
-              )
-        }
-      );
-
-      await saveTicketMetadata(
-        channel.id,
-        ticket,
-        metadataMessageId
-      );
-
-      await updateTicketControlMessage(
-        channel.id,
-        ticket,
-        true
-      );
-
-      await postChannelMessage(
-        channel.id,
-        {
-          embeds: [
-            ticketEmbed(
-              `${TICKET_EMOJI} Ticket Closed`,
-
-              `Closed by <@${userId}>.\n\n` +
-              "Staff can reopen or delete this ticket."
-            )
-          ],
-
-          components:
-            ticketButtons(true),
-
-          allowed_mentions: {
-            parse: []
-          }
-        }
-      );
-
-      await logTicketEvent(
-        "Ticket Closed",
-
-        `**Ticket:** ${channel.name}\n` +
-        `**Ticket Number:** #${ticket.number}\n` +
-        `**Category:** ${ticket.type}\n` +
-        `**Closed by:** <@${userId}>`
-      ).catch(console.error);
-
-      return updateOriginalResponse(
-        i,
-        "Ticket closed successfully."
+    if (!tCanManage(i, state)) {
+      throw new Error(
+        "You cannot manage this ticket."
       );
     }
 
     // ================================================
-    // REOPEN
+    // CLOSE / REOPEN
     // ================================================
 
-    if (action === "reopen") {
+    if (
+      action === "close" ||
+      action === "reopen"
+    ) {
       if (
-        ticket.status !== "closed"
+        action === "close" &&
+        state.status === "closed"
       ) {
         throw new Error(
-          "This ticket is already open."
+          "Already closed."
         );
       }
 
-      ticket.status = "open";
+      if (
+        action === "reopen" &&
+        state.status === "open"
+      ) {
+        throw new Error(
+          "Already open."
+        );
+      }
 
-      await botRequest(
-        "PUT",
-        `/channels/${channel.id}/permissions/${ticket.ownerId}`,
-        {
-          type: 1,
-          allow: TICKET_ALLOW,
-          deny: "0"
-        }
+      state.status =
+        action === "close"
+          ? "closed"
+          : "open";
+
+      if (action === "close") {
+        state.closeReason =
+          closeReason ||
+          "No further action required.";
+      }
+
+      await tApplyPermissions(
+        channelId,
+        guildId,
+        state
       );
 
-      await botRequest(
+      await tApi(
         "PATCH",
-        `/channels/${channel.id}`,
+        `/channels/${channelId}`,
         {
-          topic: null,
-
-          name: ticket.number
-            ? ticketChannelName(
-                ticket.type,
-                ticket.number
-              )
-            : `${ticket.type}-${ticket.ownerId}`.slice(
-                0,
-                100
-              )
+          name: tName(state),
+          topic: null
         }
       );
 
-      await saveTicketMetadata(
-        channel.id,
-        ticket,
-        metadataMessageId
+      await tSave(
+        state,
+        messageId
       );
 
-      await updateTicketControlMessage(
-        channel.id,
-        ticket,
-        false
+      await tUpdateControls(
+        channelId,
+        state
       );
 
       await postChannelMessage(
-        channel.id,
+        channelId,
         {
           embeds: [
-            ticketEmbed(
-              `${TICKET_EMOJI} Ticket Reopened`,
-              `Reopened by <@${userId}>.`
+            tEmbed(
+              action === "close"
+                ? "Ticket Closed"
+                : "Ticket Reopened",
+
+              `${action === "close" ? "Closed" : "Reopened"} by <@${actor}>.` +
+              `${action === "close" ? `\n\nReason: ${tClean(state.closeReason)}` : ""}`
             )
           ],
-
-          components:
-            ticketButtons(),
 
           allowed_mentions: {
             parse: []
@@ -2061,18 +3066,16 @@ async function processTicketAction(
         }
       );
 
-      await logTicketEvent(
-        "Ticket Reopened",
-
-        `**Ticket:** ${channel.name}\n` +
-        `**Ticket Number:** #${ticket.number}\n` +
-        `**Category:** ${ticket.type}\n` +
-        `**Reopened by:** <@${userId}>`
-      ).catch(console.error);
+      await tLog(
+        action === "close"
+          ? "Ticket Closed"
+          : "Ticket Reopened",
+        state
+      );
 
       return updateOriginalResponse(
         i,
-        "Ticket reopened successfully."
+        `Ticket ${action === "close" ? "closed" : "reopened"} successfully.`
       );
     }
 
@@ -2081,34 +3084,125 @@ async function processTicketAction(
     // ================================================
 
     if (action === "delete") {
-      if (
-        ticket.status !== "closed"
-      ) {
+      if (state.status !== "closed") {
         throw new Error(
-          "Close the ticket before deleting it."
+          "Close this ticket before deleting."
         );
       }
 
-      const messages =
-        await fetchTicketMessages(
-          channel.id
+      if (
+        !(
+          tRoles(i).has(TC.owner) ||
+          tRoles(i).has(TC.admin) ||
+          tRoles(i).has(TC.mod) ||
+          tCanManage(i, state)
+        )
+      ) {
+        throw new Error(
+          "No delete permission."
+        );
+      }
+
+      // Save transcript BEFORE deletion.
+      // Abort deletion if transcript upload fails.
+
+      const msgs = (
+        await tPages(
+          channelId,
+          500
+        )
+      ).reverse();
+
+      const htmlEsc = v =>
+        String(v ?? "").replace(
+          /[&<>"']/g,
+          c => ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;"
+          })[c]
         );
 
-      await saveTranscriptLog(
-        channel,
-        ticket,
-        userId,
-        messages
+      const html =
+        "<!doctype html>" +
+        "<html>" +
+        "<head>" +
+        '<meta charset="utf-8">' +
+        "<title>Chuppys Transcript</title>" +
+        "</head>" +
+        "<body>" +
+        `<h1>${htmlEsc(tName(state))}</h1>` +
+        msgs.map(
+          m =>
+            "<article>" +
+            `<b>${htmlEsc(m.author?.username)}</b> ` +
+            `<small>${htmlEsc(m.timestamp)}</small>` +
+            `<pre>${htmlEsc(m.content)}</pre>` +
+            (m.attachments || []).map(
+              a =>
+                `<p>${htmlEsc(a.filename)}: ` +
+                `${htmlEsc(a.url)}</p>`
+            ).join("") +
+            "</article>"
+        ).join("") +
+        "</body>" +
+        "</html>";
+
+      const form = new FormData();
+
+      form.append(
+        "payload_json",
+        JSON.stringify({
+          embeds: [
+            tEmbed(
+              "Ticket Deleted",
+              `\`${tName(state)}\``
+            )
+          ]
+        })
       );
+
+      form.append(
+        "files[0]",
+        new Blob(
+          [html],
+          {
+            type: "text/html"
+          }
+        ),
+        `transcript-${state.type}-${state.number}.html`
+      );
+
+      const uploaded = await fetch(
+        `https://discord.com/api/v10/channels/${TC.logs}/messages`,
+        {
+          method: "POST",
+
+          headers: {
+            Authorization:
+              `Bot ${process.env.DISCORD_BOT_TOKEN}`
+          },
+
+          body: form
+        }
+      );
+
+      if (!uploaded.ok) {
+        throw new Error(
+          `Transcript upload failed: ${uploaded.status}`
+        );
+      }
 
       await updateOriginalResponse(
         i,
         "Transcript saved. Deleting ticket..."
       );
 
-      await botRequest(
+      await tApi(
         "DELETE",
-        `/channels/${channel.id}`
+        `/channels/${channelId}`
       );
 
       return;
@@ -2125,889 +3219,7 @@ async function processTicketAction(
 
     await updateOriginalResponse(
       i,
-      `Ticket action failed: ${error.message}`
-    ).catch(console.error);
-  }
-}
-
-// ==================================================
-// ROLE DROPDOWNS
-// ==================================================
-
-async function changeRoles(
-  i,
-  group
-) {
-  const guildId = i.guild_id;
-  const userId = getUserId(i);
-
-  const selected = new Set(
-    i.data.values || []
-  );
-
-  for (const id of selected) {
-    if (
-      !group.roles.includes(id)
-    ) {
-      throw new Error(
-        "Invalid role selection."
-      );
-    }
-  }
-
-  const current = new Set(
-    await getMemberRoles(
-      guildId,
-      userId
-    )
-  );
-
-  for (const id of group.roles) {
-    const shouldHave =
-      selected.has(id);
-
-    if (
-      shouldHave ===
-      current.has(id)
-    ) {
-      continue;
-    }
-
-    await botRequest(
-      shouldHave
-        ? "PUT"
-        : "DELETE",
-
-      `/guilds/${guildId}/members/${userId}/roles/${id}`
-    );
-  }
-}
-
-async function processRoleInteraction(
-  i,
-  group
-) {
-  try {
-    await changeRoles(
-      i,
-      group
-    );
-
-    await updateOriginalResponse(
-      i,
-      group.success
-    );
-  } catch (error) {
-    console.error(
-      "[ROLE]",
-      error
-    );
-
-    await updateOriginalResponse(
-      i,
-      "Role update failed. Please contact staff."
-    ).catch(console.error);
-  }
-}
-
-// ==================================================
-// CLIENT ROLE
-// ==================================================
-
-async function processClientRole(i) {
-  try {
-    const guildId = i.guild_id;
-    const userId = getUserId(i);
-
-    const roles =
-      await getMemberRoles(
-        guildId,
-        userId
-      );
-
-    if (
-      roles.includes(
-        CLIENT_ROLE_ID
-      )
-    ) {
-      return updateOriginalResponse(
-        i,
-        "You already have the client role! 🤍"
-      );
-    }
-
-    await botRequest(
-      "PUT",
-      `/guilds/${guildId}/members/${userId}/roles/${CLIENT_ROLE_ID}`
-    );
-
-    await updateOriginalResponse(
-      i,
-      "You now have the client role! You can submit a vouch. 🤍"
-    );
-  } catch (error) {
-    console.error(
-      "[CLIENT]",
-      error
-    );
-
-    await updateOriginalResponse(
-      i,
-      "Your client role could not be added."
-    ).catch(console.error);
-  }
-}
-
-// ==================================================
-// VERIFICATION
-// ==================================================
-
-async function processVerification(i) {
-  try {
-    const guildId = i.guild_id;
-    const userId = getUserId(i);
-
-    const roles = new Set(
-      await getMemberRoles(
-        guildId,
-        userId
-      )
-    );
-
-    if (
-      roles.has(CHUPPYS_ROLE_ID)
-    ) {
-      return updateOriginalResponse(
-        i,
-        "You are already verified! 🤍"
-      );
-    }
-
-    const hasAge =
-      AGE_ROLE_IDS.some(
-        id => roles.has(id)
-      );
-
-    const hasPronoun =
-      PRONOUN_ROLE_IDS.some(
-        id => roles.has(id)
-      );
-
-    const pingCount =
-      PING_ROLE_IDS.filter(
-        id => roles.has(id)
-      ).length;
-
-    if (
-      !hasAge ||
-      !hasPronoun ||
-      pingCount < 2
-    ) {
-      return updateOriginalResponse(
-        i,
-        `Please select an age role, pronoun role, and at least two ping roles in <#${ROLES_CHANNEL_ID}>.`
-      );
-    }
-
-    await botRequest(
-      "PUT",
-      `/guilds/${guildId}/members/${userId}/roles/${CHUPPYS_ROLE_ID}`
-    );
-
-    await updateOriginalResponse(
-      i,
-      "You are now verified! Welcome to .gg/chuppys 🤍"
-    );
-  } catch (error) {
-    console.error(
-      "[VERIFY]",
-      error
-    );
-
-    await updateOriginalResponse(
-      i,
-      "Verification failed. Please contact staff."
-    ).catch(console.error);
-  }
-}
-
-// ==================================================
-// /VOUCH
-// ==================================================
-
-async function processVouchInteraction(i) {
-  try {
-    if (!i.guild_id) {
-      throw new Error(
-        "Use /vouch inside the server."
-      );
-    }
-
-    const buyerId = getUserId(i);
-
-    const roles =
-      await getMemberRoles(
-        i.guild_id,
-        buyerId
-      );
-
-    if (
-      !roles.includes(
-        CLIENT_ROLE_ID
-      )
-    ) {
-      throw new Error(
-        "You need the client role before submitting a vouch."
-      );
-    }
-
-    const options = optionsMap(i);
-
-    const sellerId =
-      options.seller;
-
-    const rating =
-      options.rating;
-
-    const order =
-      options.order?.trim();
-
-    const resolved =
-      i.data.resolved || {};
-
-    const proof =
-      resolved.attachments?.[
-        options.proof
-      ];
-
-    const seller =
-      resolved.users?.[sellerId];
-
-    if (
-      !sellerId ||
-      seller?.bot ||
-      sellerId === buyerId
-    ) {
-      throw new Error(
-        "Please choose a valid seller."
-      );
-    }
-
-    if (
-      !Number.isInteger(rating) ||
-      rating < 1 ||
-      rating > 5
-    ) {
-      throw new Error(
-        "Rating must be between 1 and 5."
-      );
-    }
-
-    if (
-      !order ||
-      order.length > 500
-    ) {
-      throw new Error(
-        "Enter an order description of 500 characters or fewer."
-      );
-    }
-
-    if (
-      !proof ||
-      !(
-        proof.content_type?.startsWith(
-          "image/"
-        ) ||
-        /\.(png|jpe?g|gif|webp)$/i.test(
-          proof.filename || ""
-        )
-      )
-    ) {
-      throw new Error(
-        "Please attach an image as proof."
-      );
-    }
-
-    const embed = {
-      color: 0xffffff,
-      title: "NEW VOUCH",
-
-      thumbnail: {
-        url: VOUCH_EMOJI_URL
-      },
-
-      description:
-        `**seller:** <@${sellerId}>\n` +
-        `**buyer:** <@${buyerId}>\n` +
-        `**items purchased:** ${safeText(order)}\n` +
-        `**rating:** ${rating}/5\n` +
-        `**proof:** 📎 ${safeText(proof.filename)}\n\n` +
-        "*thank you for vouching! shop again ♡*",
-
-      image: {
-        url: proof.url
-      },
-
-      timestamp:
-        new Date().toISOString()
-    };
-
-    await postChannelMessage(
-      getVouchChannelId(
-        sellerId
-      ),
-      {
-        embeds: [embed],
-
-        allowed_mentions: {
-          parse: []
-        }
-      }
-    );
-
-    await updateOriginalResponse(
-      i,
-      "Your vouch was submitted successfully! ♡"
-    );
-  } catch (error) {
-    console.error(
-      "[VOUCH]",
-      error
-    );
-
-    await updateOriginalResponse(
-      i,
-      `❌ ${error.message}`
-    ).catch(console.error);
-  }
-}
-
-// ==================================================
-// /QUESTION
-// ==================================================
-
-async function processQuestionInteraction(i) {
-  try {
-    if (
-      i.channel_id !==
-      QUESTION_CHANNEL_ID
-    ) {
-      throw new Error(
-        `Use /question in <#${QUESTION_CHANNEL_ID}>.`
-      );
-    }
-
-    const options = optionsMap(i);
-
-    const question =
-      options.question?.trim();
-
-    const askerId =
-      getUserId(i);
-
-    if (!question) {
-      throw new Error(
-        "Please enter your question."
-      );
-    }
-
-    const picture =
-      options.picture
-        ? i.data.resolved?.attachments?.[
-            options.picture
-          ]
-        : null;
-
-    if (
-      picture &&
-      !(
-        picture.content_type?.startsWith(
-          "image/"
-        ) ||
-        /\.(png|jpe?g|gif|webp)$/i.test(
-          picture.filename || ""
-        )
-      )
-    ) {
-      throw new Error(
-        "The picture must be an image."
-      );
-    }
-
-    const embed = {
-      title:
-        `Question from @${i.member?.user?.username || i.user?.username || "Member"}`,
-
-      color: 0xffffff,
-
-      description:
-        `**Question**\n${safeText(question)}`,
-
-      thumbnail: {
-        url: QUESTION_EMOJI_URL
-      },
-
-      footer: {
-        text:
-          `.gg/chuppys • Question User ID: ${askerId}`
-      },
-
-      timestamp:
-        new Date().toISOString()
-    };
-
-    if (picture) {
-      embed.image = {
-        url: picture.url
-      };
-    }
-
-    await postChannelMessage(
-      QUESTION_CHANNEL_ID,
-      {
-        embeds: [embed],
-
-        components: [{
-          type: 1,
-
-          components: [
-            {
-              type: 2,
-              style: 2,
-
-              label:
-                "Make a Support Ticket",
-
-              custom_id:
-                `${QUESTION_TICKET_CUSTOM_ID}${askerId}`
-            },
-
-            {
-              type: 2,
-              style: 1,
-
-              label:
-                "Reply to Question",
-
-              custom_id:
-                `${QUESTION_REPLY_CUSTOM_ID}${askerId}`
-            }
-          ]
-        }],
-
-        allowed_mentions: {
-          parse: []
-        }
-      }
-    );
-
-    await updateOriginalResponse(
-      i,
-      "Your question was sent to Chuppys staff! ♡"
-    );
-  } catch (error) {
-    console.error(
-      "[QUESTION]",
-      error
-    );
-
-    await updateOriginalResponse(
-      i,
-      `Your question could not be sent: ${error.message}`
-    ).catch(console.error);
-  }
-}
-
-// ==================================================
-// /REQUEST
-// ==================================================
-
-async function processRequestInteraction(i) {
-  try {
-    if (
-      i.channel_id !==
-      REQUEST_CHANNEL_ID
-    ) {
-      throw new Error(
-        `Use /request in <#${REQUEST_CHANNEL_ID}>.`
-      );
-    }
-
-    const options = optionsMap(i);
-
-    const category =
-      options.category;
-
-    const items =
-      options.items?.trim();
-
-    if (
-      !REQUEST_CATEGORIES.has(
-        category
-      )
-    ) {
-      throw new Error(
-        "Invalid request category."
-      );
-    }
-
-    if (
-      !items ||
-      items.length > 1000
-    ) {
-      throw new Error(
-        "Enter your requested items."
-      );
-    }
-
-    const embed = {
-      title:
-        `${category} Request`,
-
-      color: 0xffffff,
-
-      description:
-        `**Requested by:** <@${getUserId(i)}>\n\n` +
-        `**Category:** ${category}\n\n` +
-        "**What they'd like Chuppys to stock up on:**\n" +
-        safeText(items),
-
-      thumbnail: {
-        url: QUESTION_EMOJI_URL
-      },
-
-      footer: {
-        text: ".gg/chuppys"
-      },
-
-      timestamp:
-        new Date().toISOString()
-    };
-
-    await postChannelMessage(
-      REQUEST_CHANNEL_ID,
-      {
-        embeds: [embed],
-
-        allowed_mentions: {
-          parse: []
-        }
-      }
-    );
-
-    await updateOriginalResponse(
-      i,
-      `Your **${category}** request has been submitted! ♡`
-    );
-  } catch (error) {
-    console.error(
-      "[REQUEST]",
-      error
-    );
-
-    await updateOriginalResponse(
-      i,
-      `Your request could not be submitted: ${error.message}`
-    ).catch(console.error);
-  }
-}
-
-// ==================================================
-// /HELP
-// ==================================================
-
-function makeHelpEmbed() {
-  return {
-    title:
-      ".gg/chuppys Bot Commands",
-
-    color: 0xffffff,
-
-    description:
-      "Here is a list of available commands and what they do.",
-
-    fields: [
-      {
-        name:
-          "General Commands",
-
-        value:
-          "`/help` — Displays this command menu.\n" +
-          "`/question` — Submit a question.\n" +
-          "`/request` — Request stock.\n" +
-          "`/vouch` — Submit a vouch.\n" +
-          "`,afk [reason]` — Set AFK status.\n" +
-          "`,pay` — Payment methods.\n" +
-          "`,client` — Client-role message."
-      },
-
-      {
-        name:
-          "Tickets",
-
-        value:
-          `Open a ticket in <#${TICKET_PANEL_CHANNEL_ID}>.\n` +
-          "Categories: Purchase, Cashout, Giveaway, Partnership, Support.\n" +
-          "Every new ticket increases the global ticket number by 1.\n" +
-          "Authorized staff can claim, close, reopen, and delete tickets."
-      },
-
-      {
-        name:
-          "Support Commands",
-
-        value:
-          "`,r @user c` — Give Chuppys role.\n" +
-          "`,r @user r` — Vouch reminder.\n" +
-          "`,partner` — Partnership instructions.\n" +
-          "`,mod` — Moderator information.\n" +
-          "`,seller` — Seller information.\n" +
-          "`,promoter` — Promoter information."
-      },
-
-      {
-        name:
-          "Service Commands",
-
-        value:
-          "`,nitro` / `!nitro`\n" +
-          "`,decor` / `!decor`\n" +
-          "`,boosties` / `!boosties`\n" +
-          "`,sellers` / `!sellers`\n" +
-          "`,staff` / `!staff`"
-      },
-
-      {
-        name:
-          "Additional Commands",
-
-        value:
-          "`!vouchtut` — Vouch tutorial.\n" +
-          "`!ranked` — Ranked roles.\n" +
-          "`!robuxcashout` — Cashout rates.\n" +
-          "`!testwelcome` — Test welcome.\n" +
-          "`!testgoodbye` — Test goodbye."
-      }
-    ],
-
-    thumbnail: {
-      url:
-        "https://cdn.discordapp.com/emojis/1569039366880235560.png"
-    },
-
-    footer: {
-      text: ".gg/chuppys"
-    }
-  };
-}
-
-// ==================================================
-// QUESTION SUPPORT BUTTON
-// ==================================================
-
-function handleQuestionTicketButton() {
-  return {
-    type: 4,
-
-    data: {
-      flags: 64,
-
-      embeds: [{
-        color: 0xffffff,
-
-        description:
-          `Please open a Support ticket in <#${TICKET_PANEL_CHANNEL_ID}>.\n\n` +
-          `Our Ticket Support team will assist you. ${TICKET_EMOJI}`,
-
-        thumbnail: {
-          url: QUESTION_EMOJI_URL
-        },
-
-        footer: {
-          text: ".gg/chuppys"
-        }
-      }]
-    }
-  };
-}
-
-// ==================================================
-// QUESTION REPLY BUTTON
-// ==================================================
-
-function handleQuestionReplyButton(i) {
-  if (!hasStaffPermission(i)) {
-    return ephemeral(
-      "Only authorized staff can reply to questions."
-    );
-  }
-
-  const askerId =
-    i.data.custom_id.slice(
-      QUESTION_REPLY_CUSTOM_ID.length
-    );
-
-  if (
-    !/^\d{17,20}$/.test(
-      askerId
-    )
-  ) {
-    return ephemeral(
-      "Invalid question button."
-    );
-  }
-
-  return {
-    type: 9,
-
-    data: {
-      custom_id:
-        `${QUESTION_MODAL_CUSTOM_ID}${askerId}:${i.message.id}`,
-
-      title:
-        "Reply to Question",
-
-      components: [{
-        type: 1,
-
-        components: [{
-          type: 4,
-          custom_id:
-            "question_reply_text",
-          label:
-            "Your response",
-          style: 2,
-          min_length: 1,
-          max_length: 2000,
-          required: true
-        }]
-      }]
-    }
-  };
-}
-
-// ==================================================
-// QUESTION REPLY MODAL
-// ==================================================
-
-async function processQuestionReply(i) {
-  try {
-    if (
-      !hasStaffPermission(i)
-    ) {
-      throw new Error(
-        "Only authorized staff can reply."
-      );
-    }
-
-    const match =
-      i.data.custom_id.match(
-        /^question_reply_modal:(\d{17,20}):(\d{17,20})$/
-      );
-
-    if (!match) {
-      throw new Error(
-        "Invalid reply form."
-      );
-    }
-
-    const askerId =
-      match[1];
-
-    const originalMessageId =
-      match[2];
-
-    const answer =
-      i.data.components
-        ?.flatMap(
-          row => row.components || []
-        )
-        .find(
-          component =>
-            component.custom_id ===
-            "question_reply_text"
-        )
-        ?.value?.trim();
-
-    if (!answer) {
-      throw new Error(
-        "Please enter a response."
-      );
-    }
-
-    const dm = await botRequest(
-      "POST",
-      "/users/@me/channels",
-      {
-        recipient_id:
-          askerId
-      }
-    );
-
-    await postChannelMessage(
-      dm.id,
-      {
-        embeds: [{
-          title:
-            "Response to Your Question",
-
-          color: 0xffffff,
-
-          description:
-            `${QUESTION_EMOJI} **Replied by:** <@${getUserId(i)}>\n\n` +
-            `**Response:**\n${safeText(answer)}`,
-
-          thumbnail: {
-            url: QUESTION_EMOJI_URL
-          },
-
-          footer: {
-            text: ".gg/chuppys"
-          },
-
-          timestamp:
-            new Date().toISOString()
-        }],
-
-        allowed_mentions: {
-          parse: []
-        }
-      }
-    );
-
-    await postChannelMessage(
-      QUESTION_CHANNEL_ID,
-      {
-        content:
-          "A response was sent privately to the member.",
-
-        message_reference: {
-          message_id:
-            originalMessageId,
-
-          fail_if_not_exists:
-            false
-        },
-
-        allowed_mentions: {
-          parse: []
-        }
-      }
-    ).catch(console.warn);
-
-    await updateOriginalResponse(
-      i,
-      "Your response was sent privately."
-    );
-  } catch (error) {
-    console.error(
-      "[QUESTION REPLY]",
-      error
-    );
-
-    await updateOriginalResponse(
-      i,
-      `Could not send response: ${error.message}`
+      `Ticket action failed: ${tClean(error.message)}`
     ).catch(console.error);
   }
 }
@@ -3020,9 +3232,15 @@ export default async function handler(
   req,
   res
 ) {
-  if (
-    req.method !== "POST"
-  ) {
+  console.log(
+    `[INTERACTIONS DEBUG] Received ${req.method} request.`
+  );
+
+  // ==================================================
+  // REQUEST METHOD
+  // ==================================================
+
+  if (req.method !== "POST") {
     res.setHeader(
       "Allow",
       "POST"
@@ -3036,24 +3254,47 @@ export default async function handler(
   let body;
 
   try {
-    body =
-      await getRawBody(req);
-  } catch {
+    body = await getRawBody(req);
+  } catch (error) {
+    console.error(
+      "[INTERACTIONS DEBUG] Could not read request:",
+      error
+    );
+
     return res.status(400).send(
       "Invalid request body"
+    );
+  }
+
+  // ==================================================
+  // VERIFY DISCORD SIGNATURE
+  // ==================================================
+
+  const signature =
+    req.headers["x-signature-ed25519"];
+
+  const timestamp =
+    req.headers["x-signature-timestamp"];
+
+  const publicKey =
+    process.env.DISCORD_PUBLIC_KEY;
+
+  if (
+    !signature ||
+    !timestamp ||
+    !publicKey
+  ) {
+    return res.status(401).send(
+      "Missing signature information"
     );
   }
 
   if (
     !verifyDiscordSignature(
       body,
-      req.headers[
-        "x-signature-ed25519"
-      ],
-      req.headers[
-        "x-signature-timestamp"
-      ],
-      process.env.DISCORD_PUBLIC_KEY
+      signature,
+      timestamp,
+      publicKey
     )
   ) {
     return res.status(401).send(
@@ -3061,10 +3302,10 @@ export default async function handler(
     );
   }
 
-  let i;
+  let interaction;
 
   try {
-    i = JSON.parse(
+    interaction = JSON.parse(
       body.toString("utf8")
     );
   } catch {
@@ -3073,13 +3314,24 @@ export default async function handler(
     );
   }
 
+  console.log(
+    "[INTERACTIONS DEBUG] Interaction received:",
+    {
+      type: interaction.type,
+
+      command:
+        interaction.data?.name || null,
+
+      customId:
+        interaction.data?.custom_id || null
+    }
+  );
+
   // ==================================================
   // DISCORD PING
   // ==================================================
 
-  if (
-    i.type === 1
-  ) {
+  if (interaction.type === 1) {
     return res.status(200).json({
       type: 1
     });
@@ -3089,20 +3341,19 @@ export default async function handler(
   // SLASH COMMANDS
   // ==================================================
 
-  if (
-    i.type === 2
-  ) {
-    const command =
-      i.data?.name;
+  if (interaction.type === 2) {
+    const commandName =
+      interaction.data?.name;
 
-    if (
-      command === "help"
-    ) {
+    // /help
+
+    if (commandName === "help") {
       return res.status(200).json({
         type: 4,
 
         data: {
           flags: 64,
+
           embeds: [
             makeHelpEmbed()
           ]
@@ -3110,23 +3361,51 @@ export default async function handler(
       });
     }
 
-    const handlers = {
-      request:
-        processRequestInteraction,
+    // /ticketpanel
 
-      question:
-        processQuestionInteraction,
-
-      vouch:
-        processVouchInteraction
-    };
-
-    if (
-      handlers[command]
-    ) {
+    if (commandName === "ticketpanel") {
       deferEphemeral(
         res,
-        handlers[command](i)
+        tPanel(interaction)
+      );
+
+      return;
+    }
+
+    // /request
+
+    if (commandName === "request") {
+      deferEphemeral(
+        res,
+        processRequestInteraction(
+          interaction
+        )
+      );
+
+      return;
+    }
+
+    // /vouch
+
+    if (commandName === "vouch") {
+      deferEphemeral(
+        res,
+        processVouchInteraction(
+          interaction
+        )
+      );
+
+      return;
+    }
+
+    // /question
+
+    if (commandName === "question") {
+      deferEphemeral(
+        res,
+        processQuestionInteraction(
+          interaction
+        )
       );
 
       return;
@@ -3134,7 +3413,7 @@ export default async function handler(
 
     return res.status(200).json(
       ephemeral(
-        "This slash command is not configured."
+        "This slash command is not configured on the Vercel endpoint."
       )
     );
   }
@@ -3143,192 +3422,356 @@ export default async function handler(
   // BUTTONS AND DROPDOWNS
   // ==================================================
 
-  if (
-    i.type === 3
-  ) {
-    const id =
-      i.data?.custom_id || "";
+  if (interaction.type === 3) {
+    const customId =
+      interaction.data?.custom_id;
 
-    // TICKET DROPDOWN
+    // ================================================
+    // TICKET CATEGORY DROPDOWN
+    // ================================================
+
     if (
-      TICKET_SELECT_IDS.has(id) &&
-      i.data?.component_type === 3
+      T_SELECT.has(customId) &&
+      interaction.data?.component_type === 3
     ) {
       const type = String(
-        i.data?.values?.[0] || ""
-      ).toLowerCase().trim();
+        interaction.data.values?.[0] || ""
+      ).toLowerCase();
 
       if (
-        !TICKET_TYPES[type]
+        !T_TYPES[type] ||
+        type === "verification"
       ) {
         return res.status(200).json(
           ephemeral(
-            "Please select a valid ticket category."
+            "Invalid ticket type."
           )
         );
       }
 
-      if (
-        TICKET_TYPES[type].questions
-      ) {
+      if (T_TYPES[type].questions) {
         return res.status(200).json(
-          ticketForm(type)
+          tForm(type)
         );
       }
 
       deferEphemeral(
         res,
-        processTicketOpen(i)
-      );
-
-      return;
-    }
-
-    // TRANSCRIPT BUTTON
-    if (
-      id.startsWith(
-        TRANSCRIPT_BUTTON_PREFIX
-      )
-    ) {
-      deferEphemeral(
-        res,
-        processViewTranscript(i)
-      );
-
-      return;
-    }
-
-    // TICKET MANAGEMENT
-    const ticketActions = {
-      chuppys_ticket_claim:
-        "claim",
-
-      chuppys_ticket_close:
-        "close",
-
-      chuppys_ticket_reopen:
-        "reopen",
-
-      chuppys_ticket_delete:
-        "delete"
-    };
-
-    if (
-      ticketActions[id]
-    ) {
-      deferEphemeral(
-        res,
-        processTicketAction(
-          i,
-          ticketActions[id]
+        tCreate(
+          interaction,
+          type
         )
       );
 
       return;
     }
 
-    // CLIENT ROLE
+    // ================================================
+    // VIEW TRANSCRIPT
+    // ================================================
+
     if (
-      id === CLIENT_ROLE_BUTTON_ID
+      customId?.startsWith(
+        "chuppys_transcript:"
+      )
     ) {
       deferEphemeral(
         res,
-        processClientRole(i)
+        (async () => {
+          try {
+            const roles =
+              tRoles(interaction);
+
+            const admin =
+              (
+                BigInt(
+                  interaction.member?.permissions || "0"
+                ) & 8n
+              ) !== 0n;
+
+            if (
+              !roles.has(TC.owner) &&
+              !roles.has(TC.support) &&
+              !admin
+            ) {
+              throw new Error(
+                "Only Owner and Ticket Support may view transcripts."
+              );
+            }
+
+            const logId =
+              customId.slice(
+                "chuppys_transcript:".length
+              );
+
+            if (
+              logId !== interaction.message?.id
+            ) {
+              throw new Error(
+                "Invalid transcript button."
+              );
+            }
+
+            const msg = await tApi(
+              "GET",
+              `/channels/${TC.logs}/messages/${logId}`
+            );
+
+            const file = (
+              msg.attachments || []
+            ).find(
+              a =>
+                /^transcript-/i.test(
+                  a.filename || ""
+                )
+            );
+
+            if (!file) {
+              throw new Error(
+                "Transcript attachment not found."
+              );
+            }
+
+            await updateOriginalResponse(
+              interaction,
+              {
+                content:
+                  `Transcript: [Open ${file.filename}](${file.url})`,
+
+                allowed_mentions: {
+                  parse: []
+                }
+              }
+            );
+          } catch (error) {
+            await updateOriginalResponse(
+              interaction,
+              `Could not open transcript: ${tClean(error.message)}`
+            ).catch(console.error);
+          }
+        })()
       );
 
       return;
     }
 
-    // VERIFICATION
+    // ================================================
+    // CREATE VERIFICATION TICKET
+    // ================================================
+
     if (
-      id === VERIFY_CUSTOM_ID
+      customId === TC.verifyButton
     ) {
       deferEphemeral(
         res,
-        processVerification(i)
+        tCreate(
+          interaction,
+          "verification"
+        )
       );
 
       return;
     }
 
+    // ================================================
+    // TICKET MANAGEMENT BUTTONS
+    // ================================================
+
+    const action =
+      T_BUTTONS[customId] ||
+      (
+        customId?.startsWith(
+          "chuppys_ticket:"
+        )
+          ? T_COMPAT[
+              customId.slice(
+                "chuppys_ticket:".length
+              )
+            ]
+          : null
+      );
+
+    // Close opens a modal.
+
+    if (action === "close") {
+      return res.status(200).json(
+        tCloseForm(
+          interaction.channel_id
+        )
+      );
+    }
+
+    // Claim, Reopen, Delete.
+
+    if (action) {
+      deferEphemeral(
+        res,
+        tAction(
+          interaction,
+          action
+        )
+      );
+
+      return;
+    }
+
+    // ================================================
+    // CLIENT ROLE BUTTON
+    // ================================================
+
+    if (
+      customId === CLIENT_ROLE_BUTTON_ID
+    ) {
+      if (!interaction.guild_id) {
+        return res.status(200).json(
+          ephemeral(
+            "You must use this button inside Chuppys."
+          )
+        );
+      }
+
+      deferEphemeral(
+        res,
+        processClientRole(
+          interaction
+        )
+      );
+
+      return;
+    }
+
+    // ================================================
+    // VERIFY BUTTON
+    // ================================================
+
+    if (
+      customId === VERIFY_CUSTOM_ID
+    ) {
+      if (!interaction.guild_id) {
+        return res.status(200).json(
+          ephemeral(
+            "You must verify inside the Chuppys server."
+          )
+        );
+      }
+
+      deferEphemeral(
+        res,
+        processVerification(
+          interaction
+        )
+      );
+
+      return;
+    }
+
+    // ================================================
     // QUESTION SUPPORT BUTTON
+    // ================================================
+
     if (
-      id.startsWith(
+      typeof customId === "string" &&
+      customId.startsWith(
         QUESTION_TICKET_CUSTOM_ID
       )
     ) {
       return res.status(200).json(
-        handleQuestionTicketButton()
+        handleQuestionTicketButton(
+          interaction
+        )
       );
     }
 
+    // ================================================
     // QUESTION REPLY BUTTON
+    // ================================================
+
     if (
-      id.startsWith(
+      typeof customId === "string" &&
+      customId.startsWith(
         QUESTION_REPLY_CUSTOM_ID
       )
     ) {
       return res.status(200).json(
-        handleQuestionReplyButton(i)
+        handleQuestionReplyButton(
+          interaction
+        )
       );
     }
 
+    // ================================================
     // ROLE DROPDOWNS
+    // ================================================
+
     const group =
       Object.prototype.hasOwnProperty.call(
         ROLE_GROUPS,
-        id
+        customId
       )
-        ? ROLE_GROUPS[id]
+        ? ROLE_GROUPS[customId]
         : null;
 
-    if (group) {
-      deferEphemeral(
-        res,
-        processRoleInteraction(
-          i,
-          group
+    if (
+      !group ||
+      !Array.isArray(
+        interaction.data?.values
+      )
+    ) {
+      return res.status(200).json(
+        ephemeral(
+          "This interaction is not configured."
         )
       );
-
-      return;
     }
 
-    console.warn(
-      "[INTERACTIONS] Unknown component:",
-      id
-    );
+    if (
+      interaction.data.values.some(
+        roleId =>
+          !group.roles.includes(roleId)
+      )
+    ) {
+      return res.status(200).json(
+        ephemeral(
+          "Invalid role selection."
+        )
+      );
+    }
 
-    return res.status(200).json(
-      ephemeral(
-        "This interaction is not configured."
+    deferEphemeral(
+      res,
+      processRoleInteraction(
+        interaction,
+        group
       )
     );
+
+    return;
   }
 
   // ==================================================
   // MODAL SUBMISSIONS
   // ==================================================
 
-  if (
-    i.type === 5
-  ) {
-    const id =
-      i.data?.custom_id || "";
+  if (interaction.type === 5) {
+    const customId =
+      interaction.data?.custom_id || "";
 
-    // PURCHASE / CASH OUT FORMS
+    // ================================================
+    // PURCHASE / CASHOUT / PARTNERSHIP MODALS
+    // ================================================
+
     if (
-      id.startsWith(
-        TICKET_MODAL_PREFIX
+      customId.startsWith(
+        T_MODAL
       )
     ) {
       const type =
-        id.slice(
-          TICKET_MODAL_PREFIX.length
+        customId.slice(
+          T_MODAL.length
         );
 
       if (
-        !TICKET_TYPES[type]?.questions
+        !T_TYPES[type]?.questions
       ) {
         return res.status(200).json(
           ephemeral(
@@ -3337,26 +3780,105 @@ export default async function handler(
         );
       }
 
+      let answers;
+
+      try {
+        answers = tAnswers(
+          interaction,
+          type
+        );
+      } catch (error) {
+        return res.status(200).json(
+          ephemeral(
+            tClean(error.message)
+          )
+        );
+      }
+
       deferEphemeral(
         res,
-        processTicketOpen(
-          i,
-          type
+        tCreate(
+          interaction,
+          type,
+          answers
         )
       );
 
       return;
     }
 
-    // QUESTION REPLY MODAL
+    // ================================================
+    // CLOSE TICKET MODAL
+    // ================================================
+
     if (
-      id.startsWith(
+      customId.startsWith(
+        T_CLOSE
+      )
+    ) {
+      if (
+        interaction.channel_id !==
+        customId.slice(
+          T_CLOSE.length
+        )
+      ) {
+        return res.status(200).json(
+          ephemeral(
+            "This form belongs to another ticket."
+          )
+        );
+      }
+
+      const fields = (
+        interaction.data.components || []
+      ).flatMap(
+        r => r.components || []
+      );
+
+      const reason = fields.find(
+        f =>
+          f.custom_id ===
+          "close_reason"
+      )?.value?.trim() || "";
+
+      deferEphemeral(
+        res,
+        tAction(
+          interaction,
+          "close",
+          reason
+        )
+      );
+
+      return;
+    }
+
+    // ================================================
+    // QUESTION REPLY MODAL
+    // ================================================
+
+    if (
+      customId.startsWith(
         QUESTION_MODAL_CUSTOM_ID
       )
     ) {
+      if (
+        !hasStaffPermission(
+          interaction
+        )
+      ) {
+        return res.status(200).json(
+          ephemeral(
+            "Only the owner, administrators, moderators, or Ticket Support can reply to questions."
+          )
+        );
+      }
+
       deferEphemeral(
         res,
-        processQuestionReply(i)
+        processQuestionReply(
+          interaction
+        )
       );
 
       return;
@@ -3369,9 +3891,13 @@ export default async function handler(
     );
   }
 
+  // ==================================================
+  // UNSUPPORTED INTERACTIONS
+  // ==================================================
+
   return res.status(200).json(
     ephemeral(
-      "Unsupported interaction."
+      "This interaction type is not supported."
     )
   );
 }
