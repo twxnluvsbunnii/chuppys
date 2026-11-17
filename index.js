@@ -69,7 +69,9 @@ const VERIFY_CHANNEL_ID = "1528716328985301052";
 
 const VERIFY_BUTTON_ID = "chuppys_verify";
 
-// NEW: VERIFICATION TICKET BUTTON
+// ==================================================
+// VERIFICATION TICKET BUTTON
+// ==================================================
 //
 // This button is handled by index.js.
 //
@@ -77,7 +79,7 @@ const VERIFY_BUTTON_ID = "chuppys_verify";
 // tickets.js so the same ticket counter,
 // permissions, logs and transcripts are used.
 //
-// When tickets.js is updated, export:
+// tickets.js must export:
 //
 // module.exports.openVerificationTicket =
 //   async function (interaction) { ... };
@@ -96,6 +98,7 @@ const VERIFY_TICKET_BUTTON_ID =
 const VERIFY_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1561103471325745242.png";
 
+// BOTH verification buttons use this SAME emoji.
 const VERIFY_BUTTON_EMOJI_ID = "1561103471325745242";
 
 const CHUPPYS_ROLE_ID = "1550230619127021568";
@@ -323,7 +326,7 @@ const ZELLE = "631-401-8951";
 // TWO ADDITIONAL PAYMENT METHODS
 // ==================================================
 //
-// You can configure these in Render:
+// Configure these in Render:
 //
 // PAYMENT_METHOD_5_NAME
 // PAYMENT_METHOD_5_DETAILS
@@ -426,9 +429,16 @@ function makeVerificationEmbed() {
 // VERIFICATION BUTTONS — UPDATED
 // ==================================================
 //
-// BOTH BUTTONS ARE ON THE SAME ROW:
+// BOTH BUTTONS ARE ON THE SAME ROW.
+//
+// BOTH BUTTONS ARE PURPLE.
+//
+// BOTH BUTTONS USE THE SAME CUSTOM EMOJI.
 //
 // [Verify] [Create Verification Ticket]
+//
+// Their custom IDs remain different,
+// so they still perform separate actions.
 //
 // ==================================================
 
@@ -445,8 +455,10 @@ function makeVerificationButton() {
     new ButtonBuilder()
       .setCustomId(VERIFY_TICKET_BUTTON_ID)
       .setLabel("Create Verification Ticket")
-      .setEmoji("🎫")
-      .setStyle(ButtonStyle.Secondary)
+      .setEmoji({
+        id: VERIFY_BUTTON_EMOJI_ID
+      })
+      .setStyle(ButtonStyle.Primary)
   );
 }
 
@@ -1719,7 +1731,14 @@ client.on(
       }
 
       // ==================================================
-      // NEW VERIFICATION TICKET BUTTON
+      // VERIFICATION TICKET BUTTON
+      // ==================================================
+      //
+      // Same purple style and same emoji
+      // as the Verify button.
+      //
+      // Separate custom ID and function.
+      //
       // ==================================================
 
       if (
@@ -2707,7 +2726,7 @@ async function sendDecorServices(channel) {
       "$21.99 • **$15.00**\n" +
       "$22.99 • **$16.00**\n\n" +
       "All legally purchased and will be sent the same day!\n\n" +
-      `$DIL0\n\n**.gg/chuppys**`
+      `${PAYMENT_METHODS_TEXT}\n\n**.gg/chuppys**`
     )
     .setColor("#FFFFFF");
 
@@ -2728,7 +2747,7 @@ async function sendNitroServices(channel) {
       `# NITRO ${SERVICE_EMOJI}\n\n` +
       "**1 Month + No War — $7.25**\n\n" +
       "**1 Month + War — $9.25**\n\n" +
-     `${PAYMENT_METHODS_TEXT}\n\n**.gg/chuppys**`
+      `${PAYMENT_METHODS_TEXT}\n\n**.gg/chuppys**`
     )
     .setColor("#FFFFFF");
 
@@ -4230,4 +4249,4 @@ if (!TOKEN) {
 
 // ==================================================
 // END OF CHUPPYS INDEX.JS
-// ==================================================
+// ============================================================
