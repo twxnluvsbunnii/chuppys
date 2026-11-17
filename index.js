@@ -1,4 +1,3 @@
-
 const http = require("http");
 
 const {
@@ -67,7 +66,32 @@ const REQUEST_THUMBNAIL_URL =
 // ==================================================
 
 const VERIFY_CHANNEL_ID = "1528716328985301052";
+
 const VERIFY_BUTTON_ID = "chuppys_verify";
+
+// NEW: VERIFICATION TICKET BUTTON
+//
+// This button is handled by index.js.
+//
+// Actual ticket creation is delegated to
+// tickets.js so the same ticket counter,
+// permissions, logs and transcripts are used.
+//
+// When tickets.js is updated, export:
+//
+// module.exports.openVerificationTicket =
+//   async function (interaction) { ... };
+//
+// The function should:
+// - Create or locate a verification ticket
+// - Return the resulting ticket channel
+// - Prevent duplicate open verification tickets
+// - Use the established ticket storage/log system
+//
+// ==================================================
+
+const VERIFY_TICKET_BUTTON_ID =
+  "chuppys_create_verification_ticket";
 
 const VERIFY_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1561103471325745242.png";
@@ -280,6 +304,12 @@ const SELLER_EMOJI = "<:chuppyseller:1560284517955141653>";
 const WELCOME_IMAGE =
   "https://cdn.discordapp.com/attachments/1531043582348230767/1551448584656916530/BCA71D48-B1AD-46BA-BAAA-CC87D8C81E62.png";
 
+// ==================================================
+// PAYMENT SETTINGS
+// ==================================================
+
+// EXISTING PAYMENT METHODS
+
 const CASHAPP_USERNAME = "$yysluvv";
 const CASHAPP_URL = "https://cash.app/$yysluvv";
 
@@ -289,8 +319,57 @@ const PAYPAL_URL = "https://paypal.me/twxnsrevenge";
 const APPLE_PAY = "929-554-5969";
 const ZELLE = "631-401-8951";
 
+// ==================================================
+// TWO ADDITIONAL PAYMENT METHODS
+// ==================================================
+//
+// You can configure these in Render:
+//
+// PAYMENT_METHOD_5_NAME
+// PAYMENT_METHOD_5_DETAILS
+// PAYMENT_METHOD_5_URL
+//
+// PAYMENT_METHOD_6_NAME
+// PAYMENT_METHOD_6_DETAILS
+// PAYMENT_METHOD_6_URL
+//
+// Example:
+//
+// PAYMENT_METHOD_5_NAME = Method Name
+// PAYMENT_METHOD_5_DETAILS = Username
+// PAYMENT_METHOD_5_URL = https://example.com/your-link
+//
+// Only actual HTTPS payment links will
+// be turned into Discord Link buttons.
+//
+// When the values are supplied, ,pay will
+// automatically show the additional methods.
+//
+// ==================================================
+
+const EXTRA_PAYMENT_METHODS = [
+  {
+    name: process.env.PAYMENT_METHOD_5_NAME || "",
+    details: process.env.PAYMENT_METHOD_5_DETAILS || "",
+    url: process.env.PAYMENT_METHOD_5_URL || ""
+  },
+  {
+    name: process.env.PAYMENT_METHOD_6_NAME || "",
+    details: process.env.PAYMENT_METHOD_6_DETAILS || "",
+    url: process.env.PAYMENT_METHOD_6_URL || ""
+  }
+];
+
+// ==================================================
+// SERVICE PAYMENT TEXT
+// ==================================================
+
 const PAYMENT_METHODS_TEXT =
   "**Payment Methods**\n> Apple Pay\n> Venmo\n> Cash App";
+
+// ==================================================
+// RUNTIME MAPS AND LOCKS
+// ==================================================
 
 const afkUsers = new Map();
 
@@ -301,6 +380,8 @@ let vouchCounterRecountRequested = false;
 const sellerCommandLocks = new Set();
 const clientCommandLocks = new Set();
 const promoterCommandLocks = new Set();
+
+const verificationTicketLocks = new Set();
 
 // ==================================================
 // DISCORD CLIENT
@@ -332,32 +413,66 @@ function makeVerificationEmbed() {
     .setTitle("Verify to Access .gg/chuppys")
     .setDescription(
       `Select your roles in <#${ROLES_CHANNEL_ID}> before verifying ` +
-      `to gain full access to **.gg/chuppys**.`
+      `to gain full access to **.gg/chuppys**.\n\n` +
+      "Need help verifying? Click **Create Verification Ticket** " +
+      "and our team will assist you."
     )
     .setColor("#FFFFFF")
     .setThumbnail(VERIFY_THUMBNAIL_URL)
     .setFooter({ text: ".gg/chuppys" });
 }
 
+// ==================================================
+// VERIFICATION BUTTONS — UPDATED
+// ==================================================
+//
+// BOTH BUTTONS ARE ON THE SAME ROW:
+//
+// [Verify] [Create Verification Ticket]
+//
+// ==================================================
+
 function makeVerificationButton() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(VERIFY_BUTTON_ID)
       .setLabel("Verify")
-      .setEmoji({ id: VERIFY_BUTTON_EMOJI_ID })
-      .setStyle(ButtonStyle.Primary)
+      .setEmoji({
+        id: VERIFY_BUTTON_EMOJI_ID
+      })
+      .setStyle(ButtonStyle.Primary),
+
+    new ButtonBuilder()
+      .setCustomId(VERIFY_TICKET_BUTTON_ID)
+      .setLabel("Create Verification Ticket")
+      .setEmoji("🎫")
+      .setStyle(ButtonStyle.Secondary)
   );
 }
 
+// ==================================================
+// VERIFICATION MESSAGE UPDATER
+// ==================================================
+
 async function sendOrUpdateVerificationMessage() {
   try {
-    const channel = await client.channels.fetch(VERIFY_CHANNEL_ID);
+    const channel = await client.channels.fetch(
+      VERIFY_CHANNEL_ID
+    );
 
-    if (!channel || !channel.isTextBased() || !channel.messages) {
-      throw new Error("Verification channel not found or invalid.");
+    if (
+      !channel ||
+      !channel.isTextBased() ||
+      !channel.messages
+    ) {
+      throw new Error(
+        "Verification channel not found or invalid."
+      );
     }
 
-    const messages = await channel.messages.fetch({ limit: 100 });
+    const messages = await channel.messages.fetch({
+      limit: 100
+    });
 
     const matching = messages.filter(message =>
       message.author.id === client.user.id &&
@@ -371,7 +486,9 @@ async function sendOrUpdateVerificationMessage() {
     const payload = {
       embeds: [makeVerificationEmbed()],
       components: [makeVerificationButton()],
-      allowedMentions: { parse: [] }
+      allowedMentions: {
+        parse: []
+      }
     };
 
     if (existing) {
@@ -380,18 +497,26 @@ async function sendOrUpdateVerificationMessage() {
       for (const duplicate of matching.values()) {
         if (duplicate.id !== existing.id) {
           await duplicate.delete().catch(error => {
-            console.error("[VERIFY] Could not delete duplicate:", error);
+            console.error(
+              "[VERIFY] Could not delete duplicate:",
+              error
+            );
           });
         }
       }
 
-      console.log("[VERIFY] Existing verification message updated.");
+      console.log(
+        "[VERIFY] Existing verification message updated."
+      );
+
       return existing;
     }
 
     const sent = await channel.send(payload);
 
-    console.log("[VERIFY] Verification message created.");
+    console.log(
+      "[VERIFY] Verification message created."
+    );
 
     return sent;
   } catch (error) {
@@ -407,7 +532,9 @@ async function sendOrUpdateVerificationMessage() {
 // ==================================================
 
 function hasAtLeastOneRole(member, roleIds) {
-  return roleIds.some(roleId => member.roles.cache.has(roleId));
+  return roleIds.some(roleId =>
+    member.roles.cache.has(roleId)
+  );
 }
 
 function countMatchingRoles(member, roleIds) {
@@ -417,9 +544,14 @@ function countMatchingRoles(member, roleIds) {
 }
 
 function checkVerificationRequirements(member) {
-  const hasAgeRole = hasAtLeastOneRole(member, AGE_ROLE_IDS);
-  const hasPronounRole = hasAtLeastOneRole(member, PRONOUN_ROLE_IDS);
-  const pingRoleCount = countMatchingRoles(member, PING_ROLE_IDS);
+  const hasAgeRole =
+    hasAtLeastOneRole(member, AGE_ROLE_IDS);
+
+  const hasPronounRole =
+    hasAtLeastOneRole(member, PRONOUN_ROLE_IDS);
+
+  const pingRoleCount =
+    countMatchingRoles(member, PING_ROLE_IDS);
 
   return {
     hasAgeRole,
@@ -433,6 +565,167 @@ function checkVerificationRequirements(member) {
 }
 
 // ==================================================
+// VERIFICATION TICKET HANDOFF
+// ==================================================
+//
+// index.js owns the button interaction.
+//
+// tickets.js owns the ticket creation.
+//
+// This avoids:
+// - Duplicate ticket counters
+// - Duplicate metadata
+// - Duplicate ticket handlers
+// - Inconsistent ticket permissions
+// - Missing ticket transcripts
+//
+// IMPORTANT:
+//
+// tickets.js must export a function:
+//
+// module.exports.openVerificationTicket =
+//   async function (interaction) { ... };
+//
+// It may return:
+// - A TextChannel directly, or
+// - { channel, existing }
+//
+// The interaction is already deferred
+// when the function is called.
+//
+// ==================================================
+
+async function createVerificationTicket(interaction) {
+  if (!interaction.inGuild()) {
+    return interaction.reply({
+      content:
+        "Verification tickets can only be created inside the server.",
+      ephemeral: true
+    });
+  }
+
+  const member =
+    interaction.guild.members.cache.get(
+      interaction.user.id
+    ) ||
+    await interaction.guild.members.fetch(
+      interaction.user.id
+    ).catch(() => null);
+
+  if (!member) {
+    return interaction.reply({
+      content:
+        "I couldn't verify your server membership.",
+      ephemeral: true
+    });
+  }
+
+  if (member.roles.cache.has(CHUPPYS_ROLE_ID)) {
+    return interaction.reply({
+      content:
+        "You're already verified and have full access to .gg/chuppys!",
+      ephemeral: true
+    });
+  }
+
+  const ticketModule = require("./tickets");
+
+  if (
+    typeof ticketModule.openVerificationTicket !== "function"
+  ) {
+    return interaction.reply({
+      content:
+        "Verification ticket creation is being configured. " +
+        "For now, please use the Support ticket option in " +
+        `<#${QUESTION_TICKET_CHANNEL_ID}>.`,
+      ephemeral: true,
+      allowedMentions: { parse: [] }
+    });
+  }
+
+  if (
+    verificationTicketLocks.has(interaction.user.id)
+  ) {
+    return interaction.reply({
+      content:
+        "Your verification ticket request is already being processed.",
+      ephemeral: true
+    });
+  }
+
+  verificationTicketLocks.add(interaction.user.id);
+
+  try {
+    await interaction.deferReply({
+      ephemeral: true
+    });
+
+    const result =
+      await ticketModule.openVerificationTicket(interaction);
+
+    const ticketChannel =
+      result?.channel || result;
+
+    if (
+      !ticketChannel ||
+      !ticketChannel.id
+    ) {
+      throw new Error(
+        "The ticket system did not return a ticket channel."
+      );
+    }
+
+    const existing = Boolean(result?.existing);
+
+    await interaction.editReply({
+      content: existing
+        ? (
+            "You already have an open verification ticket!\n\n" +
+            `${ticketChannel}`
+          )
+        : (
+            "Your verification ticket has been created!\n\n" +
+            `${ticketChannel}\n\n` +
+            "Please explain what you need help verifying."
+          ),
+      allowedMentions: { parse: [] }
+    });
+
+    console.log(
+      `[VERIFY TICKET] ${interaction.user.id} ` +
+      `${existing ? "opened existing" : "created"} ` +
+      `ticket ${ticketChannel.id}`
+    );
+
+  } catch (error) {
+    console.error(
+      "[VERIFY TICKET] Failed:",
+      error
+    );
+
+    const errorContent =
+      "I couldn't create your verification ticket. " +
+      "Please try again or contact Ticket Support.";
+
+    if (interaction.deferred) {
+      await interaction.editReply({
+        content: errorContent
+      }).catch(() => {});
+    } else if (!interaction.replied) {
+      await interaction.reply({
+        content: errorContent,
+        ephemeral: true
+      }).catch(() => {});
+    }
+
+  } finally {
+    verificationTicketLocks.delete(
+      interaction.user.id
+    );
+  }
+}
+
+// ==================================================
 // SLASH COMMAND REGISTRATION
 // ==================================================
 
@@ -441,12 +734,14 @@ async function registerQuestionCommand() {
     console.error(
       "[COMMANDS] Missing token, guild ID, or logged-in bot."
     );
+
     return;
   }
 
-  const rest = new REST({ version: "10" }).setToken(TOKEN);
+  const rest = new REST({
+    version: "10"
+  }).setToken(TOKEN);
 
-  // Ticket panel command is exported from tickets.js.
   const commandsToRegister = [
     QUESTION_COMMAND,
     REQUEST_COMMAND,
@@ -455,17 +750,21 @@ async function registerQuestionCommand() {
   ];
 
   try {
-    const route = Routes.applicationGuildCommands(
-      client.user.id,
-      GUILD_ID
-    );
+    const route =
+      Routes.applicationGuildCommands(
+        client.user.id,
+        GUILD_ID
+      );
 
-    const existingCommands = await rest.get(route);
+    const existingCommands =
+      await rest.get(route);
 
     for (const command of commandsToRegister) {
-      const existing = existingCommands.find(
-        registered => registered.name === command.name
-      );
+      const existing =
+        existingCommands.find(
+          registered =>
+            registered.name === command.name
+        );
 
       if (existing) {
         await rest.patch(
@@ -482,6 +781,7 @@ async function registerQuestionCommand() {
         console.log(
           `[COMMANDS] Updated /${command.name}.`
         );
+
       } else {
         await rest.post(route, {
           body: command.toJSON()
@@ -492,8 +792,12 @@ async function registerQuestionCommand() {
         );
       }
     }
+
   } catch (error) {
-    console.error("[COMMANDS] Registration failed:", error);
+    console.error(
+      "[COMMANDS] Registration failed:",
+      error
+    );
   }
 }
 
@@ -502,9 +806,12 @@ async function registerQuestionCommand() {
 // ==================================================
 
 function canReplyToQuestion(interaction) {
-  if (!interaction.guild || !interaction.member) return false;
+  if (!interaction.guild || !interaction.member) {
+    return false;
+  }
 
-  const memberPermissions = interaction.memberPermissions;
+  const memberPermissions =
+    interaction.memberPermissions;
 
   if (
     memberPermissions?.has(
@@ -522,12 +829,18 @@ function canReplyToQuestion(interaction) {
 
   const memberRoles = interaction.member.roles;
 
-  if (memberRoles?.cache?.has(TICKET_SUPPORT_ROLE_ID)) {
+  if (
+    memberRoles?.cache?.has(
+      TICKET_SUPPORT_ROLE_ID
+    )
+  ) {
     return true;
   }
 
   if (Array.isArray(memberRoles)) {
-    return memberRoles.includes(TICKET_SUPPORT_ROLE_ID);
+    return memberRoles.includes(
+      TICKET_SUPPORT_ROLE_ID
+    );
   }
 
   return false;
@@ -538,7 +851,9 @@ function canReplyToQuestion(interaction) {
 // ==================================================
 
 function isTicketSupport(member) {
-  return member.roles.cache.has(TICKET_SUPPORT_ROLE_ID);
+  return member.roles.cache.has(
+    TICKET_SUPPORT_ROLE_ID
+  );
 }
 
 // ==================================================
@@ -556,7 +871,9 @@ function makeClientEmbed() {
     .setThumbnail(
       `https://cdn.discordapp.com/emojis/${CLIENT_EMOJI_ID}.png`
     )
-    .setFooter({ text: ".gg/chuppys" });
+    .setFooter({
+      text: ".gg/chuppys"
+    });
 }
 
 function makeClientButton() {
@@ -564,7 +881,9 @@ function makeClientButton() {
     new ButtonBuilder()
       .setCustomId(CLIENT_BUTTON_ID)
       .setLabel("client")
-      .setEmoji({ id: CLIENT_EMOJI_ID })
+      .setEmoji({
+        id: CLIENT_EMOJI_ID
+      })
       .setStyle(ButtonStyle.Secondary)
   );
 }
@@ -574,7 +893,10 @@ function makeClientButton() {
 // ==================================================
 
 async function findClientRoleMessages(channel) {
-  const messages = await channel.messages.fetch({ limit: 100 });
+  const messages =
+    await channel.messages.fetch({
+      limit: 100
+    });
 
   return messages
     .filter(msg =>
@@ -585,8 +907,10 @@ async function findClientRoleMessages(channel) {
         )
       )
     )
-    .sort((a, b) =>
-      b.createdTimestamp - a.createdTimestamp
+    .sort(
+      (a, b) =>
+        b.createdTimestamp -
+        a.createdTimestamp
     );
 }
 
@@ -595,7 +919,11 @@ async function findClientRoleMessages(channel) {
 // ==================================================
 
 async function sendRobuxCashoutEmbed(channel) {
-  if (!channel || !channel.isTextBased() || !channel.messages) {
+  if (
+    !channel ||
+    !channel.isTextBased() ||
+    !channel.messages
+  ) {
     throw new Error(
       "Robux Cash Out channel not found or invalid."
     );
@@ -603,7 +931,9 @@ async function sendRobuxCashoutEmbed(channel) {
 
   const embed = new EmbedBuilder()
     .setTitle("Cashing Out Robux\n\n")
-    .setThumbnail(ROBUX_CASHOUT_THUMBNAIL_URL)
+    .setThumbnail(
+      ROBUX_CASHOUT_THUMBNAIL_URL
+    )
     .setDescription(
       "RATES\n\n" +
       "**Below 10k**\n" +
@@ -613,21 +943,27 @@ async function sendRobuxCashoutEmbed(channel) {
       "-# make a cash out ticket now !! make sure u ping me in tickets <:uppyty:1561094713153429746>"
     )
     .setColor("#FFFFFF")
-    .setFooter({ text: ".gg/chuppys" });
+    .setFooter({
+      text: ".gg/chuppys"
+    });
 
   const payload = {
     embeds: [embed],
-    allowedMentions: { parse: [] }
+    allowedMentions: {
+      parse: []
+    }
   };
 
-  const messages = await channel.messages.fetch({
-    limit: 100
-  });
+  const messages =
+    await channel.messages.fetch({
+      limit: 100
+    });
 
   const matches = messages.filter(message =>
     message.author.id === client.user.id &&
     message.embeds.some(existingEmbed => {
-      const title = existingEmbed.title || "";
+      const title =
+        existingEmbed.title || "";
 
       return (
         title.startsWith("Cashing Out Robux") ||
@@ -643,19 +979,25 @@ async function sendRobuxCashoutEmbed(channel) {
 
     for (const duplicate of matches.values()) {
       if (duplicate.id !== existing.id) {
-        await duplicate.delete().catch(() => {});
+        await duplicate.delete()
+          .catch(() => {});
       }
     }
 
     console.log(
       "[ROBUX CASHOUT] Existing embed updated."
     );
+
     return existing;
   }
 
-  const sent = await channel.send(payload);
+  const sent =
+    await channel.send(payload);
 
-  console.log("[ROBUX CASHOUT] New embed created.");
+  console.log(
+    "[ROBUX CASHOUT] New embed created."
+  );
+
   return sent;
 }
 
@@ -664,26 +1006,35 @@ async function sendRobuxCashoutEmbed(channel) {
 // ==================================================
 
 function makeRankedRolesEmbed() {
-  const roleList = RANKED_ROLE_IDS
-    .map((roleId, index) =>
-      `**${index + 1}.** <@&${roleId}>`
-    )
-    .join("\n\n");
+  const roleList =
+    RANKED_ROLE_IDS.map(
+      (roleId, index) =>
+        `**${index + 1}.** <@&${roleId}>`
+    ).join("\n\n");
 
   return new EmbedBuilder()
     .setTitle(".gg/chuppys ranked roles")
     .setDescription(roleList)
     .setColor("#FFFFFF")
-    .setThumbnail(RANKED_ROLES_THUMBNAIL_URL)
-    .setFooter({ text: ".gg/chuppys" });
+    .setThumbnail(
+      RANKED_ROLES_THUMBNAIL_URL
+    )
+    .setFooter({
+      text: ".gg/chuppys"
+    });
 }
 
 async function sendRankedRoles(guild) {
-  const channel = await guild.channels.fetch(
-    RANKED_ROLES_CHANNEL_ID
-  );
+  const channel =
+    await guild.channels.fetch(
+      RANKED_ROLES_CHANNEL_ID
+    );
 
-  if (!channel || !channel.isTextBased() || !channel.send) {
+  if (
+    !channel ||
+    !channel.isTextBased() ||
+    !channel.send
+  ) {
     throw new Error(
       "Ranked roles channel not found or invalid."
     );
@@ -691,7 +1042,9 @@ async function sendRankedRoles(guild) {
 
   const sent = await channel.send({
     embeds: [makeRankedRolesEmbed()],
-    allowedMentions: { parse: [] }
+    allowedMentions: {
+      parse: []
+    }
   });
 
   console.log(
@@ -707,7 +1060,11 @@ async function sendRankedRoles(guild) {
 // ==================================================
 
 async function countChannelMessages(channel) {
-  if (!channel || !channel.isTextBased() || !channel.messages) {
+  if (
+    !channel ||
+    !channel.isTextBased() ||
+    !channel.messages
+  ) {
     throw new Error(
       `Vouch source channel ${channel?.id || "unknown"} ` +
       "is unavailable."
@@ -718,27 +1075,49 @@ async function countChannelMessages(channel) {
   let before;
 
   while (true) {
-    const options = { limit: 100 };
+    const options = {
+      limit: 100
+    };
 
-    if (before) options.before = before;
+    if (before) {
+      options.before = before;
+    }
 
-    const messages = await channel.messages.fetch(options);
+    const messages =
+      await channel.messages.fetch(
+        options
+      );
 
-    if (messages.size === 0) break;
+    if (messages.size === 0) {
+      break;
+    }
 
     count += messages.size;
-    before = messages.last().id;
 
-    if (messages.size < 100) break;
+    before =
+      messages.last().id;
+
+    if (messages.size < 100) {
+      break;
+    }
   }
 
   return count;
 }
 
-async function renameCounterChannel(channelId, name) {
-  const channel = await client.channels.fetch(channelId);
+async function renameCounterChannel(
+  channelId,
+  name
+) {
+  const channel =
+    await client.channels.fetch(
+      channelId
+    );
 
-  if (!channel || typeof channel.setName !== "function") {
+  if (
+    !channel ||
+    typeof channel.setName !== "function"
+  ) {
     throw new Error(
       `Counter channel ${channelId} was not found ` +
       "or cannot be renamed."
@@ -766,25 +1145,32 @@ async function recountAllVouches() {
     do {
       vouchCounterRecountRequested = false;
 
-      const personalChannel = await client.channels.fetch(
-        PERSONAL_VOUCH_CHANNEL_ID
-      );
+      const personalChannel =
+        await client.channels.fetch(
+          PERSONAL_VOUCH_CHANNEL_ID
+        );
 
-      const regularChannel = await client.channels.fetch(
-        VOUCH_CHANNEL_ID
-      );
+      const regularChannel =
+        await client.channels.fetch(
+          VOUCH_CHANNEL_ID
+        );
 
       const personalCount =
-        await countChannelMessages(personalChannel);
+        await countChannelMessages(
+          personalChannel
+        );
 
       const regularCount =
-        await countChannelMessages(regularChannel);
+        await countChannelMessages(
+          regularChannel
+        );
 
       const chuppyName =
         `${CHUPPY_COUNT_PREFIX}${personalCount}` +
         `${CHUPPY_COUNT_SUFFIX}`;
 
-      const serverTotal = personalCount + regularCount;
+      const serverTotal =
+        personalCount + regularCount;
 
       const serverName =
         `${SERVER_COUNT_PREFIX}${serverTotal}` +
@@ -837,12 +1223,18 @@ function scheduleVouchCounterUpdate() {
 // ==================================================
 
 async function sendVouchTutorial(guild) {
-  const channel = await guild.channels.fetch(
-    VOUCH_TUTORIAL_CHANNEL_ID
-  );
+  const channel =
+    await guild.channels.fetch(
+      VOUCH_TUTORIAL_CHANNEL_ID
+    );
 
-  if (!channel || !channel.isTextBased()) {
-    throw new Error("Vouch tutorial channel not found.");
+  if (
+    !channel ||
+    !channel.isTextBased()
+  ) {
+    throw new Error(
+      "Vouch tutorial channel not found."
+    );
   }
 
   const embeds = [
@@ -855,7 +1247,9 @@ async function sendVouchTutorial(guild) {
         "When you're ready, use the **`/vouch`** command."
       )
       .setColor("#FFFFFF")
-      .setFooter({ text: ".gg/chuppys" }),
+      .setFooter({
+        text: ".gg/chuppys"
+      }),
 
     new EmbedBuilder()
       .setTitle("STEP 1 — USE /VOUCH")
@@ -864,9 +1258,13 @@ async function sendVouchTutorial(guild) {
         "Select the seller you purchased from and complete " +
         "the fields that appear."
       )
-      .setImage(VOUCH_TUTORIAL_IMAGES.command)
+      .setImage(
+        VOUCH_TUTORIAL_IMAGES.command
+      )
       .setColor("#FFFFFF")
-      .setFooter({ text: ".gg/chuppys" }),
+      .setFooter({
+        text: ".gg/chuppys"
+      }),
 
     new EmbedBuilder()
       .setTitle("WHAT TO FILL IN")
@@ -880,7 +1278,9 @@ async function sendVouchTutorial(guild) {
         "Check your answers before submitting."
       )
       .setColor("#FFFFFF")
-      .setFooter({ text: ".gg/chuppys" }),
+      .setFooter({
+        text: ".gg/chuppys"
+      }),
 
     new EmbedBuilder()
       .setTitle("EXAMPLE OF A COMPLETED VOUCH")
@@ -888,9 +1288,13 @@ async function sendVouchTutorial(guild) {
         "If the command was completed correctly, " +
         "your vouch should look similar to this! ↓"
       )
-      .setImage(VOUCH_TUTORIAL_IMAGES.completed)
+      .setImage(
+        VOUCH_TUTORIAL_IMAGES.completed
+      )
       .setColor("#FFFFFF")
-      .setFooter({ text: ".gg/chuppys" }),
+      .setFooter({
+        text: ".gg/chuppys"
+      }),
 
     new EmbedBuilder()
       .setTitle("SUCCESSFULLY SUBMITTED")
@@ -901,9 +1305,13 @@ async function sendVouchTutorial(guild) {
         "Make sure your vouch accurately describes " +
         "your actual transaction."
       )
-      .setImage(VOUCH_TUTORIAL_IMAGES.success)
+      .setImage(
+        VOUCH_TUTORIAL_IMAGES.success
+      )
       .setColor("#FFFFFF")
-      .setFooter({ text: ".gg/chuppys" })
+      .setFooter({
+        text: ".gg/chuppys"
+      })
   ];
 
   for (const embed of embeds) {
@@ -946,7 +1354,9 @@ function makeHelpEmbed() {
           "`/ticketpanel` — Posts or updates the ticket panel.\n" +
           "Use the ticket dropdown to open a private ticket.\n" +
           "Ticket buttons allow claiming, closing, reopening, " +
-          "and deleting tickets."
+          "and deleting tickets.\n" +
+          "The verification message also has a " +
+          "Create Verification Ticket button."
       },
       {
         name: "Support Commands",
@@ -982,7 +1392,9 @@ function makeHelpEmbed() {
     .setThumbnail(
       "https://cdn.discordapp.com/emojis/1569039366880235560.png"
     )
-    .setFooter({ text: ".gg/chuppys" });
+    .setFooter({
+      text: ".gg/chuppys"
+    });
 }
 
 // ==================================================
@@ -1017,764 +1429,1114 @@ function makePromoterEmbed() {
       "and send your answers to the Chuppys team."
     )
     .setColor("#FFFFFF")
-    .setFooter({ text: ".gg/chuppys" });
+    .setFooter({
+      text: ".gg/chuppys"
+    });
 }
 
 // ==================================================
 // CLIENT READY
 // ==================================================
 
-client.once(Events.ClientReady, async readyClient => {
-  console.log(
-    `[READY] Logged in as ${readyClient.user.tag}`
-  );
+client.once(
+  Events.ClientReady,
+  async readyClient => {
+    console.log(
+      `[READY] Logged in as ${readyClient.user.tag}`
+    );
 
-  console.log("[READY] Chuppys bot is online.");
+    console.log(
+      "[READY] Chuppys bot is online."
+    );
 
-  readyClient.user.setActivity(".gg/chuppys", {
-    type: 3
-  });
+    readyClient.user.setActivity(
+      ".gg/chuppys",
+      {
+        type: 3
+      }
+    );
 
-  await registerQuestionCommand();
-  await recountAllVouches();
-  await sendOrUpdateVerificationMessage();
+    // Start all independent startup tasks.
+    // This prevents a long vouch recount
+    // from delaying the verification buttons.
 
-  setInterval(() => {
-    if (client.isReady()) {
-      scheduleVouchCounterUpdate();
+    const startupTasks = [
+      registerQuestionCommand(),
+      recountAllVouches(),
+      sendOrUpdateVerificationMessage()
+    ];
+
+    const results =
+      await Promise.allSettled(startupTasks);
+
+    for (const result of results) {
+      if (result.status === "rejected") {
+        console.error(
+          "[READY] Startup task failed:",
+          result.reason
+        );
+      }
     }
-  }, 5 * 60 * 1000);
-});
+
+    setInterval(() => {
+      if (client.isReady()) {
+        scheduleVouchCounterUpdate();
+      }
+    }, 5 * 60 * 1000);
+  }
+);
 
 // ==================================================
 // QUESTION + REQUEST + VERIFICATION + CLIENT INTERACTIONS
 // ==================================================
 
-client.on(Events.InteractionCreate, async interaction => {
-  try {
+client.on(
+  Events.InteractionCreate,
+  async interaction => {
+    try {
 
-    // ==================================================
-    // /HELP COMMAND
-    // ==================================================
-
-    if (
-      interaction.isChatInputCommand() &&
-      interaction.commandName === "help"
-    ) {
-      await interaction.reply({
-        embeds: [makeHelpEmbed()],
-        ephemeral: true
-      });
-
-      return;
-    }
-
-    // ==================================================
-    // /REQUEST COMMAND
-    // ==================================================
-
-    if (
-      interaction.isChatInputCommand() &&
-      interaction.commandName === "request"
-    ) {
-      if (interaction.channelId !== REQUEST_CHANNEL_ID) {
-        await interaction.reply({
-          content:
-            `Please use \`/request\` in <#${REQUEST_CHANNEL_ID}>.`,
-          ephemeral: true
-        });
-        return;
-      }
-
-      const category = interaction.options.getString(
-        "category",
-        true
-      );
-
-      const items = interaction.options.getString(
-        "items",
-        true
-      ).trim();
-
-      const validCategories = [
-        "Baddies",
-        "MM2",
-        "Adopt Me",
-        "Blade Ball",
-        "Robux"
-      ];
-
-      if (!validCategories.includes(category)) {
-        await interaction.reply({
-          content: "Please select a valid category.",
-          ephemeral: true
-        });
-        return;
-      }
-
-      if (!items) {
-        await interaction.reply({
-          content:
-            "Please enter the items you want to request.",
-          ephemeral: true
-        });
-        return;
-      }
-
-      const requestEmbed = new EmbedBuilder()
-        .setTitle(`${category} Request`)
-        .setDescription(
-          `**Requested by:** <@${interaction.user.id}>\n\n` +
-          `**Category:** ${category}\n\n` +
-          "**What they'd like Chuppys to stock up on:**\n" +
-          items
-        )
-        .setColor("#FFFFFF")
-        .setThumbnail(REQUEST_THUMBNAIL_URL)
-        .setFooter({ text: ".gg/chuppys" })
-        .setTimestamp();
-
-      const requestChannel = await client.channels.fetch(
-        REQUEST_CHANNEL_ID
-      );
+      // ==================================================
+      // /HELP COMMAND
+      // ==================================================
 
       if (
-        !requestChannel ||
-        !requestChannel.isTextBased() ||
-        !requestChannel.send
+        interaction.isChatInputCommand() &&
+        interaction.commandName === "help"
       ) {
         await interaction.reply({
-          content:
-            "I couldn't find the stock request channel.",
+          embeds: [makeHelpEmbed()],
           ephemeral: true
         });
+
         return;
       }
 
-      await interaction.deferReply({
-        ephemeral: true
-      });
-
-      await requestChannel.send({
-        embeds: [requestEmbed],
-        allowedMentions: { parse: [] }
-      });
-
-      await interaction.editReply({
-        content:
-          `Your **${category}** request has been submitted! ` +
-          "Thank you for helping Chuppys decide what to stock. ♡"
-      });
-
-      console.log(
-        `[REQUEST] ${interaction.user.tag} submitted ` +
-        `a ${category} request.`
-      );
-
-      return;
-    }
-
-    // ==================================================
-    // VERIFY BUTTON
-    // ==================================================
-
-    if (
-      interaction.isButton() &&
-      interaction.customId === VERIFY_BUTTON_ID
-    ) {
-      if (!interaction.guild) {
-        await interaction.reply({
-          content:
-            "Verification can only be completed inside the server.",
-          ephemeral: true
-        });
-        return;
-      }
-
-      const member = await interaction.guild.members
-        .fetch(interaction.user.id)
-        .catch(() => null);
-
-      if (!member) {
-        await interaction.reply({
-          content:
-            "I couldn't find your server membership. Please try again.",
-          ephemeral: true
-        });
-        return;
-      }
-
-      if (member.roles.cache.has(CHUPPYS_ROLE_ID)) {
-        await interaction.reply({
-          content:
-            "You're already verified and have full access to .gg/chuppys!",
-          ephemeral: true
-        });
-        return;
-      }
-
-      const requirements =
-        checkVerificationRequirements(member);
-
-      if (!requirements.passed) {
-        await interaction.reply({
-          content:
-            `Please select your roles in <#${ROLES_CHANNEL_ID}> ` +
-            "before verifying.\n\n" +
-            "You need at least one age role, " +
-            "one pronoun role, and two ping roles.",
-          ephemeral: true
-        });
-        return;
-      }
-
-      await member.roles.add(
-        CHUPPYS_ROLE_ID,
-        "Successfully completed Chuppys verification."
-      );
-
-      await interaction.reply({
-        content:
-          `${AFK_RETURN_EMOJI} You're verified! ` +
-          "You now have full access to **.gg/chuppys**.",
-        ephemeral: true
-      });
-
-      console.log(
-        `[VERIFY] ${member.user.tag} verified successfully.`
-      );
-
-      return;
-    }
-
-    // ==================================================
-    // CLIENT ROLE BUTTON
-    // ==================================================
-
-    if (
-      interaction.isButton() &&
-      interaction.customId === CLIENT_BUTTON_ID
-    ) {
-      if (!interaction.guild) {
-        await interaction.reply({
-          content:
-            "This button can only be used inside the server.",
-          ephemeral: true
-        });
-        return;
-      }
-
-      const member = await interaction.guild.members
-        .fetch(interaction.user.id)
-        .catch(() => null);
-
-      if (!member) {
-        await interaction.reply({
-          content:
-            "I couldn't find your server membership.",
-          ephemeral: true
-        });
-        return;
-      }
-
-      if (member.roles.cache.has(CLIENT_ROLE_ID)) {
-        await interaction.reply({
-          content: "You already have the client role!",
-          ephemeral: true
-        });
-        return;
-      }
-
-      await member.roles.add(
-        CLIENT_ROLE_ID,
-        "Member claimed the Chuppys client role."
-      );
-
-      await interaction.reply({
-        content:
-          `${CLIENT_EMOJI} You've received the client role! ` +
-          "You can now submit your vouch.",
-        ephemeral: true
-      });
-
-      console.log(
-        `[CLIENT] ${member.user.tag} received the client role.`
-      );
-
-      return;
-    }
-
-    // ==================================================
-    // /QUESTION COMMAND
-    // ==================================================
-
-    if (
-      interaction.isChatInputCommand() &&
-      interaction.commandName === "question"
-    ) {
-      if (interaction.channelId !== QUESTION_CHANNEL_ID) {
-        await interaction.reply({
-          content:
-            `Please use \`/question\` in <#${QUESTION_CHANNEL_ID}>.`,
-          ephemeral: true
-        });
-        return;
-      }
-
-      const questionText = interaction.options.getString(
-        "question",
-        true
-      );
-
-      const picture =
-        interaction.options.getAttachment("picture");
+      // ==================================================
+      // /REQUEST COMMAND
+      // ==================================================
 
       if (
-        picture &&
-        !picture.contentType?.startsWith("image/")
+        interaction.isChatInputCommand() &&
+        interaction.commandName === "request"
       ) {
-        await interaction.reply({
-          content:
-            "The optional picture must be an image.",
-          ephemeral: true
-        });
-        return;
-      }
+        if (
+          interaction.channelId !== REQUEST_CHANNEL_ID
+        ) {
+          await interaction.reply({
+            content:
+              `Please use \`/request\` in <#${REQUEST_CHANNEL_ID}>.`,
+            ephemeral: true
+          });
 
-      const questionEmbed = new EmbedBuilder()
-        .setTitle(
-          `Question from ${interaction.user.username}`
-        )
-        .setDescription(
-          `**Question**\n${questionText}`
-        )
-        .setColor("#FFFFFF")
-        .setThumbnail(QUESTION_EMOJI_URL)
-        .setFooter({
-          text:
-            `.gg/chuppys • Question User ID: ` +
-            interaction.user.id
-        })
-        .setTimestamp();
+          return;
+        }
 
-      if (picture) {
-        questionEmbed.setImage(picture.url);
-      }
+        const category =
+          interaction.options.getString(
+            "category",
+            true
+          );
 
-      const buttons = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("question_ticket")
-          .setLabel("Make a Support Ticket")
-          .setEmoji({
-            id: "1561103471325745242"
+        const items =
+          interaction.options.getString(
+            "items",
+            true
+          ).trim();
+
+        const validCategories = [
+          "Baddies",
+          "MM2",
+          "Adopt Me",
+          "Blade Ball",
+          "Robux"
+        ];
+
+        if (
+          !validCategories.includes(category)
+        ) {
+          await interaction.reply({
+            content:
+              "Please select a valid category.",
+            ephemeral: true
+          });
+
+          return;
+        }
+
+        if (!items) {
+          await interaction.reply({
+            content:
+              "Please enter the items you want to request.",
+            ephemeral: true
+          });
+
+          return;
+        }
+
+        const requestEmbed = new EmbedBuilder()
+          .setTitle(
+            `${category} Request`
+          )
+          .setDescription(
+            `**Requested by:** <@${interaction.user.id}>\n\n` +
+            `**Category:** ${category}\n\n` +
+            "**What they'd like Chuppys to stock up on:**\n" +
+            items
+          )
+          .setColor("#FFFFFF")
+          .setThumbnail(
+            REQUEST_THUMBNAIL_URL
+          )
+          .setFooter({
+            text: ".gg/chuppys"
           })
-          .setStyle(ButtonStyle.Secondary),
+          .setTimestamp();
 
-        new ButtonBuilder()
-          .setCustomId("question_reply")
-          .setLabel("Reply to Question")
-          .setEmoji({
-            id: "1561103471325745242"
-          })
-          .setStyle(ButtonStyle.Primary)
-      );
+        const requestChannel =
+          await client.channels.fetch(
+            REQUEST_CHANNEL_ID
+          );
 
-      await interaction.channel.send({
-        embeds: [questionEmbed],
-        components: [buttons],
-        allowedMentions: { parse: [] }
-      });
+        if (
+          !requestChannel ||
+          !requestChannel.isTextBased() ||
+          !requestChannel.send
+        ) {
+          await interaction.reply({
+            content:
+              "I couldn't find the stock request channel.",
+            ephemeral: true
+          });
 
-      await interaction.reply({
-        content:
-          "Your question has been submitted!",
-        ephemeral: true
-      });
+          return;
+        }
 
-      return;
-    }
-
-    // ==================================================
-    // QUESTION TICKET BUTTON
-    // ==================================================
-
-    if (
-      interaction.isButton() &&
-      interaction.customId === "question_ticket"
-    ) {
-      const ticketEmbed = new EmbedBuilder()
-        .setDescription(
-          "This question requires a support ticket.\n\n" +
-          `Please make one in <#${QUESTION_TICKET_CHANNEL_ID}> ` +
-          "using the ticket dropdown menu.\n\n" +
-          `Our <@&${TICKET_SUPPORT_ROLE_ID}> team ` +
-          "will assist you there.\n\n" +
-          "Thank you! <:uppyty:1561094713153429746>"
-        )
-        .setColor("#FFFFFF")
-        .setThumbnail(QUESTION_EMOJI_URL)
-        .setFooter({ text: ".gg/chuppys" });
-
-      await interaction.reply({
-        embeds: [ticketEmbed],
-        ephemeral: true,
-        allowedMentions: { parse: [] }
-      });
-
-      return;
-    }
-
-    // ==================================================
-    // QUESTION REPLY BUTTON
-    // ==================================================
-
-    if (
-      interaction.isButton() &&
-      interaction.customId === "question_reply"
-    ) {
-      if (!canReplyToQuestion(interaction)) {
-        await interaction.reply({
-          content:
-            "Only Ticket Support, moderators, " +
-            "administrators, or the server owner " +
-            "can reply to questions.",
+        await interaction.deferReply({
           ephemeral: true
         });
-        return;
-      }
 
-      const replyModal = new ModalBuilder()
-        .setCustomId(
-          `question_reply_modal:${interaction.message.id}`
-        )
-        .setTitle("Reply to Question");
-
-      const replyInput = new TextInputBuilder()
-        .setCustomId("question_reply_text")
-        .setLabel("Your response")
-        .setPlaceholder(
-          "Write your response to the user here..."
-        )
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(true)
-        .setMaxLength(2000);
-
-      replyModal.addComponents(
-        new ActionRowBuilder().addComponents(replyInput)
-      );
-
-      await interaction.showModal(replyModal);
-
-      return;
-    }
-
-    // ==================================================
-    // QUESTION REPLY MODAL
-    // ==================================================
-
-    if (
-      interaction.isModalSubmit() &&
-      interaction.customId.startsWith(
-        "question_reply_modal:"
-      )
-    ) {
-      if (!canReplyToQuestion(interaction)) {
-        await interaction.reply({
-          content:
-            "You are not allowed to reply to questions.",
-          ephemeral: true
+        await requestChannel.send({
+          embeds: [requestEmbed],
+          allowedMentions: {
+            parse: []
+          }
         });
-        return;
-      }
 
-      const questionMessageId =
-        interaction.customId.split(":")[1];
-
-      const answerText =
-        interaction.fields.getTextInputValue(
-          "question_reply_text"
-        );
-
-      const questionChannel =
-        await client.channels.fetch(
-          QUESTION_CHANNEL_ID
-        );
-
-      if (
-        !questionChannel ||
-        !questionChannel.isTextBased()
-      ) {
-        await interaction.reply({
-          content:
-            "I couldn't find the question channel.",
-          ephemeral: true
-        });
-        return;
-      }
-
-      const questionMessage =
-        await questionChannel.messages
-          .fetch(questionMessageId)
-          .catch(() => null);
-
-      if (!questionMessage) {
-        await interaction.reply({
-          content:
-            "I couldn't find the original question. " +
-            "It may have been deleted.",
-          ephemeral: true
-        });
-        return;
-      }
-
-      const originalEmbed =
-        questionMessage.embeds[0];
-
-      const footerText =
-        originalEmbed?.footer?.text || "";
-
-      const userIdMatch =
-        footerText.match(
-          /Question User ID:\s*(\d+)/
-        );
-
-      if (!userIdMatch) {
-        await interaction.reply({
-          content:
-            "I couldn't identify the person " +
-            "who submitted this question.",
-          ephemeral: true
-        });
-        return;
-      }
-
-      const questionUserId = userIdMatch[1];
-
-      const questionUser = await client.users
-        .fetch(questionUserId)
-        .catch(() => null);
-
-      if (!questionUser) {
-        await interaction.reply({
-          content:
-            "I couldn't find that user's Discord account.",
-          ephemeral: true
-        });
-        return;
-      }
-
-      const responseEmbed = new EmbedBuilder()
-        .setTitle("Response to Your Question")
-        .setDescription(
-          `${QUESTION_EMOJI} **Replied by:** ` +
-          `${interaction.user.username}\n\n` +
-          `**Response:**\n${answerText}`
-        )
-        .setColor("#FFFFFF")
-        .setThumbnail(QUESTION_EMOJI_URL)
-        .setFooter({ text: ".gg/chuppys" })
-        .setTimestamp();
-
-      try {
-        await questionUser.send({
-          embeds: [responseEmbed],
-          allowedMentions: { parse: [] }
-        });
-      } catch (error) {
-        await interaction.reply({
-          content:
-            "I couldn't DM that user. " +
-            "They may have their direct messages disabled.",
-          ephemeral: true
-        });
-        return;
-      }
-
-      await interaction.reply({
-        content:
-          `Your response was sent privately to ` +
-          `**${questionUser.username}**.`,
-        ephemeral: true
-      });
-
-      return;
-    }
-
-  } catch (error) {
-    console.error("[INTERACTION] Error:", error);
-
-    if (interaction.isRepliable()) {
-      if (
-        interaction.deferred &&
-        !interaction.replied
-      ) {
         await interaction.editReply({
           content:
-            "Something went wrong while processing that interaction."
-        }).catch(() => {});
+            `Your **${category}** request has been submitted! ` +
+            "Thank you for helping Chuppys decide what to stock. ♡"
+        });
 
-      } else if (
-        !interaction.replied &&
-        !interaction.deferred
+        console.log(
+          `[REQUEST] ${interaction.user.tag} submitted ` +
+          `a ${category} request.`
+        );
+
+        return;
+      }
+
+      // ==================================================
+      // VERIFY BUTTON
+      // ==================================================
+
+      if (
+        interaction.isButton() &&
+        interaction.customId === VERIFY_BUTTON_ID
       ) {
+        if (!interaction.guild) {
+          await interaction.reply({
+            content:
+              "Verification can only be completed inside the server.",
+            ephemeral: true
+          });
+
+          return;
+        }
+
+        const member =
+          await interaction.guild.members
+            .fetch(interaction.user.id)
+            .catch(() => null);
+
+        if (!member) {
+          await interaction.reply({
+            content:
+              "I couldn't find your server membership. Please try again.",
+            ephemeral: true
+          });
+
+          return;
+        }
+
+        if (
+          member.roles.cache.has(
+            CHUPPYS_ROLE_ID
+          )
+        ) {
+          await interaction.reply({
+            content:
+              "You're already verified and have full access to .gg/chuppys!",
+            ephemeral: true
+          });
+
+          return;
+        }
+
+        const requirements =
+          checkVerificationRequirements(member);
+
+        if (!requirements.passed) {
+          await interaction.reply({
+            content:
+              `Please select your roles in <#${ROLES_CHANNEL_ID}> ` +
+              "before verifying.\n\n" +
+              "You need at least one age role, " +
+              "one pronoun role, and two ping roles.",
+            ephemeral: true
+          });
+
+          return;
+        }
+
+        await member.roles.add(
+          CHUPPYS_ROLE_ID,
+          "Successfully completed Chuppys verification."
+        );
+
         await interaction.reply({
           content:
-            "Something went wrong while processing that interaction.",
+            `${AFK_RETURN_EMOJI} You're verified! ` +
+            "You now have full access to **.gg/chuppys**.",
           ephemeral: true
-        }).catch(() => {});
+        });
+
+        console.log(
+          `[VERIFY] ${member.user.tag} verified successfully.`
+        );
+
+        return;
+      }
+
+      // ==================================================
+      // NEW VERIFICATION TICKET BUTTON
+      // ==================================================
+
+      if (
+        interaction.isButton() &&
+        interaction.customId === VERIFY_TICKET_BUTTON_ID
+      ) {
+        await createVerificationTicket(
+          interaction
+        );
+
+        return;
+      }
+
+      // ==================================================
+      // CLIENT ROLE BUTTON
+      // ==================================================
+
+      if (
+        interaction.isButton() &&
+        interaction.customId === CLIENT_BUTTON_ID
+      ) {
+        if (!interaction.guild) {
+          await interaction.reply({
+            content:
+              "This button can only be used inside the server.",
+            ephemeral: true
+          });
+
+          return;
+        }
+
+        const member =
+          await interaction.guild.members
+            .fetch(interaction.user.id)
+            .catch(() => null);
+
+        if (!member) {
+          await interaction.reply({
+            content:
+              "I couldn't find your server membership.",
+            ephemeral: true
+          });
+
+          return;
+        }
+
+        if (
+          member.roles.cache.has(
+            CLIENT_ROLE_ID
+          )
+        ) {
+          await interaction.reply({
+            content:
+              "You already have the client role!",
+            ephemeral: true
+          });
+
+          return;
+        }
+
+        await member.roles.add(
+          CLIENT_ROLE_ID,
+          "Member claimed the Chuppys client role."
+        );
+
+        await interaction.reply({
+          content:
+            `${CLIENT_EMOJI} You've received the client role! ` +
+            "You can now submit your vouch.",
+          ephemeral: true
+        });
+
+        console.log(
+          `[CLIENT] ${member.user.tag} received the client role.`
+        );
+
+        return;
+      }
+
+      // ==================================================
+      // /QUESTION COMMAND
+      // ==================================================
+
+      if (
+        interaction.isChatInputCommand() &&
+        interaction.commandName === "question"
+      ) {
+        if (
+          interaction.channelId !== QUESTION_CHANNEL_ID
+        ) {
+          await interaction.reply({
+            content:
+              `Please use \`/question\` in <#${QUESTION_CHANNEL_ID}>.`,
+            ephemeral: true
+          });
+
+          return;
+        }
+
+        const questionText =
+          interaction.options.getString(
+            "question",
+            true
+          );
+
+        const picture =
+          interaction.options.getAttachment(
+            "picture"
+          );
+
+        if (
+          picture &&
+          !picture.contentType?.startsWith(
+            "image/"
+          )
+        ) {
+          await interaction.reply({
+            content:
+              "The optional picture must be an image.",
+            ephemeral: true
+          });
+
+          return;
+        }
+
+        const questionEmbed = new EmbedBuilder()
+          .setTitle(
+            `Question from ${interaction.user.username}`
+          )
+          .setDescription(
+            `**Question**\n${questionText}`
+          )
+          .setColor("#FFFFFF")
+          .setThumbnail(
+            QUESTION_EMOJI_URL
+          )
+          .setFooter({
+            text:
+              `.gg/chuppys • Question User ID: ` +
+              interaction.user.id
+          })
+          .setTimestamp();
+
+        if (picture) {
+          questionEmbed.setImage(
+            picture.url
+          );
+        }
+
+        const buttons =
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId(
+                "question_ticket"
+              )
+              .setLabel(
+                "Make a Support Ticket"
+              )
+              .setEmoji({
+                id: "1561103471325745242"
+              })
+              .setStyle(
+                ButtonStyle.Secondary
+              ),
+
+            new ButtonBuilder()
+              .setCustomId(
+                "question_reply"
+              )
+              .setLabel(
+                "Reply to Question"
+              )
+              .setEmoji({
+                id: "1561103471325745242"
+              })
+              .setStyle(
+                ButtonStyle.Primary
+              )
+          );
+
+        await interaction.channel.send({
+          embeds: [questionEmbed],
+          components: [buttons],
+          allowedMentions: {
+            parse: []
+          }
+        });
+
+        await interaction.reply({
+          content:
+            "Your question has been submitted!",
+          ephemeral: true
+        });
+
+        return;
+      }
+
+      // ==================================================
+      // QUESTION TICKET BUTTON
+      // ==================================================
+
+      if (
+        interaction.isButton() &&
+        interaction.customId === "question_ticket"
+      ) {
+        const ticketEmbed = new EmbedBuilder()
+          .setDescription(
+            "This question requires a support ticket.\n\n" +
+            `Please make one in <#${QUESTION_TICKET_CHANNEL_ID}> ` +
+            "using the ticket dropdown menu.\n\n" +
+            `Our <@&${TICKET_SUPPORT_ROLE_ID}> team ` +
+            "will assist you there.\n\n" +
+            "Thank you! <:uppyty:1561094713153429746>"
+          )
+          .setColor("#FFFFFF")
+          .setThumbnail(
+            QUESTION_EMOJI_URL
+          )
+          .setFooter({
+            text: ".gg/chuppys"
+          });
+
+        await interaction.reply({
+          embeds: [ticketEmbed],
+          ephemeral: true,
+          allowedMentions: {
+            parse: []
+          }
+        });
+
+        return;
+      }
+
+      // ==================================================
+      // QUESTION REPLY BUTTON
+      // ==================================================
+
+      if (
+        interaction.isButton() &&
+        interaction.customId === "question_reply"
+      ) {
+        if (
+          !canReplyToQuestion(
+            interaction
+          )
+        ) {
+          await interaction.reply({
+            content:
+              "Only Ticket Support, moderators, " +
+              "administrators, or the server owner " +
+              "can reply to questions.",
+            ephemeral: true
+          });
+
+          return;
+        }
+
+        const replyModal =
+          new ModalBuilder()
+            .setCustomId(
+              `question_reply_modal:${interaction.message.id}`
+            )
+            .setTitle(
+              "Reply to Question"
+            );
+
+        const replyInput =
+          new TextInputBuilder()
+            .setCustomId(
+              "question_reply_text"
+            )
+            .setLabel(
+              "Your response"
+            )
+            .setPlaceholder(
+              "Write your response to the user here..."
+            )
+            .setStyle(
+              TextInputStyle.Paragraph
+            )
+            .setRequired(true)
+            .setMaxLength(2000);
+
+        replyModal.addComponents(
+          new ActionRowBuilder()
+            .addComponents(replyInput)
+        );
+
+        await interaction.showModal(
+          replyModal
+        );
+
+        return;
+      }
+
+      // ==================================================
+      // QUESTION REPLY MODAL
+      // ==================================================
+
+      if (
+        interaction.isModalSubmit() &&
+        interaction.customId.startsWith(
+          "question_reply_modal:"
+        )
+      ) {
+        if (
+          !canReplyToQuestion(
+            interaction
+          )
+        ) {
+          await interaction.reply({
+            content:
+              "You are not allowed to reply to questions.",
+            ephemeral: true
+          });
+
+          return;
+        }
+
+        const questionMessageId =
+          interaction.customId.split(
+            ":"
+          )[1];
+
+        const answerText =
+          interaction.fields.getTextInputValue(
+            "question_reply_text"
+          );
+
+        const questionChannel =
+          await client.channels.fetch(
+            QUESTION_CHANNEL_ID
+          );
+
+        if (
+          !questionChannel ||
+          !questionChannel.isTextBased()
+        ) {
+          await interaction.reply({
+            content:
+              "I couldn't find the question channel.",
+            ephemeral: true
+          });
+
+          return;
+        }
+
+        const questionMessage =
+          await questionChannel.messages
+            .fetch(questionMessageId)
+            .catch(() => null);
+
+        if (!questionMessage) {
+          await interaction.reply({
+            content:
+              "I couldn't find the original question. " +
+              "It may have been deleted.",
+            ephemeral: true
+          });
+
+          return;
+        }
+
+        const originalEmbed =
+          questionMessage.embeds[0];
+
+        const footerText =
+          originalEmbed?.footer?.text || "";
+
+        const userIdMatch =
+          footerText.match(
+            /Question User ID:\s*(\d+)/
+          );
+
+        if (!userIdMatch) {
+          await interaction.reply({
+            content:
+              "I couldn't identify the person " +
+              "who submitted this question.",
+            ephemeral: true
+          });
+
+          return;
+        }
+
+        const questionUserId =
+          userIdMatch[1];
+
+        const questionUser =
+          await client.users.fetch(
+            questionUserId
+          ).catch(() => null);
+
+        if (!questionUser) {
+          await interaction.reply({
+            content:
+              "I couldn't find that user's Discord account.",
+            ephemeral: true
+          });
+
+          return;
+        }
+
+        const responseEmbed =
+          new EmbedBuilder()
+            .setTitle(
+              "Response to Your Question"
+            )
+            .setDescription(
+              `${QUESTION_EMOJI} **Replied by:** ` +
+              `${interaction.user.username}\n\n` +
+              `**Response:**\n${answerText}`
+            )
+            .setColor("#FFFFFF")
+            .setThumbnail(
+              QUESTION_EMOJI_URL
+            )
+            .setFooter({
+              text: ".gg/chuppys"
+            })
+            .setTimestamp();
+
+        try {
+          await questionUser.send({
+            embeds: [responseEmbed],
+            allowedMentions: {
+              parse: []
+            }
+          });
+
+        } catch (error) {
+          await interaction.reply({
+            content:
+              "I couldn't DM that user. " +
+              "They may have their direct messages disabled.",
+            ephemeral: true
+          });
+
+          return;
+        }
+
+        await interaction.reply({
+          content:
+            `Your response was sent privately to ` +
+            `**${questionUser.username}**.`,
+          ephemeral: true
+        });
+
+        return;
+      }
+
+    } catch (error) {
+      console.error(
+        "[INTERACTION] Error:",
+        error
+      );
+
+      if (interaction.isRepliable()) {
+        if (
+          interaction.deferred &&
+          !interaction.replied
+        ) {
+          await interaction.editReply({
+            content:
+              "Something went wrong while processing that interaction."
+          }).catch(() => {});
+
+        } else if (
+          !interaction.replied &&
+          !interaction.deferred
+        ) {
+          await interaction.reply({
+            content:
+              "Something went wrong while processing that interaction.",
+            ephemeral: true
+          }).catch(() => {});
+        }
       }
     }
   }
-});
+);
 
 // ==================================================
 // VOUCH COUNTER + AUTO-REACTION
 // ==================================================
 
-client.on(Events.MessageCreate, async message => {
-  if (
-    !VOUCH_SOURCE_CHANNEL_IDS.includes(
-      message.channel.id
-    )
-  ) {
-    return;
-  }
-
-  scheduleVouchCounterUpdate();
-
-  try {
-    await message.react(CHUPPY_TY_EMOJI);
-  } catch (error) {
-    console.error(
-      `[VOUCH REACTION] Could not react ` +
-      `to message ${message.id}:`,
-      error.message
-    );
-  }
-});
-
-client.on(Events.MessageDelete, message => {
-  if (
-    !VOUCH_SOURCE_CHANNEL_IDS.includes(
-      message.channel.id
-    )
-  ) {
-    return;
-  }
-
-  scheduleVouchCounterUpdate();
-});
-
-client.on(Events.MessageBulkDelete, messages => {
-  const affectsVouchChannel =
-    messages.some(message =>
-      VOUCH_SOURCE_CHANNEL_IDS.includes(
+client.on(
+  Events.MessageCreate,
+  async message => {
+    if (
+      !VOUCH_SOURCE_CHANNEL_IDS.includes(
         message.channel.id
       )
-    );
+    ) {
+      return;
+    }
 
-  if (affectsVouchChannel) {
+    scheduleVouchCounterUpdate();
+
+    try {
+      await message.react(
+        CHUPPY_TY_EMOJI
+      );
+    } catch (error) {
+      console.error(
+        `[VOUCH REACTION] Could not react ` +
+        `to message ${message.id}:`,
+        error.message
+      );
+    }
+  }
+);
+
+client.on(
+  Events.MessageDelete,
+  message => {
+    if (
+      !VOUCH_SOURCE_CHANNEL_IDS.includes(
+        message.channel.id
+      )
+    ) {
+      return;
+    }
+
     scheduleVouchCounterUpdate();
   }
-});
+);
+
+client.on(
+  Events.MessageBulkDelete,
+  messages => {
+    const affectsVouchChannel =
+      messages.some(message =>
+        VOUCH_SOURCE_CHANNEL_IDS.includes(
+          message.channel.id
+        )
+      );
+
+    if (affectsVouchChannel) {
+      scheduleVouchCounterUpdate();
+    }
+  }
+);
 
 // ==================================================
 // WELCOME
 // ==================================================
 
-client.on(Events.GuildMemberAdd, async member => {
-  try {
-    const channel =
-      await member.guild.channels.fetch(
-        WELCOME_CHANNEL_ID
-      );
+client.on(
+  Events.GuildMemberAdd,
+  async member => {
+    try {
+      const channel =
+        await member.guild.channels.fetch(
+          WELCOME_CHANNEL_ID
+        );
 
-    if (!channel || !channel.isTextBased()) {
-      return;
-    }
+      if (
+        !channel ||
+        !channel.isTextBased()
+      ) {
+        return;
+      }
 
-    await member.roles.add(
-      WELCOME_ROLE_ID
-    ).catch(error => {
-      console.error(
-        "[WELCOME] Could not assign role:",
-        error
-      );
-    });
-
-    const embed = new EmbedBuilder()
-      .setTitle(
-        `Welcome to .gg/chuppys ${AFK_RETURN_EMOJI}`
-      )
-      .setDescription(
-        `Welcome ${member}!\n\n` +
-        "We're happy to have you here. " +
-        "Make sure to read the rules " +
-        "and enjoy your time in the server!"
-      )
-      .setColor("#FFFFFF")
-      .setThumbnail(
-        member.user.displayAvatarURL()
-      )
-      .setImage(WELCOME_IMAGE)
-      .setFooter({
-        text: member.guild.name
+      await member.roles.add(
+        WELCOME_ROLE_ID
+      ).catch(error => {
+        console.error(
+          "[WELCOME] Could not assign role:",
+          error
+        );
       });
 
-    await channel.send({
-      content: `${member}`,
-      embeds: [embed]
-    });
+      const embed =
+        new EmbedBuilder()
+          .setTitle(
+            `Welcome to .gg/chuppys ${AFK_RETURN_EMOJI}`
+          )
+          .setDescription(
+            `Welcome ${member}!\n\n` +
+            "We're happy to have you here. " +
+            "Make sure to read the rules " +
+            "and enjoy your time in the server!"
+          )
+          .setColor("#FFFFFF")
+          .setThumbnail(
+            member.user.displayAvatarURL()
+          )
+          .setImage(
+            WELCOME_IMAGE
+          )
+          .setFooter({
+            text: member.guild.name
+          });
 
-  } catch (error) {
-    console.error("[WELCOME] Error:", error);
+      await channel.send({
+        content: `${member}`,
+        embeds: [embed]
+      });
+
+    } catch (error) {
+      console.error(
+        "[WELCOME] Error:",
+        error
+      );
+    }
   }
-});
+);
 
 // ==================================================
 // GOODBYE
 // ==================================================
 
-client.on(Events.GuildMemberRemove, async member => {
-  try {
-    const channel =
-      await member.guild.channels.fetch(
-        GOODBYE_CHANNEL_ID
-      );
+client.on(
+  Events.GuildMemberRemove,
+  async member => {
+    try {
+      const channel =
+        await member.guild.channels.fetch(
+          GOODBYE_CHANNEL_ID
+        );
 
-    if (!channel || !channel.isTextBased()) {
-      return;
-    }
+      if (
+        !channel ||
+        !channel.isTextBased()
+      ) {
+        return;
+      }
 
-    const embed = new EmbedBuilder()
-      .setTitle(
-        `Goodbye ${AFK_GOING_EMOJI}`
-      )
-      .setDescription(
-        `**${member.user.username}** has left ` +
-        `**${member.guild.name}**.\n\n` +
-        "We hope to see you again!"
-      )
-      .setColor("#FFFFFF")
-      .setThumbnail(
-        member.user.displayAvatarURL()
-      )
-      .setFooter({
-        text: member.guild.name
+      const embed =
+        new EmbedBuilder()
+          .setTitle(
+            `Goodbye ${AFK_GOING_EMOJI}`
+          )
+          .setDescription(
+            `**${member.user.username}** has left ` +
+            `**${member.guild.name}**.\n\n` +
+            "We hope to see you again!"
+          )
+          .setColor("#FFFFFF")
+          .setThumbnail(
+            member.user.displayAvatarURL()
+          )
+          .setFooter({
+            text: member.guild.name
+          });
+
+      await channel.send({
+        embeds: [embed]
       });
 
-    await channel.send({
-      embeds: [embed]
-    });
-
-  } catch (error) {
-    console.error("[GOODBYE] Error:", error);
+    } catch (error) {
+      console.error(
+        "[GOODBYE] Error:",
+        error
+      );
+    }
   }
-});
+);
 
 // ==================================================
 // PAYMENT EMBED — ,pay
 // ==================================================
+//
+// PRESERVED:
+//
+// Cash App
+// PayPal
+// Apple Pay
+// Zelle
+//
+// NEW:
+//
+// Two configurable payment methods.
+//
+// Each configured method displays in
+// the embed.
+//
+// If the method has a valid HTTPS link,
+// it also receives a Link button.
+//
+// ==================================================
+
+function validPaymentUrl(value) {
+  if (
+    typeof value !== "string" ||
+    !value.trim()
+  ) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(
+      value.trim()
+    );
+
+    return (
+      parsed.protocol === "https:" &&
+      Boolean(parsed.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function paymentMethods() {
+  const methods = [
+    {
+      name: "Cash App",
+      details: CASHAPP_USERNAME,
+      url: CASHAPP_URL
+    },
+    {
+      name: "PayPal",
+      details: PAYPAL_USERNAME,
+      url: PAYPAL_URL
+    },
+    {
+      name: "Apple Pay",
+      details: APPLE_PAY,
+      url: ""
+    },
+    {
+      name: "Zelle",
+      details: ZELLE,
+      url: ""
+    }
+  ];
+
+  for (
+    const extra of
+    EXTRA_PAYMENT_METHODS
+  ) {
+    if (
+      !extra.name ||
+      !extra.name.trim()
+    ) {
+      continue;
+    }
+
+    methods.push({
+      name: extra.name.trim(),
+      details:
+        extra.details?.trim() ||
+        "Ask staff for payment details.",
+      url:
+        extra.url?.trim() || ""
+    });
+  }
+
+  return methods;
+}
+
+function makePaymentEmbed() {
+  const methods =
+    paymentMethods();
+
+  const embed = new EmbedBuilder()
+    .setTitle("Payment Methods")
+    .setDescription(
+      "Choose a payment method below.\n\n" +
+      "Please make sure the payment information " +
+      "is correct before sending."
+    )
+    .setColor("#FFFFFF")
+    .setThumbnail(
+      PAYMENT_EMOJI_URL
+    )
+    .setFooter({
+      text: ".gg/chuppys"
+    });
+
+  for (const method of methods) {
+    embed.addFields({
+      name: method.name.slice(0, 256),
+      value:
+        `\`${method.details
+          .replace(/`/g, "")
+          .slice(0, 1000)}\``
+    });
+  }
+
+  return embed;
+}
+
+function makePaymentButtons() {
+  const methods =
+    paymentMethods().filter(
+      method =>
+        validPaymentUrl(
+          method.url
+        )
+    );
+
+  const buttons =
+    methods.slice(0, 5).map(method =>
+      new ButtonBuilder()
+        .setLabel(
+          method.name.slice(0, 80)
+        )
+        .setStyle(
+          ButtonStyle.Link
+        )
+        .setURL(
+          method.url
+        )
+    );
+
+  if (!buttons.length) {
+    return [];
+  }
+
+  return [
+    new ActionRowBuilder()
+      .addComponents(buttons)
+  ];
+}
 
 async function sendPaymentEmbed(channel) {
   if (
@@ -1787,80 +2549,58 @@ async function sendPaymentEmbed(channel) {
     );
   }
 
-  const embed = new EmbedBuilder()
-    .setTitle("Payment Methods")
-    .setDescription(
-      "Choose a payment method below.\n\n" +
-      "Please make sure the payment information " +
-      "is correct before sending."
-    )
-    .addFields(
-      {
-        name: "Cash App",
-        value: `\`${CASHAPP_USERNAME}\``
-      },
-      {
-        name: "PayPal",
-        value: `\`${PAYPAL_USERNAME}\``
-      },
-      {
-        name: "Apple Pay",
-        value: `\`${APPLE_PAY}\``
-      },
-      {
-        name: "Zelle",
-        value: `\`${ZELLE}\``
-      }
-    )
-    .setColor("#FFFFFF")
-    .setThumbnail(PAYMENT_EMOJI_URL)
-    .setFooter({
-      text: ".gg/chuppys"
-    });
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setLabel("Cash App")
-      .setStyle(ButtonStyle.Link)
-      .setURL(CASHAPP_URL),
-
-    new ButtonBuilder()
-      .setLabel("PayPal")
-      .setStyle(ButtonStyle.Link)
-      .setURL(PAYPAL_URL)
-  );
-
   const payload = {
-    embeds: [embed],
-    components: [row]
+    embeds: [
+      makePaymentEmbed()
+    ],
+    components:
+      makePaymentButtons(),
+    allowedMentions: {
+      parse: []
+    }
   };
 
-  const messages = await channel.messages.fetch({
-    limit: 100
-  });
+  const messages =
+    await channel.messages.fetch({
+      limit: 100
+    });
 
   const matches = messages.filter(msg =>
     msg.author.id === client.user.id &&
     msg.embeds.some(existingEmbed =>
-      existingEmbed.title === "Payment Methods"
+      existingEmbed.title ===
+      "Payment Methods"
     )
   );
 
-  const existing = matches.first();
+  const existing =
+    matches.first();
 
   if (existing) {
     await existing.edit(payload);
 
     for (const duplicate of matches.values()) {
       if (duplicate.id !== existing.id) {
-        await duplicate.delete().catch(() => {});
+        await duplicate.delete()
+          .catch(() => {});
       }
     }
+
+    console.log(
+      `[PAY] Updated payment message in ${channel.id}.`
+    );
 
     return existing;
   }
 
-  return channel.send(payload);
+  const sent =
+    await channel.send(payload);
+
+  console.log(
+    `[PAY] Created payment message in ${channel.id}.`
+  );
+
+  return sent;
 }
 
 // ==================================================
@@ -1882,9 +2622,10 @@ async function updateServiceMessage(
     );
   }
 
-  const messages = await channel.messages.fetch({
-    limit: 100
-  });
+  const messages =
+    await channel.messages.fetch({
+      limit: 100
+    });
 
   const matching = messages.filter(msg => {
     if (
@@ -1915,7 +2656,8 @@ async function updateServiceMessage(
     return false;
   });
 
-  const existing = matching.first();
+  const existing =
+    matching.first();
 
   if (existing) {
     await existing.edit({
@@ -1926,7 +2668,8 @@ async function updateServiceMessage(
 
     for (const duplicate of matching.values()) {
       if (duplicate.id !== existing.id) {
-        await duplicate.delete().catch(() => {});
+        await duplicate.delete()
+          .catch(() => {});
       }
     }
 
@@ -1964,7 +2707,7 @@ async function sendDecorServices(channel) {
       "$21.99 • **$15.00**\n" +
       "$22.99 • **$16.00**\n\n" +
       "All legally purchased and will be sent the same day!\n\n" +
-      `${PAYMENT_METHODS_TEXT}\n\n**.gg/chuppys**`
+      `${PAYMENT_METHODS_TEXT}\n\n**.gg/chuppys**"
     )
     .setColor("#FFFFFF");
 
@@ -1985,7 +2728,7 @@ async function sendNitroServices(channel) {
       `# NITRO ${SERVICE_EMOJI}\n\n` +
       "**1 Month + No War — $7.25**\n\n" +
       "**1 Month + War — $9.25**\n\n" +
-      `${PAYMENT_METHODS_TEXT}\n\n**.gg/chuppys**`
+      `${PAYMENT_METHODS_TEXT}\n\n**.gg/chuppys**"
     )
     .setColor("#FFFFFF");
 
@@ -2032,17 +2775,19 @@ async function sendBoostiesServices(channel) {
   const embed = new EmbedBuilder()
     .setDescription(
       `# 1 MONTH ${BOOST_EMOJI}\n\n` +
-      oneMonth.map(([count, price]) =>
-        `${BOOST_EMOJI} **${count} • ${price}**`
+      oneMonth.map(
+        ([count, price]) =>
+          `${BOOST_EMOJI} **${count} • ${price}**`
       ).join("\n") +
 
       `\n\n# 3 MONTHS ${BOOST_EMOJI}\n\n` +
 
-      threeMonths.map(([count, price]) =>
-        `${BOOST_EMOJI} **${count} • ${price}**`
+      threeMonths.map(
+        ([count, price]) =>
+          `${BOOST_EMOJI} **${count} • ${price}**`
       ).join("\n") +
 
-      `\n\n${PAYMENT_METHODS_TEXT}\n\n**.gg/chuppys**`
+      `\n\n${PAYMENT_METHODS_TEXT}\n\n**.gg/chuppys**"
     )
     .setColor("#FFFFFF");
 
@@ -2071,7 +2816,6 @@ function makeSellersEmbed() {
     ["1328450205774909441", "seller", "$100"],
     ["1475237851414401105", "seller", "$75"]
   ];
-  
 
   const lines = [
     "# .gg/chuppys sellers",
@@ -2095,7 +2839,9 @@ function makeSellersEmbed() {
 
   return new EmbedBuilder()
     .setColor("#FFFFFF")
-    .setDescription(lines.join("\n"));
+    .setDescription(
+      lines.join("\n")
+    );
 }
 
 // ==================================================
@@ -2152,7 +2898,9 @@ function makeStaffEmbed() {
 
 function makeModEmbed() {
   return new EmbedBuilder()
-    .setTitle(".gg/chuppys moderator responsibilities")
+    .setTitle(
+      ".gg/chuppys moderator responsibilities"
+    )
     .setDescription(
       "**Server Moderation**\n\n" +
       "• Keep the server organized, safe, and welcoming.\n" +
@@ -2211,7 +2959,9 @@ async function sendEmbedToChannel(
   label
 ) {
   const channel =
-    await guild.channels.fetch(channelId);
+    await guild.channels.fetch(
+      channelId
+    );
 
   if (
     !channel ||
@@ -2224,7 +2974,9 @@ async function sendEmbedToChannel(
 
   await channel.send({
     embeds: [embed],
-    allowedMentions: { parse: [] }
+    allowedMentions: {
+      parse: []
+    }
   });
 }
 
@@ -2233,12 +2985,17 @@ async function sendEmbedToChannel(
 // ==================================================
 
 async function handleAFK(message) {
-  const guildId = message.guild.id;
-  const userId = message.author.id;
+  const guildId =
+    message.guild.id;
 
-  const afkKey = `${guildId}:${userId}`;
+  const userId =
+    message.author.id;
 
-  const rawContent = message.content.trim();
+  const afkKey =
+    `${guildId}:${userId}`;
+
+  const rawContent =
+    message.content.trim();
 
   const afkMatch =
     rawContent.match(
@@ -2272,7 +3029,8 @@ async function handleAFK(message) {
   }
 
   if (afkUsers.has(afkKey)) {
-    const oldAFK = afkUsers.get(afkKey);
+    const oldAFK =
+      afkUsers.get(afkKey);
 
     afkUsers.delete(afkKey);
 
@@ -2281,7 +3039,9 @@ async function handleAFK(message) {
         `${AFK_RETURN_EMOJI} Welcome back, ` +
         `${message.author}! ` +
         "Your AFK status has been removed.",
-      allowedMentions: { parse: [] }
+      allowedMentions: {
+        parse: []
+      }
     });
 
     console.log(
@@ -2290,7 +3050,8 @@ async function handleAFK(message) {
     );
   }
 
-  const notifiedUsers = new Set();
+  const notifiedUsers =
+    new Set();
 
   for (
     const [mentionedUserId, user]
@@ -2303,25 +3064,32 @@ async function handleAFK(message) {
       continue;
     }
 
-    const afkData = afkUsers.get(
-      `${guildId}:${mentionedUserId}`
-    );
+    const afkData =
+      afkUsers.get(
+        `${guildId}:${mentionedUserId}`
+      );
 
     if (
       !afkData ||
-      notifiedUsers.has(mentionedUserId)
+      notifiedUsers.has(
+        mentionedUserId
+      )
     ) {
       continue;
     }
 
-    notifiedUsers.add(mentionedUserId);
+    notifiedUsers.add(
+      mentionedUserId
+    );
 
     await message.channel.send({
       content:
         `${AFK_GOING_EMOJI} ` +
         `**${user.username} is currently AFK.**\n` +
         `**Reason:** ${afkData.reason}`,
-      allowedMentions: { parse: [] }
+      allowedMentions: {
+        parse: []
+      }
     });
   }
 
@@ -2332,412 +3100,275 @@ async function handleAFK(message) {
 // MESSAGE COMMANDS
 // ==================================================
 
-client.on(Events.MessageCreate, async message => {
-  if (!message.guild || message.author.bot) {
-    return;
-  }
-
-  const rawContent = message.content.trim();
-  const content = rawContent.toLowerCase();
-
-  try {
-
-    // ==================================================
-    // GREETING
-    // ==================================================
-
+client.on(
+  Events.MessageCreate,
+  async message => {
     if (
-      /^(hi+|hey+|hello+|heya+)[!.?,\s]*$/i
-        .test(rawContent)
+      !message.guild ||
+      message.author.bot
     ) {
-      await message.reply({
-        content:
-          `Hi ! ${AFK_RETURN_EMOJI}`,
-        allowedMentions: {
-          repliedUser: false
-        }
-      });
-
       return;
     }
 
-    const wasAFKCommand =
-      await handleAFK(message);
+    const rawContent =
+      message.content.trim();
 
-    if (wasAFKCommand) return;
+    const content =
+      rawContent.toLowerCase();
 
-    // ==================================================
-    // CLIENT — FAST SEND OR UPDATE
-    // ==================================================
+    try {
 
-    if (content === ",client") {
-      const channelId = message.channel.id;
+      // ==================================================
+      // GREETING
+      // ==================================================
 
       if (
-        clientCommandLocks.has(channelId)
+        /^(hi+|hey+|hello+|heya+)[!.?,\s]*$/i
+          .test(rawContent)
       ) {
-        console.log(
-          `[CLIENT] Ignored simultaneous command ` +
-          `in channel ${channelId}.`
-        );
+        await message.reply({
+          content:
+            `Hi ! ${AFK_RETURN_EMOJI}`,
+          allowedMentions: {
+            repliedUser: false
+          }
+        });
+
         return;
       }
 
-      clientCommandLocks.add(channelId);
+      const wasAFKCommand =
+        await handleAFK(message);
 
-      try {
-        const matching =
-          await findClientRoleMessages(
-            message.channel
+      if (wasAFKCommand) {
+        return;
+      }
+
+      // ==================================================
+      // CLIENT — FAST SEND OR UPDATE
+      // ==================================================
+
+      if (content === ",client") {
+        const channelId =
+          message.channel.id;
+
+        if (
+          clientCommandLocks.has(
+            channelId
+          )
+        ) {
+          console.log(
+            `[CLIENT] Ignored simultaneous command ` +
+            `in channel ${channelId}.`
           );
 
-        const payload = {
-          embeds: [makeClientEmbed()],
-          components: [makeClientButton()],
-          allowedMentions: { parse: [] }
-        };
+          return;
+        }
 
-        if (matching.size > 0) {
-          const existing = matching.first();
+        clientCommandLocks.add(
+          channelId
+        );
 
-          await existing.edit(payload);
+        try {
+          const matching =
+            await findClientRoleMessages(
+              message.channel
+            );
 
-          const duplicates = matching.filter(
-            msg => msg.id !== existing.id
-          );
+          const payload = {
+            embeds: [
+              makeClientEmbed()
+            ],
+            components: [
+              makeClientButton()
+            ],
+            allowedMentions: {
+              parse: []
+            }
+          };
 
-          if (duplicates.size > 0) {
-            await Promise.all(
-              duplicates.map(msg =>
-                msg.delete().catch(error => {
-                  console.error(
-                    "[CLIENT] Duplicate deletion failed:",
-                    error
-                  );
-                })
-              )
+          if (matching.size > 0) {
+            const existing =
+              matching.first();
+
+            await existing.edit(
+              payload
+            );
+
+            const duplicates =
+              matching.filter(
+                msg =>
+                  msg.id !== existing.id
+              );
+
+            if (duplicates.size > 0) {
+              await Promise.all(
+                duplicates.map(msg =>
+                  msg.delete().catch(error => {
+                    console.error(
+                      "[CLIENT] Duplicate deletion failed:",
+                      error
+                    );
+                  })
+                )
+              );
+            }
+
+            console.log(
+              `[CLIENT] Updated existing message ` +
+              `in ${channelId}.`
+            );
+
+          } else {
+            await message.channel.send(
+              payload
+            );
+
+            console.log(
+              `[CLIENT] Created new message ` +
+              `in ${channelId}.`
             );
           }
 
-          console.log(
-            `[CLIENT] Updated existing message ` +
-            `in ${channelId}.`
-          );
-
-        } else {
-          await message.channel.send(payload);
-
-          console.log(
-            `[CLIENT] Created new message ` +
-            `in ${channelId}.`
+        } finally {
+          clientCommandLocks.delete(
+            channelId
           );
         }
 
-      } finally {
-        clientCommandLocks.delete(channelId);
-      }
-
-      return;
-    }
-
-    // ==================================================
-    // ,promoter — PROMOTER RESPONSIBILITIES
-    // ==================================================
-
-    if (content === ",promoter") {
-      const channelId = message.channel.id;
-
-      if (
-        promoterCommandLocks.has(channelId)
-      ) {
-        console.log(
-          `[PROMOTER] Ignored simultaneous command ` +
-          `in channel ${channelId}.`
-        );
         return;
       }
 
-      promoterCommandLocks.add(channelId);
+      // ==================================================
+      // ,promoter — PROMOTER RESPONSIBILITIES
+      // ==================================================
 
-      try {
-        const messages =
-          await message.channel.messages.fetch({
-            limit: 100
-          });
+      if (content === ",promoter") {
+        const channelId =
+          message.channel.id;
 
-        const matching = messages.filter(msg =>
-          msg.author.id === client.user.id &&
-          msg.embeds.some(embed =>
-            embed.title ===
-            ".gg/chuppys promoter information"
-          )
-        );
-
-        const existing = matching.first();
-
-        const payload = {
-          embeds: [makePromoterEmbed()],
-          content: "",
-          components: [],
-          allowedMentions: { parse: [] }
-        };
-
-        if (existing) {
-          await existing.edit(payload);
-
-          for (
-            const duplicate
-            of matching.values()
-          ) {
-            if (duplicate.id !== existing.id) {
-              await duplicate.delete().catch(error => {
-                console.error(
-                  "[PROMOTER] Could not delete duplicate:",
-                  error
-                );
-              });
-            }
-          }
-
-          console.log(
-            `[PROMOTER] Updated promoter information ` +
-            `in ${channelId}.`
-          );
-
-        } else {
-          await message.channel.send(payload);
-
-          console.log(
-            `[PROMOTER] Created promoter information ` +
-            `in ${channelId}.`
-          );
-        }
-
-      } finally {
-        promoterCommandLocks.delete(channelId);
-      }
-
-      return;
-    }
-
-    // ==================================================
-    // VOUCH TUTORIAL — MANAGE SERVER ONLY
-    // ==================================================
-
-    if (content === "!vouchtut") {
-      if (
-        !message.member.permissions.has(
-          PermissionsBitField.Flags.ManageGuild
-        )
-      ) {
-        await message.reply({
-          content:
-            "You need **Manage Server** permission " +
-            "to use this command.",
-          allowedMentions: {
-            repliedUser: false
-          }
-        });
-
-        return;
-      }
-
-      await sendVouchTutorial(message.guild);
-
-      await message.reply({
-        content:
-          "The vouch tutorial has been posted!",
-        allowedMentions: {
-          repliedUser: false
-        }
-      });
-
-      return;
-    }
-
-    // ==================================================
-    // RANKED ROLES — MANAGE SERVER ONLY
-    // ==================================================
-
-    if (content === "!ranked") {
-      if (
-        !message.member.permissions.has(
-          PermissionsBitField.Flags.ManageGuild
-        )
-      ) {
-        await message.reply({
-          content:
-            "You need **Manage Server** permission " +
-            "to use this command.",
-          allowedMentions: {
-            repliedUser: false
-          }
-        });
-
-        return;
-      }
-
-      await sendRankedRoles(message.guild);
-
-      await message.reply({
-        content:
-          "The ranked roles embed has been sent!",
-        allowedMentions: {
-          repliedUser: false
-        }
-      });
-
-      return;
-    }
-
-    // ==================================================
-    // ,r @user c AND ,r @user r
-    // TICKET SUPPORT ONLY
-    // ==================================================
-
-    if (/^,r(?:\s|$)/i.test(rawContent)) {
-      if (
-        !isTicketSupport(message.member)
-      ) {
-        await message.reply({
-          content:
-            "Only Ticket Support can use this command.",
-          allowedMentions: {
-            repliedUser: false
-          }
-        });
-
-        return;
-      }
-
-      const commandMatch = rawContent.match(
-        /^,r\s+<@!?(\d+)>\s+([cr])$/i
-      );
-
-      if (!commandMatch) {
-        await message.reply({
-          content:
-            "Usage: `,r @user c` or `,r @user r`",
-          allowedMentions: {
-            repliedUser: false
-          }
-        });
-
-        return;
-      }
-
-      const targetId = commandMatch[1];
-
-      const action =
-        commandMatch[2].toLowerCase();
-
-      const target =
-        await message.guild.members
-          .fetch(targetId)
-          .catch(() => null);
-
-      if (!target) {
-        await message.reply({
-          content:
-            "I couldn't find that member in this server.",
-          allowedMentions: {
-            repliedUser: false
-          }
-        });
-
-        return;
-      }
-
-      if (action === "c") {
         if (
-          target.roles.cache.has(
-            CHUPPYS_ROLE_ID
+          promoterCommandLocks.has(
+            channelId
+          )
+        ) {
+          console.log(
+            `[PROMOTER] Ignored simultaneous command ` +
+            `in channel ${channelId}.`
+          );
+
+          return;
+        }
+
+        promoterCommandLocks.add(
+          channelId
+        );
+
+        try {
+          const messages =
+            await message.channel.messages.fetch({
+              limit: 100
+            });
+
+          const matching =
+            messages.filter(msg =>
+              msg.author.id === client.user.id &&
+              msg.embeds.some(embed =>
+                embed.title ===
+                ".gg/chuppys promoter information"
+              )
+            );
+
+          const existing =
+            matching.first();
+
+          const payload = {
+            embeds: [
+              makePromoterEmbed()
+            ],
+            content: "",
+            components: [],
+            allowedMentions: {
+              parse: []
+            }
+          };
+
+          if (existing) {
+            await existing.edit(
+              payload
+            );
+
+            for (
+              const duplicate
+              of matching.values()
+            ) {
+              if (
+                duplicate.id !== existing.id
+              ) {
+                await duplicate.delete()
+                  .catch(error => {
+                    console.error(
+                      "[PROMOTER] Could not delete duplicate:",
+                      error
+                    );
+                  });
+              }
+            }
+
+            console.log(
+              `[PROMOTER] Updated promoter information ` +
+              `in ${channelId}.`
+            );
+
+          } else {
+            await message.channel.send(
+              payload
+            );
+
+            console.log(
+              `[PROMOTER] Created promoter information ` +
+              `in ${channelId}.`
+            );
+          }
+
+        } finally {
+          promoterCommandLocks.delete(
+            channelId
+          );
+        }
+
+        return;
+      }
+
+      // ==================================================
+      // VOUCH TUTORIAL — MANAGE SERVER ONLY
+      // ==================================================
+
+      if (content === "!vouchtut") {
+        if (
+          !message.member.permissions.has(
+            PermissionsBitField.Flags.ManageGuild
           )
         ) {
           await message.reply({
             content:
-              `${target.user.username} already has ` +
-              "the Chuppys role.",
-            allowedMentions: { parse: [] }
+              "You need **Manage Server** permission " +
+              "to use this command.",
+            allowedMentions: {
+              repliedUser: false
+            }
           });
 
           return;
         }
 
-        await target.roles.add(
-          CHUPPYS_ROLE_ID,
-          `Chuppys access granted by Ticket Support: ` +
-          message.author.tag
+        await sendVouchTutorial(
+          message.guild
         );
 
-        const embed = new EmbedBuilder()
-          .setDescription(
-            `Welcome to **.gg/chuppys**! ` +
-            `Please check out <#${ROLES_CHANNEL_ID}> ` +
-            `and <#${RULES_CHANNEL_ID}>. ` +
-            `Enjoy shopping at Chuppy’s Market ` +
-            CHUPPYS_WELCOME_EMOJI
-          )
-          .setColor("#FFFFFF")
-          .setFooter({
-            text: ".gg/chuppys"
-          });
-
-        await message.channel.send({
-          content: `${target}`,
-          embeds: [embed],
-          allowedMentions: {
-            users: [target.id]
-          }
-        });
-
-        return;
-      }
-
-      if (action === "r") {
-        const embed = new EmbedBuilder()
-          .setTitle("Reminder to Vouch!")
-          .setDescription(
-            "Thank you for shopping at **.gg/chuppys**! " +
-            `${CHUPPYS_WELCOME_EMOJI}\n\n` +
-            `Please check out <#${VOUCH_TUTORIAL_CHANNEL_ID}> ` +
-            "to learn how to leave a vouch using " +
-            "the **/vouch** command.\n\n" +
-            `And don't forget to stop by ` +
-            `<#${QUICK_VOUCH_CHANNEL_ID}> ` +
-            "for a quick vouch as well!\n\n" +
-            "Not vouching sellers within the 2 day " +
-            "grace period will result in you being " +
-            "black listed in this server."
-          )
-          .setColor("#FFFFFF")
-          .setFooter({
-            text: ".gg/chuppys"
-          });
-
-        await message.channel.send({
-          content: `${target}`,
-          embeds: [embed],
-          allowedMentions: {
-            users: [target.id]
-          }
-        });
-
-        return;
-      }
-    }
-
-    // ==================================================
-    // ,partner — PARTNERSHIP INSTRUCTIONS
-    // ==================================================
-
-    if (content === ",partner") {
-      if (
-        !isTicketSupport(message.member)
-      ) {
         await message.reply({
           content:
-            "Only Ticket Support can use this command.",
+            "The vouch tutorial has been posted!",
           allowedMentions: {
             repliedUser: false
           }
@@ -2746,84 +3377,35 @@ client.on(Events.MessageCreate, async message => {
         return;
       }
 
-      const partnerEmbed = new EmbedBuilder()
-        .setDescription(
-          "**.gg/chuppys partnership**\n\n" +
-          "Please make sure all questions from the " +
-          ".gg/chuppys ticket bot are answered !! " +
-          "If not please answer them now !!\n\n" +
-          "1. **How many vouches ? Please show us proof !**\n\n\n" +
-          "2. **How many server members ?**\n\n\n" +
-          "After these questions are answered, " +
-          "please copy and paste your server ad " +
-          "in this partnership ticket. Staff will " +
-          "post it shortly in <#1552387314049618041>.\n\n" +
-          `Go to <#${PARTNER_AD_CHANNEL_ID}> ` +
-          "to copy and paste Chuppys' ad. " +
-          "Once this is done, send a screenshot for proof.\n\n" +
-          "Thank you for partnering with **.gg/chuppys!** " +
-          CHUPPYS_WELCOME_EMOJI
-        )
-        .setColor("#FFFFFF")
-        .setFooter({
-          text: ".gg/chuppys"
-        });
+      // ==================================================
+      // RANKED ROLES — MANAGE SERVER ONLY
+      // ==================================================
 
-      const messages =
-        await message.channel.messages.fetch({
-          limit: 100
-        });
-
-      const matching = messages.filter(msg =>
-        msg.author.id === client.user.id &&
-        msg.embeds.some(embed =>
-          (embed.description || "").includes(
-            ".gg/chuppys partnership"
+      if (content === "!ranked") {
+        if (
+          !message.member.permissions.has(
+            PermissionsBitField.Flags.ManageGuild
           )
-        )
-      );
-
-      const existing = matching.first();
-
-      const payload = {
-        embeds: [partnerEmbed],
-        content: "",
-        components: [],
-        allowedMentions: { parse: [] }
-      };
-
-      if (existing) {
-        await existing.edit(payload);
-
-        for (
-          const duplicate
-          of matching.values()
         ) {
-          if (duplicate.id !== existing.id) {
-            await duplicate.delete().catch(
-              () => {}
-            );
-          }
+          await message.reply({
+            content:
+              "You need **Manage Server** permission " +
+              "to use this command.",
+            allowedMentions: {
+              repliedUser: false
+            }
+          });
+
+          return;
         }
 
-      } else {
-        await message.channel.send(payload);
-      }
+        await sendRankedRoles(
+          message.guild
+        );
 
-      return;
-    }
-
-    // ==================================================
-    // ,mod — MODERATOR RESPONSIBILITIES
-    // ==================================================
-
-    if (content === ",mod") {
-      if (
-        !isTicketSupport(message.member)
-      ) {
         await message.reply({
           content:
-            "Only Ticket Support can use this command.",
+            "The ranked roles embed has been sent!",
           allowedMentions: {
             repliedUser: false
           }
@@ -2832,178 +3414,536 @@ client.on(Events.MessageCreate, async message => {
         return;
       }
 
-      const messages =
-        await message.channel.messages.fetch({
-          limit: 100
-        });
+      // ==================================================
+      // ,r @user c AND ,r @user r
+      // TICKET SUPPORT ONLY
+      // ==================================================
 
-      const matching = messages.filter(msg =>
-        msg.author.id === client.user.id &&
-        msg.embeds.some(embed =>
-          embed.title ===
-          ".gg/chuppys moderator responsibilities"
+      if (
+        /^,r(?:\s|$)/i.test(
+          rawContent
         )
-      );
-
-      const existing = matching.first();
-
-      const payload = {
-        embeds: [makeModEmbed()],
-        content: "",
-        components: [],
-        allowedMentions: { parse: [] }
-      };
-
-      if (existing) {
-        await existing.edit(payload);
-
-        for (
-          const duplicate
-          of matching.values()
+      ) {
+        if (
+          !isTicketSupport(
+            message.member
+          )
         ) {
-          if (duplicate.id !== existing.id) {
-            await duplicate.delete().catch(error => {
-              console.error(
-                "[MOD] Could not delete duplicate:",
-                error
-              );
+          await message.reply({
+            content:
+              "Only Ticket Support can use this command.",
+            allowedMentions: {
+              repliedUser: false
+            }
+          });
+
+          return;
+        }
+
+        const commandMatch =
+          rawContent.match(
+            /^,r\s+<@!?(\d+)>\s+([cr])$/i
+          );
+
+        if (!commandMatch) {
+          await message.reply({
+            content:
+              "Usage: `,r @user c` or `,r @user r`",
+            allowedMentions: {
+              repliedUser: false
+            }
+          });
+
+          return;
+        }
+
+        const targetId =
+          commandMatch[1];
+
+        const action =
+          commandMatch[2].toLowerCase();
+
+        const target =
+          await message.guild.members
+            .fetch(targetId)
+            .catch(() => null);
+
+        if (!target) {
+          await message.reply({
+            content:
+              "I couldn't find that member in this server.",
+            allowedMentions: {
+              repliedUser: false
+            }
+          });
+
+          return;
+        }
+
+        if (action === "c") {
+          if (
+            target.roles.cache.has(
+              CHUPPYS_ROLE_ID
+            )
+          ) {
+            await message.reply({
+              content:
+                `${target.user.username} already has ` +
+                "the Chuppys role.",
+              allowedMentions: {
+                parse: []
+              }
             });
+
+            return;
           }
+
+          await target.roles.add(
+            CHUPPYS_ROLE_ID,
+            `Chuppys access granted by Ticket Support: ` +
+            message.author.tag
+          );
+
+          const embed =
+            new EmbedBuilder()
+              .setDescription(
+                `Welcome to **.gg/chuppys**! ` +
+                `Please check out <#${ROLES_CHANNEL_ID}> ` +
+                `and <#${RULES_CHANNEL_ID}>. ` +
+                `Enjoy shopping at Chuppy’s Market ` +
+                CHUPPYS_WELCOME_EMOJI
+              )
+              .setColor("#FFFFFF")
+              .setFooter({
+                text: ".gg/chuppys"
+              });
+
+          await message.channel.send({
+            content: `${target}`,
+            embeds: [embed],
+            allowedMentions: {
+              users: [target.id]
+            }
+          });
+
+          return;
         }
 
-        console.log(
-          `[MOD] Updated moderator responsibilities ` +
-          `in ${message.channel.id}.`
-        );
+        if (action === "r") {
+          const embed =
+            new EmbedBuilder()
+              .setTitle(
+                "Reminder to Vouch!"
+              )
+              .setDescription(
+                "Thank you for shopping at **.gg/chuppys**! " +
+                `${CHUPPYS_WELCOME_EMOJI}\n\n` +
+                `Please check out <#${VOUCH_TUTORIAL_CHANNEL_ID}> ` +
+                "to learn how to leave a vouch using " +
+                "the **/vouch** command.\n\n" +
+                `And don't forget to stop by ` +
+                `<#${QUICK_VOUCH_CHANNEL_ID}> ` +
+                "for a quick vouch as well!\n\n" +
+                "Not vouching sellers within the 2 day " +
+                "grace period will result in you being " +
+                "black listed in this server."
+              )
+              .setColor("#FFFFFF")
+              .setFooter({
+                text: ".gg/chuppys"
+              });
 
-      } else {
-        await message.channel.send(payload);
-
-        console.log(
-          `[MOD] Created moderator responsibilities ` +
-          `in ${message.channel.id}.`
-        );
-      }
-
-      return;
-    }
-
-    // ==================================================
-    // ,seller — SELLER APPLICATION
-    // ==================================================
-
-    if (content === ",seller") {
-      const channelId = message.channel.id;
-
-      if (
-        sellerCommandLocks.has(channelId)
-      ) {
-        console.log(
-          `[SELLER] Ignored simultaneous command ` +
-          `in channel ${channelId}.`
-        );
-        return;
-      }
-
-      sellerCommandLocks.add(channelId);
-
-      try {
-        const sellerEmbed = new EmbedBuilder()
-          .setDescription(
-            "**Interested in selling at .gg/chuppys**\n\n" +
-            "**Permanent fees**\n\n" +
-            "$10 - permanent fee with no personal commands\n\n" +
-            "$15 - permanent fee with personal commands\n\n" +
-            "Personal commands are ones we can create " +
-            "for you or insert your code that allows " +
-            "you to use your personal payment command, " +
-            "ps command, etc.\n\n" +
-            "Your limit is defined primarily based on " +
-            "how many personal vouches you have. " +
-            "If you have a server with multiple sellers, " +
-            "the vouches they received in your server " +
-            "do not increase your limit. However, after " +
-            "your limit is determined, every 2 vouches " +
-            "gained in .gg/chuppys increases your limit " +
-            "by $5.\n\n" +
-            "If you agree and understand all of this, " +
-            `please ping <@&${TICKET_SUPPORT_ROLE_ID}> ` +
-            "to assist you further. Thank you!"
-          )
-          .setColor("#FFFFFF")
-          .setFooter({
-            text: ".gg/chuppys"
+          await message.channel.send({
+            content: `${target}`,
+            embeds: [embed],
+            allowedMentions: {
+              users: [target.id]
+            }
           });
+
+          return;
+        }
+      }
+
+      // ==================================================
+      // ,partner — PARTNERSHIP INSTRUCTIONS
+      // ==================================================
+
+      if (content === ",partner") {
+        if (
+          !isTicketSupport(
+            message.member
+          )
+        ) {
+          await message.reply({
+            content:
+              "Only Ticket Support can use this command.",
+            allowedMentions: {
+              repliedUser: false
+            }
+          });
+
+          return;
+        }
+
+        const partnerEmbed =
+          new EmbedBuilder()
+            .setDescription(
+              "**.gg/chuppys partnership**\n\n" +
+              "Please make sure all questions from the " +
+              ".gg/chuppys ticket bot are answered !! " +
+              "If not please answer them now !!\n\n" +
+              "1. **How many vouches ? Please show us proof !**\n\n\n" +
+              "2. **How many server members ?**\n\n\n" +
+              "After these questions are answered, " +
+              "please copy and paste your server ad " +
+              "in this partnership ticket. Staff will " +
+              "post it shortly in <#1552387314049618041>.\n\n" +
+              `Go to <#${PARTNER_AD_CHANNEL_ID}> ` +
+              "to copy and paste Chuppys' ad. " +
+              "Once this is done, send a screenshot for proof.\n\n" +
+              "Thank you for partnering with **.gg/chuppys!** " +
+              CHUPPYS_WELCOME_EMOJI
+            )
+            .setColor("#FFFFFF")
+            .setFooter({
+              text: ".gg/chuppys"
+            });
 
         const messages =
           await message.channel.messages.fetch({
             limit: 100
           });
 
-        const matching = messages.filter(msg =>
-          msg.author.id === client.user.id &&
-          msg.embeds.some(embed =>
-            (embed.description || "").includes(
-              "Interested in selling at .gg/chuppys"
+        const matching =
+          messages.filter(msg =>
+            msg.author.id === client.user.id &&
+            msg.embeds.some(embed =>
+              (embed.description || "").includes(
+                ".gg/chuppys partnership"
+              )
             )
-          )
-        );
+          );
 
-        const existing = matching.first();
+        const existing =
+          matching.first();
 
         const payload = {
-          embeds: [sellerEmbed],
+          embeds: [partnerEmbed],
           content: "",
           components: [],
           allowedMentions: {
-            roles: [TICKET_SUPPORT_ROLE_ID]
+            parse: []
           }
         };
 
         if (existing) {
-          await existing.edit(payload);
+          await existing.edit(
+            payload
+          );
 
           for (
             const duplicate
             of matching.values()
           ) {
-            if (duplicate.id !== existing.id) {
-              await duplicate.delete().catch(error => {
-                console.error(
-                  "[SELLER] Could not delete duplicate:",
-                  error
-                );
-              });
+            if (
+              duplicate.id !== existing.id
+            ) {
+              await duplicate.delete()
+                .catch(() => {});
+            }
+          }
+
+        } else {
+          await message.channel.send(
+            payload
+          );
+        }
+
+        return;
+      }
+
+      // ==================================================
+      // ,mod — MODERATOR RESPONSIBILITIES
+      // ==================================================
+
+      if (content === ",mod") {
+        if (
+          !isTicketSupport(
+            message.member
+          )
+        ) {
+          await message.reply({
+            content:
+              "Only Ticket Support can use this command.",
+            allowedMentions: {
+              repliedUser: false
+            }
+          });
+
+          return;
+        }
+
+        const messages =
+          await message.channel.messages.fetch({
+            limit: 100
+          });
+
+        const matching =
+          messages.filter(msg =>
+            msg.author.id === client.user.id &&
+            msg.embeds.some(embed =>
+              embed.title ===
+              ".gg/chuppys moderator responsibilities"
+            )
+          );
+
+        const existing =
+          matching.first();
+
+        const payload = {
+          embeds: [
+            makeModEmbed()
+          ],
+          content: "",
+          components: [],
+          allowedMentions: {
+            parse: []
+          }
+        };
+
+        if (existing) {
+          await existing.edit(
+            payload
+          );
+
+          for (
+            const duplicate
+            of matching.values()
+          ) {
+            if (
+              duplicate.id !== existing.id
+            ) {
+              await duplicate.delete()
+                .catch(error => {
+                  console.error(
+                    "[MOD] Could not delete duplicate:",
+                    error
+                  );
+                });
             }
           }
 
           console.log(
-            `[SELLER] Updated existing seller embed ` +
-            `in ${channelId}.`
+            `[MOD] Updated moderator responsibilities ` +
+            `in ${message.channel.id}.`
           );
 
         } else {
-          await message.channel.send(payload);
+          await message.channel.send(
+            payload
+          );
 
           console.log(
-            `[SELLER] Created seller embed ` +
-            `in ${channelId}.`
+            `[MOD] Created moderator responsibilities ` +
+            `in ${message.channel.id}.`
           );
         }
 
-      } finally {
-        sellerCommandLocks.delete(channelId);
+        return;
       }
 
-      return;
-    }
+      // ==================================================
+      // ,seller — SELLER APPLICATION
+      // ==================================================
 
-    // ==================================================
-    // ROBUX CASHOUT
-    // ==================================================
+      if (content === ",seller") {
+        const channelId =
+          message.channel.id;
 
-    if (content === "!robuxcashout") {
+        if (
+          sellerCommandLocks.has(
+            channelId
+          )
+        ) {
+          console.log(
+            `[SELLER] Ignored simultaneous command ` +
+            `in channel ${channelId}.`
+          );
+
+          return;
+        }
+
+        sellerCommandLocks.add(
+          channelId
+        );
+
+        try {
+          const sellerEmbed =
+            new EmbedBuilder()
+              .setDescription(
+                "**Interested in selling at .gg/chuppys**\n\n" +
+                "**Permanent fees**\n\n" +
+                "$10 - permanent fee with no personal commands\n\n" +
+                "$15 - permanent fee with personal commands\n\n" +
+                "Personal commands are ones we can create " +
+                "for you or insert your code that allows " +
+                "you to use your personal payment command, " +
+                "ps command, etc.\n\n" +
+                "Your limit is defined primarily based on " +
+                "how many personal vouches you have. " +
+                "If you have a server with multiple sellers, " +
+                "the vouches they received in your server " +
+                "do not increase your limit. However, after " +
+                "your limit is determined, every 2 vouches " +
+                "gained in .gg/chuppys increases your limit " +
+                "by $5.\n\n" +
+                "If you agree and understand all of this, " +
+                `please ping <@&${TICKET_SUPPORT_ROLE_ID}> ` +
+                "to assist you further. Thank you!"
+              )
+              .setColor("#FFFFFF")
+              .setFooter({
+                text: ".gg/chuppys"
+              });
+
+          const messages =
+            await message.channel.messages.fetch({
+              limit: 100
+            });
+
+          const matching =
+            messages.filter(msg =>
+              msg.author.id === client.user.id &&
+              msg.embeds.some(embed =>
+                (embed.description || "").includes(
+                  "Interested in selling at .gg/chuppys"
+                )
+              )
+            );
+
+          const existing =
+            matching.first();
+
+          const payload = {
+            embeds: [sellerEmbed],
+            content: "",
+            components: [],
+            allowedMentions: {
+              roles: [
+                TICKET_SUPPORT_ROLE_ID
+              ]
+            }
+          };
+
+          if (existing) {
+            await existing.edit(
+              payload
+            );
+
+            for (
+              const duplicate
+              of matching.values()
+            ) {
+              if (
+                duplicate.id !== existing.id
+              ) {
+                await duplicate.delete()
+                  .catch(error => {
+                    console.error(
+                      "[SELLER] Could not delete duplicate:",
+                      error
+                    );
+                  });
+              }
+            }
+
+            console.log(
+              `[SELLER] Updated existing seller embed ` +
+              `in ${channelId}.`
+            );
+
+          } else {
+            await message.channel.send(
+              payload
+            );
+
+            console.log(
+              `[SELLER] Created seller embed ` +
+              `in ${channelId}.`
+            );
+          }
+
+        } finally {
+          sellerCommandLocks.delete(
+            channelId
+          );
+        }
+
+        return;
+      }
+
+      // ==================================================
+      // ROBUX CASHOUT
+      // ==================================================
+
+      if (content === "!robuxcashout") {
+        if (
+          !message.member.permissions.has(
+            PermissionsBitField.Flags.ManageGuild
+          )
+        ) {
+          await message.reply(
+            "You need **Manage Server** permission " +
+            "to use this command."
+          );
+
+          return;
+        }
+
+        const channel =
+          await client.channels.fetch(
+            ROBUX_CASHOUT_CHANNEL_ID
+          );
+
+        await sendRobuxCashoutEmbed(
+          channel
+        );
+
+        await message.reply(
+          "Robux Cash Out message sent " +
+          "or updated successfully!"
+        );
+
+        return;
+      }
+
+      // ==================================================
+      // PAYMENT — UPDATED
+      // ==================================================
+
+      if (content === ",pay") {
+        await sendPaymentEmbed(
+          message.channel
+        );
+
+        return;
+      }
+
+      // ==================================================
+      // ADMIN COMMANDS
+      // ==================================================
+
+      const adminCommands = [
+        "!nitro", ",nitro",
+        "!decor", ",decor",
+        "!boosties", ",boosties",
+        "!sellers", ",sellers",
+        "!staff", ",staff"
+      ];
+
       if (
+        adminCommands.includes(content) &&
         !message.member.permissions.has(
           PermissionsBitField.Flags.ManageGuild
         )
@@ -3012,274 +3952,252 @@ client.on(Events.MessageCreate, async message => {
           "You need **Manage Server** permission " +
           "to use this command."
         );
+
         return;
       }
-
-      const channel = await client.channels.fetch(
-        ROBUX_CASHOUT_CHANNEL_ID
-      );
-
-      await sendRobuxCashoutEmbed(channel);
-
-      await message.reply(
-        "Robux Cash Out message sent " +
-        "or updated successfully!"
-      );
-
-      return;
-    }
-
-    // ==================================================
-    // PAYMENT
-    // ==================================================
-
-    if (content === ",pay") {
-      await sendPaymentEmbed(
-        message.channel
-      );
-      return;
-    }
-
-    // ==================================================
-    // ADMIN COMMANDS
-    // ==================================================
-
-    const adminCommands = [
-      "!nitro", ",nitro",
-      "!decor", ",decor",
-      "!boosties", ",boosties",
-      "!sellers", ",sellers",
-      "!staff", ",staff"
-    ];
-
-    if (
-      adminCommands.includes(content) &&
-      !message.member.permissions.has(
-        PermissionsBitField.Flags.ManageGuild
-      )
-    ) {
-      await message.reply(
-        "You need **Manage Server** permission " +
-        "to use this command."
-      );
-      return;
-    }
-
-    if (
-      ["!nitro", ",nitro"].includes(content)
-    ) {
-      await sendNitroServices(
-        await client.channels.fetch(
-          NITRO_CHANNEL_ID
-        )
-      );
-
-      await message.reply(
-        "Nitro message updated successfully."
-      );
-
-      return;
-    }
-
-    if (
-      ["!decor", ",decor"].includes(content)
-    ) {
-      await sendDecorServices(
-        await client.channels.fetch(
-          DECOR_CHANNEL_ID
-        )
-      );
-
-      await message.reply(
-        "Decor message updated successfully."
-      );
-
-      return;
-    }
-
-    if (
-      ["!boosties", ",boosties"].includes(content)
-    ) {
-      await sendBoostiesServices(
-        await client.channels.fetch(
-          BOOSTIES_CHANNEL_ID
-        )
-      );
-
-      await message.reply(
-        "Boosties message updated successfully."
-      );
-
-      return;
-    }
-
-    if (
-      ["!sellers", ",sellers"].includes(content)
-    ) {
-      await sendEmbedToChannel(
-        message.guild,
-        SELLERS_CHANNEL_ID,
-        makeSellersEmbed(),
-        "Sellers"
-      );
-
-      await message.reply(
-        "The sellers message was sent!"
-      );
-
-      return;
-    }
-
-    if (
-      ["!staff", ",staff"].includes(content)
-    ) {
-      await sendEmbedToChannel(
-        message.guild,
-        STAFF_CHANNEL_ID,
-        makeStaffEmbed(),
-        "Staff"
-      );
-
-      await message.reply(
-        "The staff message was sent!"
-      );
-
-      return;
-    }
-
-    // ==================================================
-    // TEST WELCOME
-    // ==================================================
-
-    if (content === "!testwelcome") {
-      const channel = await client.channels.fetch(
-        WELCOME_CHANNEL_ID
-      );
 
       if (
-        !channel ||
-        !channel.isTextBased()
+        ["!nitro", ",nitro"].includes(
+          content
+        )
       ) {
-        await message.reply(
-          "Welcome channel not found."
+        await sendNitroServices(
+          await client.channels.fetch(
+            NITRO_CHANNEL_ID
+          )
         );
+
+        await message.reply(
+          "Nitro message updated successfully."
+        );
+
         return;
       }
-
-      const embed = new EmbedBuilder()
-        .setTitle(
-          `Welcome to .gg/chuppys ${AFK_RETURN_EMOJI}`
-        )
-        .setDescription(
-          `Welcome ${message.author}!\n\n` +
-          "We're happy to have you here. " +
-          "Make sure to read the rules " +
-          "and enjoy your time in the server!"
-        )
-        .setColor("#FFFFFF")
-        .setThumbnail(
-          message.author.displayAvatarURL()
-        )
-        .setImage(WELCOME_IMAGE)
-        .setFooter({
-          text: message.guild.name
-        });
-
-      await channel.send({
-        content: `${message.author}`,
-        embeds: [embed]
-      });
-
-      return;
-    }
-
-    // ==================================================
-    // TEST GOODBYE
-    // ==================================================
-
-    if (content === "!testgoodbye") {
-      const channel = await client.channels.fetch(
-        GOODBYE_CHANNEL_ID
-      );
 
       if (
-        !channel ||
-        !channel.isTextBased()
+        ["!decor", ",decor"].includes(
+          content
+        )
       ) {
-        await message.reply(
-          "Goodbye channel not found."
+        await sendDecorServices(
+          await client.channels.fetch(
+            DECOR_CHANNEL_ID
+          )
         );
+
+        await message.reply(
+          "Decor message updated successfully."
+        );
+
         return;
       }
 
-      const embed = new EmbedBuilder()
-        .setTitle(
-          `Goodbye ${AFK_GOING_EMOJI}`
+      if (
+        ["!boosties", ",boosties"].includes(
+          content
         )
-        .setDescription(
-          `**${message.author.username}** has left ` +
-          `**${message.guild.name}**.\n\n` +
-          "We hope to see you again!"
+      ) {
+        await sendBoostiesServices(
+          await client.channels.fetch(
+            BOOSTIES_CHANNEL_ID
+          )
+        );
+
+        await message.reply(
+          "Boosties message updated successfully."
+        );
+
+        return;
+      }
+
+      if (
+        ["!sellers", ",sellers"].includes(
+          content
         )
-        .setColor("#FFFFFF")
-        .setThumbnail(
-          message.author.displayAvatarURL()
+      ) {
+        await sendEmbedToChannel(
+          message.guild,
+          SELLERS_CHANNEL_ID,
+          makeSellersEmbed(),
+          "Sellers"
+        );
+
+        await message.reply(
+          "The sellers message was sent!"
+        );
+
+        return;
+      }
+
+      if (
+        ["!staff", ",staff"].includes(
+          content
         )
-        .setFooter({
-          text: message.guild.name
+      ) {
+        await sendEmbedToChannel(
+          message.guild,
+          STAFF_CHANNEL_ID,
+          makeStaffEmbed(),
+          "Staff"
+        );
+
+        await message.reply(
+          "The staff message was sent!"
+        );
+
+        return;
+      }
+
+      // ==================================================
+      // TEST WELCOME
+      // ==================================================
+
+      if (content === "!testwelcome") {
+        const channel =
+          await client.channels.fetch(
+            WELCOME_CHANNEL_ID
+          );
+
+        if (
+          !channel ||
+          !channel.isTextBased()
+        ) {
+          await message.reply(
+            "Welcome channel not found."
+          );
+
+          return;
+        }
+
+        const embed =
+          new EmbedBuilder()
+            .setTitle(
+              `Welcome to .gg/chuppys ${AFK_RETURN_EMOJI}`
+            )
+            .setDescription(
+              `Welcome ${message.author}!\n\n` +
+              "We're happy to have you here. " +
+              "Make sure to read the rules " +
+              "and enjoy your time in the server!"
+            )
+            .setColor("#FFFFFF")
+            .setThumbnail(
+              message.author.displayAvatarURL()
+            )
+            .setImage(
+              WELCOME_IMAGE
+            )
+            .setFooter({
+              text: message.guild.name
+            });
+
+        await channel.send({
+          content:
+            `${message.author}`,
+          embeds: [embed]
         });
 
-      await channel.send({
-        embeds: [embed]
-      });
+        return;
+      }
 
-      return;
+      // ==================================================
+      // TEST GOODBYE
+      // ==================================================
+
+      if (content === "!testgoodbye") {
+        const channel =
+          await client.channels.fetch(
+            GOODBYE_CHANNEL_ID
+          );
+
+        if (
+          !channel ||
+          !channel.isTextBased()
+        ) {
+          await message.reply(
+            "Goodbye channel not found."
+          );
+
+          return;
+        }
+
+        const embed =
+          new EmbedBuilder()
+            .setTitle(
+              `Goodbye ${AFK_GOING_EMOJI}`
+            )
+            .setDescription(
+              `**${message.author.username}** has left ` +
+              `**${message.guild.name}**.\n\n` +
+              "We hope to see you again!"
+            )
+            .setColor("#FFFFFF")
+            .setThumbnail(
+              message.author.displayAvatarURL()
+            )
+            .setFooter({
+              text: message.guild.name
+            });
+
+        await channel.send({
+          embeds: [embed]
+        });
+
+        return;
+      }
+
+    } catch (error) {
+      console.error(
+        "[MESSAGE COMMAND] Error:",
+        error
+      );
+
+      await message.reply(
+        `Something went wrong: ${error.message}`
+      ).catch(() => {});
     }
-
-  } catch (error) {
-    console.error(
-      "[MESSAGE COMMAND] Error:",
-      error
-    );
-
-    await message.reply(
-      `Something went wrong: ${error.message}`
-    ).catch(() => {});
   }
-});
+);
 
 // ==================================================
 // INVITE BOT REACTION
 // ==================================================
 
-client.on(Events.MessageCreate, async message => {
-  if (!message.guild) return;
+client.on(
+  Events.MessageCreate,
+  async message => {
+    if (!message.guild) {
+      return;
+    }
 
-  if (
-    message.channel.id !== INVITE_CHANNEL_ID
-  ) {
-    return;
+    if (
+      message.channel.id !==
+      INVITE_CHANNEL_ID
+    ) {
+      return;
+    }
+
+    if (
+      message.author.id !==
+      INVITE_BOT_ID
+    ) {
+      return;
+    }
+
+    try {
+      await message.react(
+        INVITE_REACTION_EMOJI
+      );
+
+    } catch (error) {
+      console.error(
+        "[INVITE REACTION] Could not react " +
+        "to invite message:",
+        error
+      );
+    }
   }
-
-  if (
-    message.author.id !== INVITE_BOT_ID
-  ) {
-    return;
-  }
-
-  try {
-    await message.react(
-      INVITE_REACTION_EMOJI
-    );
-
-  } catch (error) {
-    console.error(
-      "[INVITE REACTION] Could not react " +
-      "to invite message:",
-      error
-    );
-  }
-});
+);
 
 // ==================================================
 // ERROR HANDLING
@@ -3309,3 +4227,7 @@ if (!TOKEN) {
     );
   });
 }
+
+// ==================================================
+// END OF CHUPPYS INDEX.JS
+// ==================================================
