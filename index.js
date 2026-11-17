@@ -2707,7 +2707,7 @@ async function sendDecorServices(channel) {
       "$21.99 • **$15.00**\n" +
       "$22.99 • **$16.00**\n\n" +
       "All legally purchased and will be sent the same day!\n\n" +
-      `${PAYMENT_METHODS_TEXT}\n\n**.gg/chuppys**"
+      `$DIL0\n\n**.gg/chuppys**`
     )
     .setColor("#FFFFFF");
 
