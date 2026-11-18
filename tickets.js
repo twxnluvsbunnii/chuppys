@@ -1,3 +1,4 @@
+
 "use strict";
 
 // ============================================================
@@ -7,14 +8,21 @@
 //
 // FIXED:
 //
+// - Storage messages send ONLY embeds
+// - No visible metadata JSON above embeds
+// - V3 metadata recoverable from embed URLs
+// - Old V3 and legacy metadata still readable
+// - Existing storage messages migrated to embed-only
+// - Global counter uses an embed-only message
+// - Global numbering preserved across restarts
 // - No full-server member fetching when claiming
 // - No Gateway opcode 8 member-list requests
 // - Sellers can claim Purchase and Cash Out tickets
-// - Claim button and ,claim use the same handler
+// - Claim button and ,claim share the same handler
 // - Claimed trading tickets hide other sellers
-// - Exact claiming member keeps access
-// - Owner and Ticket Support keep access
-// - Ticket creator keeps access
+// - Exact claiming member retains access
+// - Owner and Ticket Support retain access
+// - Ticket creator retains access
 // - Forceclaim updates the claiming member
 // - Existing ticket permissions can be repaired
 //
@@ -48,6 +56,11 @@
 // Duplicate ticket prevention
 //
 // IMPORTANT:
+//
+// Metadata is encoded inside the storage embed's
+// title URL instead of visible message content.
+//
+// Keep the private data channel restricted.
 //
 // Discord administrators and the server owner
 // can bypass channel permission overwrites.
@@ -193,6 +206,25 @@ const COUNTER_PREFIX =
 
 const OLD_COUNTER_PREFIX =
   "CHUPPYS_TICKET_COUNTERS_V1:";
+
+// ============================================================
+// EMBED-ONLY STORAGE IDENTIFIERS
+// ============================================================
+//
+// These keys hold metadata inside embed URLs.
+//
+// They do not appear as message content.
+//
+// Existing prefix constants remain unchanged
+// so legacy records can still be recovered.
+//
+// ============================================================
+
+const EMBED_STATE_KEY =
+  "chuppys_state_v3";
+
+const EMBED_COUNTER_KEY =
+  "chuppys_counter_v1";
 
 // ============================================================
 // COMPONENT IDS
@@ -536,6 +568,118 @@ async function textChannel(
   }
 
   return channel;
+}
+
+// ============================================================
+// EMBED-ONLY METADATA ENCODING
+// ============================================================
+//
+// IMPORTANT:
+//
+// Discord does not provide invisible custom
+// fields on normal message embeds.
+//
+// To retain restart-safe metadata without
+// placing JSON above the embed, we encode
+// the state into the embed title URL.
+//
+// The visible message contains only an embed.
+//
+// The title links to the Discord ticket
+// channel with an encoded state parameter.
+//
+// The metadata is still recoverable by the
+// bot after a full restart.
+//
+// The data is encoded, NOT encrypted.
+// Keep the data channel private.
+//
+// ============================================================
+
+function encodeStateMetadata(state) {
+  return Buffer.from(
+    JSON.stringify(state),
+    "utf8"
+  ).toString("base64url");
+}
+
+function decodeStateMetadata(value) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const json = Buffer.from(
+      value,
+      "base64url"
+    ).toString("utf8");
+
+    return normalizeState(
+      JSON.parse(json)
+    );
+  } catch {
+    return null;
+  }
+}
+
+function metadataUrl(
+  guildId,
+  state
+) {
+  const base =
+    `https://discord.com/channels/` +
+    `${guildId}/${state.channelId}`;
+
+  const encoded =
+    encodeStateMetadata(state);
+
+  const url =
+    `${base}?${EMBED_STATE_KEY}=${encoded}`;
+
+  if (url.length > 2048) {
+    throw new Error(
+      "Ticket metadata URL exceeds Discord's embed URL limit."
+    );
+  }
+
+  return url;
+}
+
+function counterMetadataUrl(
+  guildId,
+  number
+) {
+  return (
+    `https://discord.com/channels/` +
+    `${guildId}/${IDS.data}` +
+    `?${EMBED_COUNTER_KEY}=${number}`
+  );
+}
+
+function readEmbedParameter(
+  embed,
+  key
+) {
+  const value = embed?.url;
+
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const url = new URL(value);
+
+    if (
+      url.hostname !== "discord.com" &&
+      url.hostname !== "www.discord.com"
+    ) {
+      return null;
+    }
+
+    return url.searchParams.get(key);
+  } catch {
+    return null;
+  }
 }
 
 // ============================================================
@@ -941,7 +1085,20 @@ function normalizeState(data) {
 }
 
 // ============================================================
-// PARSE V3 AND LEGACY METADATA
+// PARSE V3, EMBED AND LEGACY METADATA
+// ============================================================
+//
+// Supports BOTH storage formats:
+//
+// OLD:
+// Visible STATE_PREFIX plus JSON content.
+//
+// NEW:
+// Empty message content and encoded embed.
+//
+// This allows old tickets to survive
+// migration without resetting numbering.
+//
 // ============================================================
 
 function parseState(message) {
@@ -955,26 +1112,155 @@ function parseState(message) {
     content.startsWith(value)
   );
 
-  if (!prefix) {
-    return null;
+  if (prefix) {
+    try {
+      const parsed = normalizeState(
+        JSON.parse(
+          content.slice(prefix.length)
+        )
+      );
+
+      if (parsed) {
+        return parsed;
+      }
+    } catch {
+      // Try the embed format below.
+    }
   }
 
-  try {
-    return normalizeState(
-      JSON.parse(
-        content.slice(prefix.length)
+  for (
+    const embed
+    of message?.embeds || []
+  ) {
+    const encoded =
+      readEmbedParameter(
+        embed,
+        EMBED_STATE_KEY
+      );
+
+    if (!encoded) {
+      continue;
+    }
+
+    const state =
+      decodeStateMetadata(encoded);
+
+    if (state) {
+      return state;
+    }
+  }
+
+  return null;
+}
+
+// ============================================================
+// PARSE GLOBAL COUNTER
+// ============================================================
+//
+// Supports:
+//
+// 1. Original counter content prefix
+// 2. New embed-only counter URL
+// 3. Existing readable counter embed
+//
+// ============================================================
+
+function parseCounter(message) {
+  const content =
+    message?.content || "";
+
+  if (
+    content.startsWith(
+      COUNTER_PREFIX
+    )
+  ) {
+    const number = Number(
+      content.slice(
+        COUNTER_PREFIX.length
       )
     );
-  } catch {
-    return null;
+
+    if (
+      Number.isSafeInteger(number) &&
+      number >= 0
+    ) {
+      return number;
+    }
   }
+
+  for (
+    const embed
+    of message?.embeds || []
+  ) {
+    const encoded =
+      readEmbedParameter(
+        embed,
+        EMBED_COUNTER_KEY
+      );
+
+    if (encoded !== null) {
+      const number =
+        Number(encoded);
+
+      if (
+        Number.isSafeInteger(number) &&
+        number >= 0
+      ) {
+        return number;
+      }
+    }
+
+    if (
+      embed.title ===
+      "Chuppys Global Ticket Counter"
+    ) {
+      const description =
+        String(
+          embed.description || ""
+        );
+
+      const match =
+        description.match(
+          /Total Tickets Created:\*\*\s*`?(\d+)`?/i
+        );
+
+      if (match) {
+        const number =
+          Number(match[1]);
+
+        if (
+          Number.isSafeInteger(number) &&
+          number >= 0
+        ) {
+          return number;
+        }
+      }
+    }
+  }
+
+  return null;
 }
 
 // ============================================================
 // PRIVATE STORAGE EMBED
 // ============================================================
+//
+// ONLY AN EMBED IS SENT.
+//
+// NO:
+// CHUPPYS_PRIVATE_TICKET_METADATA_V3:
+// {"channelId": ... }
+//
+// The embed URL contains encoded metadata.
+//
+// Visible embed information stays readable.
+//
+// ============================================================
 
-function stateEmbed(state) {
+function stateEmbed(
+  state,
+  guildId
+) {
   const typeLabel =
     TYPES[state.type]?.label ||
     state.type;
@@ -989,6 +1275,12 @@ function stateEmbed(state) {
       .setColor(WHITE)
       .setTitle(
         `Ticket #${numberText(state.number)} • ${typeLabel}`
+      )
+      .setURL(
+        metadataUrl(
+          guildId,
+          state
+        )
       )
       .setDescription(
         `**Status:** ${status}\n\n` +
@@ -1065,7 +1357,19 @@ function stateEmbed(state) {
   return embed;
 }
 
-function counterEmbed(number) {
+// ============================================================
+// GLOBAL COUNTER EMBED
+// ============================================================
+//
+// Global numbering is stored inside
+// the embed URL, not message content.
+//
+// ============================================================
+
+function counterEmbed(
+  number,
+  guildId
+) {
   return whiteEmbed(
     "Chuppys Global Ticket Counter",
 
@@ -1075,7 +1379,62 @@ function counterEmbed(number) {
     `\`${numberText(number + 1)}\`\n\n` +
     "This counter preserves ticket numbering " +
     "across bot restarts."
+  ).setURL(
+    counterMetadataUrl(
+      guildId,
+      number
+    )
   );
+}
+
+// ============================================================
+// EMBED-ONLY STORAGE PAYLOADS
+// ============================================================
+//
+// These functions guarantee that both
+// new messages and edited old messages
+// contain no visible text above embeds.
+//
+// ============================================================
+
+function storagePayload(
+  state,
+  guildId
+) {
+  return {
+    content: "",
+
+    embeds: [
+      stateEmbed(
+        state,
+        guildId
+      )
+    ],
+
+    allowedMentions: {
+      parse: []
+    }
+  };
+}
+
+function counterPayload(
+  number,
+  guildId
+) {
+  return {
+    content: "",
+
+    embeds: [
+      counterEmbed(
+        number,
+        guildId
+      )
+    ],
+
+    allowedMentions: {
+      parse: []
+    }
+  };
 }
 
 // ============================================================
@@ -1122,6 +1481,24 @@ async function scan(
 // ============================================================
 // SAVE V3 STATE
 // ============================================================
+//
+// CHANGED:
+//
+// Previously:
+//
+// content: STATE_PREFIX + JSON.stringify(...)
+//
+// NOW:
+//
+// content: ""
+// embeds: [stateEmbed(...)]
+//
+// The full metadata is retained inside
+// the embed URL.
+//
+// Existing messages are edited in place.
+//
+// ============================================================
 
 async function saveState(channel, entry) {
   const storage =
@@ -1131,21 +1508,11 @@ async function saveState(channel, entry) {
       "Ticket data"
     );
 
-  const content =
-    STATE_PREFIX +
-    JSON.stringify(entry.state);
-
-  const payload = {
-    content,
-
-    embeds: [
-      stateEmbed(entry.state)
-    ],
-
-    allowedMentions: {
-      parse: []
-    }
-  };
+  const payload =
+    storagePayload(
+      entry.state,
+      channel.guild.id
+    );
 
   let message = null;
 
@@ -1174,13 +1541,30 @@ async function saveState(channel, entry) {
       message.id;
   }
 
-  tickets.set(channel.id, entry);
+  entry.needsMigration = false;
+
+  tickets.set(
+    channel.id,
+    entry
+  );
 
   return message;
 }
 
 // ============================================================
 // INITIALIZE DATA
+// ============================================================
+//
+// Reads old and new storage messages.
+//
+// Preserves previous ticket numbers.
+//
+// Converts old visible metadata messages
+// to clean embed-only messages.
+//
+// Also converts the old counter message
+// without resetting global numbering.
+//
 // ============================================================
 
 async function init(guild) {
@@ -1222,7 +1606,8 @@ async function init(guild) {
         return;
       }
 
-      const state = parseState(message);
+      const state =
+        parseState(message);
 
       if (state) {
         highest = Math.max(
@@ -1231,7 +1616,9 @@ async function init(guild) {
         );
 
         const previous =
-          tickets.get(state.channelId);
+          tickets.get(
+            state.channelId
+          );
 
         if (
           !previous ||
@@ -1250,38 +1637,31 @@ async function init(guild) {
                   ? message.id
                   : null,
 
-              recovered: false
+              recovered: false,
+
+              needsMigration:
+                inData &&
+                Boolean(message.content)
             }
           );
         }
       }
 
-      if (
-        message.content.startsWith(
-          COUNTER_PREFIX
-        )
-      ) {
-        const number = Number(
-          message.content.slice(
-            COUNTER_PREFIX.length
-          )
+      const counter =
+        parseCounter(message);
+
+      if (counter !== null) {
+        highest = Math.max(
+          highest,
+          counter
         );
 
         if (
-          Number.isSafeInteger(number) &&
-          number >= 0
+          inData &&
+          !counterMessage
         ) {
-          highest = Math.max(
-            highest,
-            number
-          );
-
-          if (
-            inData &&
-            !counterMessage
-          ) {
-            counterMessage = message;
-          }
+          counterMessage =
+            message;
         }
       }
 
@@ -1317,19 +1697,37 @@ async function init(guild) {
       }
     }
 
+    // ========================================================
+    // LOAD PRIVATE STORAGE
+    // ========================================================
+
     await scan(
       data,
       message =>
-        processMessage(message, true)
+        processMessage(
+          message,
+          true
+        )
     );
+
+    // ========================================================
+    // LOAD LEGACY LOG METADATA
+    // ========================================================
 
     if (logs.id !== data.id) {
       await scan(
         logs,
         message =>
-          processMessage(message, false)
+          processMessage(
+            message,
+            false
+          )
       );
     }
+
+    // ========================================================
+    // RESTORE NUMBER FROM CHANNEL NAMES
+    // ========================================================
 
     await guild.channels.fetch();
 
@@ -1340,7 +1738,9 @@ async function init(guild) {
       guild.channels.cache.values()
     ) {
       const parsed =
-        parseTicketName(channel.name);
+        parseTicketName(
+          channel.name
+        );
 
       if (parsed) {
         highest = Math.max(
@@ -1350,47 +1750,59 @@ async function init(guild) {
       }
     }
 
-    globalCounter = highest;
+    globalCounter =
+      highest;
+
+    // ========================================================
+    // MIGRATE GLOBAL COUNTER TO EMBED-ONLY
+    // ========================================================
 
     if (counterMessage) {
       counterMessageId =
         counterMessage.id;
 
-      await counterMessage.edit({
-        content:
-          COUNTER_PREFIX + highest,
-
-        embeds: [
-          counterEmbed(highest)
-        ],
-
-        allowedMentions: {
-          parse: []
-        }
-      });
+      await counterMessage.edit(
+        counterPayload(
+          highest,
+          guild.id
+        )
+      );
     } else {
       const message =
-        await data.send({
-          content:
-            COUNTER_PREFIX + highest,
+        await data.send(
+          counterPayload(
+            highest,
+            guild.id
+          )
+        );
 
-          embeds: [
-            counterEmbed(highest)
-          ],
-
-          allowedMentions: {
-            parse: []
-          }
-        });
-
-      counterMessageId = message.id;
+      counterMessageId =
+        message.id;
     }
+
+    // ========================================================
+    // MIGRATE EXISTING STORAGE RECORDS
+    // ========================================================
+    //
+    // Existing records with visible JSON
+    // are updated to embed-only.
+    //
+    // The same storage message ID is used.
+    //
+    // Ticket numbers and metadata remain.
+    //
+    // ========================================================
+
+    let migrated = 0;
 
     for (
       const [id, entry]
       of tickets
     ) {
-      if (entry.storageMessageId) {
+      if (
+        entry.storageMessageId &&
+        !entry.needsMigration
+      ) {
         continue;
       }
 
@@ -1403,10 +1815,49 @@ async function init(guild) {
         channel?.type ===
         ChannelType.GuildText
       ) {
-        await saveState(
-          channel,
-          entry
-        );
+        try {
+          await saveState(
+            channel,
+            entry
+          );
+
+          migrated++;
+        } catch (error) {
+          console.error(
+            `[TICKETS] Storage migration failed for ${id}:`,
+            error
+          );
+        }
+      } else if (
+        entry.storageMessageId &&
+        entry.needsMigration
+      ) {
+        // Preserve records for deleted
+        // channels without recreating them.
+
+        try {
+          const oldMessage =
+            await data.messages.fetch(
+              entry.storageMessageId
+            );
+
+          await oldMessage.edit(
+            storagePayload(
+              entry.state,
+              guild.id
+            )
+          );
+
+          entry.needsMigration =
+            false;
+
+          migrated++;
+        } catch (error) {
+          console.error(
+            `[TICKETS] Archived storage migration failed for ${id}:`,
+            error
+          );
+        }
       }
     }
 
@@ -1419,6 +1870,14 @@ async function init(guild) {
     console.log(
       `[TICKETS] Global counter: ${globalCounter}`
     );
+
+    console.log(
+      `[TICKETS] ${migrated} storage records migrated or restored.`
+    );
+
+    console.log(
+      "[TICKETS] Embed-only storage enabled."
+    );
   })();
 
   try {
@@ -1430,6 +1889,13 @@ async function init(guild) {
 
 // ============================================================
 // GLOBAL COUNTER
+// ============================================================
+//
+// Stores the counter in an embed-only
+// Discord message.
+//
+// Previous numbering is preserved.
+//
 // ============================================================
 
 async function nextNumber(guild) {
@@ -1451,34 +1917,22 @@ async function nextNumber(guild) {
 
   if (!message) {
     message =
-      await storage.send({
-        content:
-          COUNTER_PREFIX + globalCounter,
+      await storage.send(
+        counterPayload(
+          globalCounter,
+          guild.id
+        )
+      );
 
-        embeds: [
-          counterEmbed(globalCounter)
-        ],
-
-        allowedMentions: {
-          parse: []
-        }
-      });
-
-    counterMessageId = message.id;
+    counterMessageId =
+      message.id;
   }
 
   const stored =
-    message.content.startsWith(
-      COUNTER_PREFIX
-    )
-      ? Number(
-          message.content.slice(
-            COUNTER_PREFIX.length
-          )
-        )
-      : 0;
+    parseCounter(message);
 
   if (
+    stored !== null &&
     Number.isSafeInteger(stored) &&
     stored >= 0
   ) {
@@ -1490,18 +1944,12 @@ async function nextNumber(guild) {
 
   globalCounter++;
 
-  await message.edit({
-    content:
-      COUNTER_PREFIX + globalCounter,
-
-    embeds: [
-      counterEmbed(globalCounter)
-    ],
-
-    allowedMentions: {
-      parse: []
-    }
-  });
+  await message.edit(
+    counterPayload(
+      globalCounter,
+      guild.id
+    )
+  );
 
   return globalCounter;
 }
@@ -2021,9 +2469,6 @@ async function ensureVerificationCategory(
     }
 
     if (existing) {
-      // Keep existing private category
-      // synchronized with intended roles.
-
       await existing.permissionOverwrites.set(
         overwrites,
 
@@ -2149,8 +2594,6 @@ async function category(guild, type) {
 // ============================================================
 // FIXED TICKET PERMISSIONS
 // ============================================================
-//
-// THE MOST IMPORTANT FIX IN THIS FILE.
 //
 // NO:
 //
@@ -2355,21 +2798,6 @@ async function permissions(guild, state) {
   // ==========================================================
   // SELLER ACCESS AFTER CLAIM
   // ==========================================================
-  //
-  // Deny the Seller role.
-  //
-  // This hides the ticket from
-  // other sellers.
-  //
-  // The claiming seller is added below
-  // using an individual member allow.
-  //
-  // Owners and Ticket Support with
-  // their authorized roles retain access.
-  //
-  // No Guild Members request is needed.
-  //
-  // ==========================================================
 
   if (claimedTrading) {
     if (
@@ -2433,17 +2861,8 @@ async function permissions(guild, state) {
 // FIXED CLAIM PRIVACY CHECK
 // ============================================================
 //
-// OLD CODE:
-//
-// Downloaded every seller in the server.
-//
-// NEW CODE:
-//
-// Checks only channel overwrites,
-// the claiming member, and the creator.
-//
-// This completely removes the full-server
-// Guild Members request.
+// Checks channel overwrites without
+// downloading the full member list.
 //
 // ============================================================
 
@@ -2731,17 +3150,6 @@ async function applyPermissions(
       channel.guild,
       state
     );
-
-  // ==========================================================
-  // REPLACE EXISTING OVERWRITES
-  // ==========================================================
-  //
-  // This removes old individual seller
-  // overwrites from the previous system.
-  //
-  // No seller-member lookup is needed.
-  //
-  // ==========================================================
 
   await channel.permissionOverwrites.set(
     overwrites,
@@ -3059,9 +3467,6 @@ async function syncExistingTickets(guild) {
       await queuedTicket(
         channel.id,
         async () => {
-          // Repair the old claim permission
-          // overwrites without fetching sellers.
-
           await applyPermissions(
             channel,
             entry.state
@@ -3610,6 +4015,8 @@ async function createTicket(
       recovered: false
     };
 
+    // Store as a clean embed only.
+
     await saveState(
       channel,
       entry
@@ -3730,6 +4137,10 @@ async function createTicket(
 // ============================================================
 // OPEN VERIFICATION TICKET
 // ============================================================
+//
+// PRESERVED IN ORIGINAL LOCATION.
+//
+// ============================================================
 
 async function openVerificationTicket(
   interaction
@@ -3836,9 +4247,6 @@ async function claim(
   entry,
   force = false
 ) {
-  // Only fetch the member claiming.
-  // Never fetch the whole guild.
-
   const member =
     await getMember(context);
 
@@ -3911,18 +4319,7 @@ async function claim(
     member.id;
 
   // ==========================================================
-  // APPLY NEW CLAIM PERMISSIONS
-  // ==========================================================
-  //
-  // This no longer causes opcode 8.
-  //
-  // No full guild member list is requested.
-  //
-  // Seller role denied.
-  // Claimer gets member allow.
-  // Buyer keeps member allow.
-  // Owner and Support keep role allow.
-  //
+  // APPLY CLAIM PERMISSIONS
   // ==========================================================
 
   try {
@@ -3930,6 +4327,9 @@ async function claim(
       channel,
       state
     );
+
+    // Updates storage embed only.
+    // No JSON text above the embed.
 
     await saveState(
       channel,
@@ -5075,7 +5475,23 @@ function setupTickets(client) {
       );
 
       console.log(
-        "[TICKETS] Readable storage embeds enabled."
+        "[TICKETS] Legacy storage recovery enabled."
+      );
+
+      console.log(
+        "[TICKETS] Embed-only storage enabled."
+      );
+
+      console.log(
+        "[TICKETS] Raw JSON storage text disabled."
+      );
+
+      console.log(
+        "[TICKETS] Existing storage migration enabled."
+      );
+
+      console.log(
+        "[TICKETS] Embed-only global counter enabled."
       );
 
       console.log(
@@ -5315,6 +5731,14 @@ function setupTickets(client) {
 
   console.log(
     "[VERIFY] Private verification permissions installed."
+  );
+
+  console.log(
+    "[TICKETS] Storage messages are EMBED-ONLY."
+  );
+
+  console.log(
+    "[TICKETS] No visible metadata text above storage embeds."
   );
 }
 
