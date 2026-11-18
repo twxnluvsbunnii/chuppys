@@ -10,41 +10,80 @@
 // transactions.js
 // tickets.js
 //
-// TICKETS HANDLED BY tickets.js:
+// TICKET HANDLING:
 // /ticketpanel
 // ,claim
 // ,forceclaim
 // ,close
 // ,reopen
 // ,delete
-// Ticket buttons
 // Verification ticket button
 //
-// INDEX FEATURES:
-// Self roles, normal verification, client role,
-// questions, stock requests, welcome/goodbye,
-// AFK, payments, service embeds, vouch counters,
-// tutorials, ranked roles and invite reactions.
+// All ticket handling remains in tickets.js.
 //
-// PAYMENT METHODS:
-// Cash App, PayPal, Venmo, Chime,
-// Apple Pay, Zelle and optional extra methods.
+// NEW BLACKLIST SYSTEM:
 //
-// PAYMENT DUPLICATE FIX:
-// - Search all accessible channel history.
-// - Keep the newest payment embed.
-// - Update it with all payment methods.
-// - Delete older duplicate payment embeds.
-// - Prevent concurrent ,pay updates in one channel.
+// ,r @user b reason
+// - Owner / Admin / Mod only
+// - Requires a blacklist reason
+// - Removes all removable member roles
+// - Assigns Blacklisted role
+// - Logs the blacklist with a white embed
+// - Attempts to DM the member
+// - Prevents normal verification
+// - Prevents client and self-role claiming
+//
+// ,appealpanel
+// ,unblacklistpanel
+// - Posts or updates unblacklist appeal panel
+// - Request Unblacklist Ticket button
+// - Ticket creation belongs to tickets.js
+//
+// PRESERVED:
+//
+// /help
+// /question
+// /request
+// ,roles
+// ,pings
+// ,age
+// ,pronouns
+// ,client
+// ,promoter
+// ,seller
+// ,partner
+// ,mod
+// ,r @user c
+// ,r @user r
+// ,afk
+// ,pay
+// ,nitro / !nitro
+// ,decor / !decor
+// ,boosties / !boosties
+// ,sellers / !sellers
+// ,staff / !staff
+// !vouchtut
+// !ranked
+// !robuxcashout
+// !testwelcome
+// !testgoodbye
+//
+// Self-role dropdowns
+// Verification
+// Welcome and goodbye embeds
+// Vouch counters and reactions
+// Invite reactions
+// Payment duplicate prevention
 //
 // IMPORTANT:
-// - Run only one bot instance.
-// - Enable Guild Members intent.
-// - Enable Message Content intent.
-// - Keep DISCORD_BOT_TOKEN in Render.
-// - Keep DISCORD_GUILD_ID in Render.
-// - tickets.js owns verification tickets.
+// Run one Render bot instance.
+// Enable Guild Members and Message Content intents.
+// Keep DISCORD_BOT_TOKEN and DISCORD_GUILD_ID in Render.
 //
+// ============================================================
+
+// ============================================================
+// IMPORTS
 // ============================================================
 
 const http = require("http");
@@ -93,39 +132,71 @@ const TOKEN = process.env.DISCORD_BOT_TOKEN;
 const GUILD_ID = process.env.DISCORD_GUILD_ID;
 
 const EPHEMERAL = MessageFlags.Ephemeral;
+
 const BRAND = ".gg/chuppys";
+
 const WHITE = 0xffffff;
 
 // ============================================================
-// CONFIGURATION
+// CHANNEL CONFIGURATION
 // ============================================================
 
-const WELCOME_CHANNEL_ID =
-  "1530755165412524042";
+const WELCOME_CHANNEL_ID = "1530755165412524042";
 
-const GOODBYE_CHANNEL_ID =
-  "1530761366489530480";
+const GOODBYE_CHANNEL_ID = "1530761366489530480";
 
-const NITRO_CHANNEL_ID =
-  "1555760937557041273";
+const NITRO_CHANNEL_ID = "1555760937557041273";
 
-const DECOR_CHANNEL_ID =
-  "1555769588229345280";
+const DECOR_CHANNEL_ID = "1555769588229345280";
 
-const BOOSTIES_CHANNEL_ID =
-  "1555769708928831489";
+const BOOSTIES_CHANNEL_ID = "1555769708928831489";
 
-const SELLERS_CHANNEL_ID =
-  "1551713598181605496";
+const SELLERS_CHANNEL_ID = "1551713598181605496";
 
-const STAFF_CHANNEL_ID =
-  "1561013244905132122";
+const STAFF_CHANNEL_ID = "1561013244905132122";
 
 const ROBUX_CASHOUT_CHANNEL_ID =
   "1552385740405473513";
 
 const ROBUX_CASHOUT_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1561094713153429746.png";
+
+// ============================================================
+// BLACKLIST CONFIGURATION
+// ============================================================
+
+const BLACKLIST_LOG_CHANNEL_ID =
+  "1572620097267437743";
+
+const BLACKLIST_ROLE_NAME =
+  "Blacklisted";
+
+// Optional existing role ID in Render.
+// If omitted, the bot searches for a role named
+// Blacklisted and creates it if not found.
+
+const BLACKLIST_ROLE_ID =
+  process.env.BLACKLIST_ROLE_ID || "";
+
+const OWNER_ROLE_ID =
+  "1530988662970650865";
+
+const ADMIN_ROLE_ID =
+  "1531800870444994641";
+
+const MOD_ROLE_ID =
+  "1531800784700706887";
+
+// This button will be owned by tickets.js.
+
+const UNBLACKLIST_BUTTON_ID =
+  "chuppys_unblacklist_request";
+
+const UNBLACKLIST_PANEL_TITLE =
+  "Request to Be Unblacklisted";
+
+const UNBLACKLIST_THUMBNAIL_URL =
+  "https://cdn.discordapp.com/emojis/1561103471325745242.png";
 
 // ============================================================
 // STOCK REQUEST
@@ -529,15 +600,10 @@ const WELCOME_IMAGE =
 // PAYMENTS
 // ============================================================
 
-// CASH APP
-
-const CASHAPP_USERNAME =
-  "$yysluvv";
+const CASHAPP_USERNAME = "$yysluvv";
 
 const CASHAPP_URL =
   "https://cash.app/$yysluvv";
-
-// PAYPAL
 
 const PAYPAL_USERNAME =
   "PayPal.me/twxnsrevenge";
@@ -545,15 +611,11 @@ const PAYPAL_USERNAME =
 const PAYPAL_URL =
   "https://paypal.me/twxnsrevenge";
 
-// VENMO
-
 const VENMO_USERNAME =
   "@chuppys";
 
 const VENMO_URL =
   "https://venmo.com/u/chuppys";
-
-// CHIME
 
 const CHIME_USERNAME =
   "chuppysss";
@@ -561,15 +623,11 @@ const CHIME_USERNAME =
 const CHIME_URL =
   "https://app.chime.com/link/qr?u=chuppysss";
 
-// APPLE PAY AND ZELLE
-
 const APPLE_PAY =
   "929-554-5969";
 
 const ZELLE =
   "631-401-8951";
-
-// OPTIONAL EXTRA PAYMENT METHODS
 
 const EXTRA_PAYMENT_METHODS = [
   {
@@ -594,8 +652,6 @@ const EXTRA_PAYMENT_METHODS = [
       process.env.PAYMENT_METHOD_6_URL || ""
   }
 ];
-
-// PAYMENT METHODS SHOWN IN SERVICES
 
 const PAYMENT_METHODS_TEXT =
   "**Payment Methods**\n" +
@@ -689,29 +745,41 @@ const HELP_COMMAND =
 // RUNTIME
 // ============================================================
 
-const afkUsers = new Map();
+const afkUsers =
+  new Map();
 
 let vouchCounterTimer = null;
+
 let vouchCounterUpdateRunning = false;
+
 let vouchCounterRecountRequested = false;
 
-const sellerCommandLocks = new Set();
+const sellerCommandLocks =
+  new Set();
 
-const clientCommandLocks = new Set();
+const clientCommandLocks =
+  new Set();
 
-const promoterCommandLocks = new Set();
+const promoterCommandLocks =
+  new Set();
 
-const rolePostingLocks = new Set();
+const rolePostingLocks =
+  new Set();
 
-const roleSelectionLocks = new Set();
+const roleSelectionLocks =
+  new Set();
 
-// NEW:
-// Prevent two ,pay commands from updating
-// the same channel simultaneously.
+const paymentCommandLocks =
+  new Set();
 
-const paymentCommandLocks = new Set();
+const blacklistCommandLocks =
+  new Set();
 
-// Verification tickets are handled by tickets.js.
+const appealPanelLocks =
+  new Set();
+
+const blacklistRoleJobs =
+  new Map();
 
 // ============================================================
 // DISCORD CLIENT
@@ -746,7 +814,7 @@ if (
   );
 }
 
-// Only install tickets.js once.
+// Install tickets.js only once.
 
 ticketModule(client);
 
@@ -835,11 +903,768 @@ async function interactionError(
 }
 
 // ============================================================
+// BLACKLIST ROLE LOOKUP
+// ============================================================
+
+async function findBlacklistRole(guild) {
+  if (BLACKLIST_ROLE_ID) {
+    const configured =
+      guild.roles.cache.get(
+        BLACKLIST_ROLE_ID
+      ) ||
+      await guild.roles.fetch(
+        BLACKLIST_ROLE_ID
+      ).catch(() => null);
+
+    if (configured) {
+      return configured;
+    }
+  }
+
+  const cached =
+    guild.roles.cache.find(role =>
+      role.name.toLowerCase() ===
+      BLACKLIST_ROLE_NAME.toLowerCase()
+    );
+
+  if (cached) {
+    return cached;
+  }
+
+  await guild.roles.fetch();
+
+  return guild.roles.cache.find(role =>
+    role.name.toLowerCase() ===
+    BLACKLIST_ROLE_NAME.toLowerCase()
+  ) || null;
+}
+
+// ============================================================
+// CREATE BLACKLIST ROLE
+// ============================================================
+
+async function ensureBlacklistRole(guild) {
+  const running =
+    blacklistRoleJobs.get(guild.id);
+
+  if (running) {
+    return running;
+  }
+
+  const job = (async () => {
+    const existing =
+      await findBlacklistRole(guild);
+
+    if (existing) {
+      return existing;
+    }
+
+    const created =
+      await guild.roles.create({
+        name: BLACKLIST_ROLE_NAME,
+        color: 0x2b2b2b,
+        hoist: false,
+        mentionable: false,
+        permissions: [],
+        reason:
+          "Chuppys blacklist moderation system"
+      });
+
+    console.log(
+      `[BLACKLIST] Created Blacklisted role: ${created.id}`
+    );
+
+    return created;
+  })();
+
+  blacklistRoleJobs.set(
+    guild.id,
+    job
+  );
+
+  try {
+    return await job;
+  } finally {
+    if (
+      blacklistRoleJobs.get(guild.id) === job
+    ) {
+      blacklistRoleJobs.delete(
+        guild.id
+      );
+    }
+  }
+}
+
+// ============================================================
+// BLACKLIST CHECK
+// ============================================================
+
+async function isBlacklisted(member) {
+  if (!member?.guild) {
+    return false;
+  }
+
+  const role =
+    await findBlacklistRole(
+      member.guild
+    );
+
+  return Boolean(
+    role &&
+    member.roles.cache.has(
+      role.id
+    )
+  );
+}
+
+// ============================================================
+// BLACKLIST STAFF PERMISSION
+// ============================================================
+
+function canBlacklist(member) {
+  if (!member?.guild) {
+    return false;
+  }
+
+  if (
+    member.id ===
+    member.guild.ownerId
+  ) {
+    return true;
+  }
+
+  return [
+    OWNER_ROLE_ID,
+    ADMIN_ROLE_ID,
+    MOD_ROLE_ID
+  ].some(id =>
+    member.roles.cache.has(id)
+  );
+}
+
+// ============================================================
+// BLACKLIST ROLE HIERARCHY
+// ============================================================
+
+function canModerateTarget(actor, target) {
+  if (!actor || !target) {
+    return false;
+  }
+
+  if (actor.id === target.id) {
+    return false;
+  }
+
+  if (
+    target.id ===
+    target.guild.ownerId
+  ) {
+    return false;
+  }
+
+  if (
+    actor.id ===
+    actor.guild.ownerId
+  ) {
+    return true;
+  }
+
+  return (
+    actor.roles.highest.position >
+    target.roles.highest.position
+  );
+}
+
+// ============================================================
+// BLACKLIST LOG EMBED
+// ============================================================
+
+function makeBlacklistEmbed(
+  target,
+  moderator,
+  reason
+) {
+  return new EmbedBuilder()
+    .setTitle(
+      "Member Blacklisted"
+    )
+    .setDescription(
+      `**Member:** <@${target.id}>\n` +
+      `**User ID:** \`${target.id}\`\n\n` +
+      "**Reason for Blacklist**\n" +
+      `${safeText(reason, 1000)}\n\n` +
+      `**Blacklisted By:** <@${moderator.id}>\n\n` +
+      "The member has received the Blacklisted role."
+    )
+    .setColor(WHITE)
+    .setThumbnail(
+      target.user.displayAvatarURL()
+    )
+    .setFooter({
+      text: BRAND
+    })
+    .setTimestamp();
+}
+
+// ============================================================
+// BLACKLIST DM
+// ============================================================
+
+function makeBlacklistDMEmbed(
+  guild,
+  reason
+) {
+  return new EmbedBuilder()
+    .setTitle(
+      "You Have Been Blacklisted"
+    )
+    .setDescription(
+      `You have been blacklisted from **${safeText(guild.name)}**.\n\n` +
+      "**Reason**\n" +
+      `${safeText(reason, 1000)}\n\n` +
+      "Your normal server access has been restricted.\n\n" +
+      "**Want to Appeal?**\n" +
+      "Use the server's unblacklist appeal panel " +
+      "to request a review.\n\n" +
+      "Please explain your situation respectfully. " +
+      "An appeal does not guarantee removal of the blacklist."
+    )
+    .setColor(WHITE)
+    .setThumbnail(
+      UNBLACKLIST_THUMBNAIL_URL
+    )
+    .setFooter({
+      text: BRAND
+    })
+    .setTimestamp();
+}
+
+// ============================================================
+// UNBLACKLIST APPEAL PANEL
+// ============================================================
+
+function makeUnblacklistPanelEmbed() {
+  return new EmbedBuilder()
+    .setTitle(
+      UNBLACKLIST_PANEL_TITLE
+    )
+    .setDescription(
+      "Have you been blacklisted from **.gg/chuppys**?\n\n" +
+      "If you believe your blacklist should be reconsidered, " +
+      "you can request an appeal through our moderation team.\n\n" +
+      "**How to Appeal**\n\n" +
+      "1. Click **Request Unblacklist Ticket** below.\n\n" +
+      "2. Explain why you were blacklisted.\n\n" +
+      "3. Explain why you believe the blacklist " +
+      "should be removed.\n\n" +
+      "4. Provide any relevant screenshots or proof.\n\n" +
+      "5. Wait for an Owner, Admin or Moderator " +
+      "to review your appeal.\n\n" +
+      "**Important**\n" +
+      "Submitting an appeal does not guarantee approval.\n\n" +
+      "Please do not spam or create duplicate appeals."
+    )
+    .setColor(WHITE)
+    .setThumbnail(
+      UNBLACKLIST_THUMBNAIL_URL
+    )
+    .setFooter({
+      text: BRAND
+    });
+}
+
+function makeUnblacklistPanelButtons() {
+  return [
+    new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilder()
+          .setCustomId(
+            UNBLACKLIST_BUTTON_ID
+          )
+          .setLabel(
+            "Request Unblacklist Ticket"
+          )
+          .setEmoji({
+            id: VERIFY_BUTTON_EMOJI_ID
+          })
+          .setStyle(
+            ButtonStyle.Primary
+          )
+      )
+  ];
+}
+
+// ============================================================
+// POST / UPDATE APPEAL PANEL
+// ============================================================
+
+async function postUnblacklistPanel(channel) {
+  if (
+    !channel?.isTextBased() ||
+    !channel.messages ||
+    !channel.send
+  ) {
+    throw new Error(
+      "Appeal panel channel unavailable."
+    );
+  }
+
+  const matches = [];
+  let before;
+
+  for (let page = 0; page < 10; page++) {
+    const messages =
+      await channel.messages.fetch({
+        limit: 100,
+        ...(before ? { before } : {})
+      });
+
+    for (const message of messages.values()) {
+      if (
+        message.author.id !==
+        client.user.id
+      ) {
+        continue;
+      }
+
+      const matchesTitle =
+        message.embeds.some(embed =>
+          embed.title ===
+          UNBLACKLIST_PANEL_TITLE
+        );
+
+      const matchesButton =
+        message.components.some(row =>
+          row.components.some(component =>
+            component.customId ===
+            UNBLACKLIST_BUTTON_ID
+          )
+        );
+
+      if (matchesTitle || matchesButton) {
+        matches.push(message);
+      }
+    }
+
+    if (messages.size < 100) {
+      break;
+    }
+
+    before =
+      messages.last().id;
+  }
+
+  matches.sort(
+    (a, b) =>
+      b.createdTimestamp -
+      a.createdTimestamp
+  );
+
+  const payload = {
+    content: "",
+    embeds: [
+      makeUnblacklistPanelEmbed()
+    ],
+    components:
+      makeUnblacklistPanelButtons(),
+    allowedMentions: {
+      parse: []
+    }
+  };
+
+  if (matches.length) {
+    const newest = matches[0];
+
+    await newest.edit(payload);
+
+    for (
+      const duplicate
+      of matches.slice(1)
+    ) {
+      await duplicate.delete()
+        .catch(console.error);
+    }
+
+    return {
+      message: newest,
+      updated: true
+    };
+  }
+
+  const sent =
+    await channel.send(payload);
+
+  return {
+    message: sent,
+    updated: false
+  };
+}
+
+// ============================================================
+// APPEAL PANEL COMMAND
+// ============================================================
+
+async function handleUnblacklistPanelCommand(
+  message
+) {
+  if (!canBlacklist(message.member)) {
+    return message.reply({
+      content:
+        "Only Owner, Admin and Mod can post this panel.",
+      allowedMentions: {
+        repliedUser: false
+      }
+    });
+  }
+
+  const key =
+    message.channel.id;
+
+  if (appealPanelLocks.has(key)) {
+    return message.reply({
+      content:
+        "The appeal panel is already being updated.",
+      allowedMentions: {
+        repliedUser: false
+      }
+    });
+  }
+
+  appealPanelLocks.add(key);
+
+  try {
+    const result =
+      await postUnblacklistPanel(
+        message.channel
+      );
+
+    return message.reply({
+      content:
+        `Unblacklist appeal panel ${result.updated ? "updated" : "posted"} successfully!`,
+      allowedMentions: {
+        parse: [],
+        repliedUser: false
+      }
+    });
+  } finally {
+    appealPanelLocks.delete(key);
+  }
+}
+
+// ============================================================
+// BLACKLIST COMMAND
+// ============================================================
+
+async function handleBlacklistCommand(
+  message,
+  targetId,
+  reason
+) {
+  if (!canBlacklist(message.member)) {
+    return message.reply({
+      content:
+        "Only Owner, Admin and Mod can blacklist members.",
+      allowedMentions: {
+        repliedUser: false
+      }
+    });
+  }
+
+  const cleanReason =
+    String(reason || "").trim();
+
+  if (!cleanReason) {
+    return message.reply({
+      content:
+        "You must provide a reason.\n\n" +
+        "Usage: `,r @user b reason here`",
+      allowedMentions: {
+        repliedUser: false
+      }
+    });
+  }
+
+  if (cleanReason.length > 1000) {
+    return message.reply({
+      content:
+        "The blacklist reason must be 1000 characters or fewer.",
+      allowedMentions: {
+        repliedUser: false
+      }
+    });
+  }
+
+  const lockKey =
+    `${message.guild.id}:${targetId}`;
+
+  if (
+    blacklistCommandLocks.has(lockKey)
+  ) {
+    return message.reply({
+      content:
+        "This member already has a blacklist action processing.",
+      allowedMentions: {
+        repliedUser: false
+      }
+    });
+  }
+
+  blacklistCommandLocks.add(lockKey);
+
+  try {
+    const guild =
+      message.guild;
+
+    const actor =
+      await guild.members.fetch({
+        user: message.author.id,
+        force: true
+      });
+
+    const target =
+      await guild.members.fetch({
+        user: targetId,
+        force: true
+      }).catch(() => null);
+
+    if (!target) {
+      return message.reply({
+        content:
+          "I couldn't find that member in the server.",
+        allowedMentions: {
+          repliedUser: false
+        }
+      });
+    }
+
+    if (target.user.bot) {
+      return message.reply({
+        content:
+          "You cannot blacklist bots with this command.",
+        allowedMentions: {
+          repliedUser: false
+        }
+      });
+    }
+
+    if (
+      !canModerateTarget(actor, target)
+    ) {
+      return message.reply({
+        content:
+          "You cannot blacklist yourself, the server owner, " +
+          "or a member whose highest role is equal to or " +
+          "higher than yours.",
+        allowedMentions: {
+          repliedUser: false
+        }
+      });
+    }
+
+    const botMember =
+      await guild.members.fetchMe();
+
+    if (
+      !botMember.permissions.has(
+        PermissionFlagsBits.ManageRoles
+      )
+    ) {
+      return message.reply({
+        content:
+          "The bot needs Manage Roles permission.",
+        allowedMentions: {
+          repliedUser: false
+        }
+      });
+    }
+
+    if (
+      target.roles.highest.position >=
+      botMember.roles.highest.position
+    ) {
+      return message.reply({
+        content:
+          "Move the bot's role above the target member's roles.",
+        allowedMentions: {
+          repliedUser: false
+        }
+      });
+    }
+
+    const blacklistRole =
+      await ensureBlacklistRole(guild);
+
+    if (
+      blacklistRole.managed ||
+      blacklistRole.position >=
+      botMember.roles.highest.position
+    ) {
+      return message.reply({
+        content:
+          "Move the Blacklisted role below the bot's highest role.",
+        allowedMentions: {
+          repliedUser: false
+        }
+      });
+    }
+
+    if (
+      target.roles.cache.has(
+        blacklistRole.id
+      )
+    ) {
+      return message.reply({
+        content:
+          "That member is already blacklisted.",
+        allowedMentions: {
+          repliedUser: false
+        }
+      });
+    }
+
+    // Discord does not allow removing @everyone
+    // or certain integration-managed roles.
+
+    const extraRoles =
+      target.roles.cache.filter(role =>
+        role.id !== guild.id &&
+        role.id !== blacklistRole.id
+      );
+
+    const unremovable =
+      extraRoles.filter(role =>
+        role.managed ||
+        role.position >=
+          botMember.roles.highest.position
+      );
+
+    if (unremovable.size) {
+      return message.reply({
+        content:
+          "One or more roles cannot be removed by the bot. " +
+          "Check managed roles and the bot role hierarchy.",
+        allowedMentions: {
+          repliedUser: false
+        }
+      });
+    }
+
+    // ========================================================
+    // REPLACE ROLES WITH BLACKLISTED ROLE
+    // ========================================================
+
+    await target.roles.set(
+      [blacklistRole.id],
+      `Blacklisted by ${actor.user.tag}: ${cleanReason.slice(0, 400)}`
+    );
+
+    // ========================================================
+    // LOG BLACKLIST
+    // ========================================================
+
+    let logSent = false;
+
+    try {
+      const logChannel =
+        await guild.channels.fetch(
+          BLACKLIST_LOG_CHANNEL_ID
+        );
+
+      if (
+        !logChannel?.isTextBased() ||
+        !logChannel.send
+      ) {
+        throw new Error(
+          "Blacklist log channel unavailable."
+        );
+      }
+
+      await logChannel.send({
+        embeds: [
+          makeBlacklistEmbed(
+            target,
+            actor,
+            cleanReason
+          )
+        ],
+        allowedMentions: {
+          parse: []
+        }
+      });
+
+      logSent = true;
+    } catch (error) {
+      console.error(
+        "[BLACKLIST] Logging failed:",
+        error
+      );
+    }
+
+    // ========================================================
+    // DM MEMBER
+    // ========================================================
+
+    let dmSent = false;
+
+    try {
+      await target.user.send({
+        embeds: [
+          makeBlacklistDMEmbed(
+            guild,
+            cleanReason
+          )
+        ],
+        allowedMentions: {
+          parse: []
+        }
+      });
+
+      dmSent = true;
+    } catch (error) {
+      console.error(
+        "[BLACKLIST] DM failed:",
+        error.message
+      );
+    }
+
+    // ========================================================
+    // CONFIRM BLACKLIST
+    // ========================================================
+
+    await message.reply({
+      embeds: [
+        whiteEmbed(
+          "Blacklist Applied",
+          `**Member:** <@${target.id}>\n\n` +
+          `**Reason:** ${safeText(cleanReason, 1000)}\n\n` +
+          "**Roles:** Replaced with Blacklisted role.\n" +
+          `**Log:** ${logSent ? "Sent" : "Could not send"}\n` +
+          `**DM:** ${dmSent ? "Sent" : "Could not deliver"}`
+        ).setTimestamp()
+      ],
+      allowedMentions: {
+        parse: [],
+        repliedUser: false
+      }
+    });
+
+    console.log(
+      `[BLACKLIST] ${target.id} blacklisted by ${actor.id}`
+    );
+  } finally {
+    blacklistCommandLocks.delete(
+      lockKey
+    );
+  }
+}
+
+// ============================================================
 // ROLE EMBED BUILDER
 // ============================================================
 
 function makeRoleEmbed(type) {
-  const config = ROLE_MENU_CONFIG[type];
+  const config =
+    ROLE_MENU_CONFIG[type];
 
   if (!config) {
     throw new Error(
@@ -853,16 +1678,19 @@ function makeRoleEmbed(type) {
       .join("\n\n") +
     "\n\nplease choose your roles below ♡";
 
-  const embed = new EmbedBuilder()
-    .setTitle(config.title)
-    .setDescription(description)
-    .setColor(WHITE)
-    .setFooter({
-      text: BRAND
-    });
+  const embed =
+    new EmbedBuilder()
+      .setTitle(config.title)
+      .setDescription(description)
+      .setColor(WHITE)
+      .setFooter({
+        text: BRAND
+      });
 
   if (config.thumbnail) {
-    embed.setThumbnail(config.thumbnail);
+    embed.setThumbnail(
+      config.thumbnail
+    );
   }
 
   return embed;
@@ -873,7 +1701,8 @@ function makeRoleEmbed(type) {
 // ============================================================
 
 function makeRoleDropdown(type) {
-  const config = ROLE_MENU_CONFIG[type];
+  const config =
+    ROLE_MENU_CONFIG[type];
 
   if (!config) {
     throw new Error(
@@ -881,24 +1710,25 @@ function makeRoleDropdown(type) {
     );
   }
 
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId(config.customId)
-    .setPlaceholder(config.placeholder)
-    .setMinValues(0)
-    .setMaxValues(config.options.length)
-    .addOptions(
-      config.options.map(option => ({
-        label: option.label,
-        value: option.value
-      }))
-    );
+  const menu =
+    new StringSelectMenuBuilder()
+      .setCustomId(config.customId)
+      .setPlaceholder(config.placeholder)
+      .setMinValues(0)
+      .setMaxValues(config.options.length)
+      .addOptions(
+        config.options.map(option => ({
+          label: option.label,
+          value: option.value
+        }))
+      );
 
   return new ActionRowBuilder()
     .addComponents(menu);
 }
 
 // ============================================================
-// ROLE MESSAGE PAYLOAD
+// ROLE PANEL PAYLOAD
 // ============================================================
 
 function rolePanelPayload(type) {
@@ -906,11 +1736,9 @@ function rolePanelPayload(type) {
     embeds: [
       makeRoleEmbed(type)
     ],
-
     components: [
       makeRoleDropdown(type)
     ],
-
     allowedMentions: {
       parse: []
     }
@@ -925,21 +1753,23 @@ async function findExistingRolePanels(
   channel,
   type
 ) {
-  const config = ROLE_MENU_CONFIG[type];
+  const config =
+    ROLE_MENU_CONFIG[type];
 
   const matching = [];
-
   let before;
 
   for (let page = 0; page < 10; page++) {
     const messages =
       await channel.messages.fetch({
         limit: 100,
-
         ...(before ? { before } : {})
       });
 
-    for (const message of messages.values()) {
+    for (
+      const message
+      of messages.values()
+    ) {
       if (
         message.author.id !==
         client.user.id
@@ -947,7 +1777,7 @@ async function findExistingRolePanels(
         continue;
       }
 
-      const hasMatchingMenu =
+      const found =
         message.components.some(row =>
           row.components.some(component =>
             component.customId ===
@@ -955,7 +1785,7 @@ async function findExistingRolePanels(
           )
         );
 
-      if (hasMatchingMenu) {
+      if (found) {
         matching.push(message);
       }
     }
@@ -964,21 +1794,23 @@ async function findExistingRolePanels(
       break;
     }
 
-    before = messages.last().id;
+    before =
+      messages.last().id;
   }
 
   return matching;
 }
 
 // ============================================================
-// POST OR UPDATE ROLE PANEL
+// POST / UPDATE ROLE PANEL
 // ============================================================
 
 async function postRolePanel(
   guild,
   type
 ) {
-  const config = ROLE_MENU_CONFIG[type];
+  const config =
+    ROLE_MENU_CONFIG[type];
 
   if (!config) {
     throw new Error(
@@ -1011,17 +1843,17 @@ async function postRolePanel(
     rolePanelPayload(type);
 
   if (existing.length) {
-    const original = existing[0];
+    const original =
+      existing[0];
 
     await original.edit(payload);
 
-    for (const duplicate of existing.slice(1)) {
-      await duplicate.delete().catch(error => {
-        console.error(
-          `[ROLE PANEL] Duplicate ${type} deletion failed:`,
-          error
-        );
-      });
+    for (
+      const duplicate
+      of existing.slice(1)
+    ) {
+      await duplicate.delete()
+        .catch(console.error);
     }
 
     console.log(
@@ -1048,7 +1880,7 @@ async function postRolePanel(
 }
 
 // ============================================================
-// ROLE COMMAND HANDLER
+// ROLE PANEL COMMAND
 // ============================================================
 
 async function handleRolePanelCommand(
@@ -1059,7 +1891,6 @@ async function handleRolePanelCommand(
     return message.reply({
       content:
         "You need Manage Server permission to use this command.",
-
       allowedMentions: {
         repliedUser: false
       }
@@ -1073,7 +1904,6 @@ async function handleRolePanelCommand(
     return message.reply({
       content:
         "That role panel is already being updated.",
-
       allowedMentions: {
         repliedUser: false
       }
@@ -1100,7 +1930,6 @@ async function handleRolePanelCommand(
       content:
         `${label} panel ${result.updated ? "updated" : "posted"} ` +
         `successfully in <#${ROLES_CHANNEL_ID}>!`,
-
       allowedMentions: {
         parse: [],
         repliedUser: false
@@ -1173,6 +2002,14 @@ async function handleRoleSelection(
         user: interaction.user.id,
         force: true
       });
+
+    if (await isBlacklisted(member)) {
+      return interaction.editReply({
+        content:
+          "You are blacklisted and cannot claim self roles. " +
+          "Please use the unblacklist appeal panel."
+      });
+    }
 
     const botMember =
       await interaction.guild.members.fetchMe();
@@ -1307,7 +2144,7 @@ function makeVerificationButton() {
 }
 
 // ============================================================
-// UPDATE VERIFICATION MESSAGE
+// POST / UPDATE VERIFICATION
 // ============================================================
 
 async function sendOrUpdateVerificationMessage() {
@@ -1347,11 +2184,9 @@ async function sendOrUpdateVerificationMessage() {
       embeds: [
         makeVerificationEmbed()
       ],
-
       components: [
         makeVerificationButton()
       ],
-
       allowedMentions: {
         parse: []
       }
@@ -1360,16 +2195,15 @@ async function sendOrUpdateVerificationMessage() {
     if (existing) {
       await existing.edit(payload);
 
-      for (const duplicate of matching.values()) {
+      for (
+        const duplicate
+        of matching.values()
+      ) {
         if (
           duplicate.id !== existing.id
         ) {
-          await duplicate.delete().catch(error => {
-            console.error(
-              "[VERIFY] Duplicate deletion failed:",
-              error
-            );
-          });
+          await duplicate.delete()
+            .catch(console.error);
         }
       }
 
@@ -1452,17 +2286,6 @@ function checkVerificationRequirements(member) {
 }
 
 // ============================================================
-// VERIFICATION TICKET HANDOFF
-// ============================================================
-//
-// No verification ticket handler in index.js.
-//
-// tickets.js handles:
-// chuppys_create_verification_ticket
-//
-// ============================================================
-
-// ============================================================
 // SLASH COMMAND REGISTRATION
 // ============================================================
 
@@ -1527,9 +2350,12 @@ async function registerQuestionCommand() {
           `[COMMANDS] Updated /${body.name}`
         );
       } else {
-        await rest.post(route, {
-          body
-        });
+        await rest.post(
+          route,
+          {
+            body
+          }
+        );
 
         console.log(
           `[COMMANDS] Registered /${body.name}`
@@ -1669,27 +2495,29 @@ async function sendRobuxCashoutEmbed(channel) {
     );
   }
 
-  const embed = new EmbedBuilder()
-    .setTitle("Cashing Out Robux\n\n")
-    .setThumbnail(
-      ROBUX_CASHOUT_THUMBNAIL_URL
-    )
-    .setDescription(
-      "RATES\n\n" +
-      "**Below 10k**\n" +
-      "3/k\n\n" +
-      "**Above 10k**\n" +
-      "3.5/k\n\n" +
-      "-# make a cash out ticket now !! make sure u ping me in tickets <:uppyty:1561094713153429746>"
-    )
-    .setColor(WHITE)
-    .setFooter({
-      text: BRAND
-    });
+  const embed =
+    new EmbedBuilder()
+      .setTitle(
+        "Cashing Out Robux\n\n"
+      )
+      .setThumbnail(
+        ROBUX_CASHOUT_THUMBNAIL_URL
+      )
+      .setDescription(
+        "RATES\n\n" +
+        "**Below 10k**\n" +
+        "3/k\n\n" +
+        "**Above 10k**\n" +
+        "3.5/k\n\n" +
+        "-# make a cash out ticket now !! make sure u ping me in tickets <:uppyty:1561094713153429746>"
+      )
+      .setColor(WHITE)
+      .setFooter({
+        text: BRAND
+      });
 
   const payload = {
     embeds: [embed],
-
     allowedMentions: {
       parse: []
     }
@@ -1745,7 +2573,9 @@ function makeRankedRolesEmbed() {
     ).join("\n\n");
 
   return new EmbedBuilder()
-    .setTitle(".gg/chuppys ranked roles")
+    .setTitle(
+      ".gg/chuppys ranked roles"
+    )
     .setDescription(roleList)
     .setColor(WHITE)
     .setThumbnail(
@@ -1776,7 +2606,6 @@ async function sendRankedRoles(guild) {
       embeds: [
         makeRankedRolesEmbed()
       ],
-
       allowedMentions: {
         parse: []
       }
@@ -1810,7 +2639,6 @@ async function countChannelMessages(channel) {
     const messages =
       await channel.messages.fetch({
         limit: 100,
-
         ...(before ? { before } : {})
       });
 
@@ -1896,13 +2724,11 @@ async function recountAllVouches() {
       await Promise.all([
         renameCounterChannel(
           CHUPPY_COUNT_CHANNEL_ID,
-
           `${CHUPPY_COUNT_PREFIX}${personalCount}`
         ),
 
         renameCounterChannel(
           SERVER_COUNT_CHANNEL_ID,
-
           `${SERVER_COUNT_PREFIX}${serverTotal}`
         )
       ]);
@@ -1962,9 +2788,7 @@ async function sendVouchTutorial(guild) {
         "When you're ready, use the **`/vouch`** command."
       )
       .setColor(WHITE)
-      .setFooter({
-        text: BRAND
-      }),
+      .setFooter({ text: BRAND }),
 
     new EmbedBuilder()
       .setTitle("STEP 1 — USE /VOUCH")
@@ -1977,9 +2801,7 @@ async function sendVouchTutorial(guild) {
         VOUCH_TUTORIAL_IMAGES.command
       )
       .setColor(WHITE)
-      .setFooter({
-        text: BRAND
-      }),
+      .setFooter({ text: BRAND }),
 
     new EmbedBuilder()
       .setTitle("WHAT TO FILL IN")
@@ -1993,9 +2815,7 @@ async function sendVouchTutorial(guild) {
         "Check your answers before submitting."
       )
       .setColor(WHITE)
-      .setFooter({
-        text: BRAND
-      }),
+      .setFooter({ text: BRAND }),
 
     new EmbedBuilder()
       .setTitle("EXAMPLE OF A COMPLETED VOUCH")
@@ -2007,9 +2827,7 @@ async function sendVouchTutorial(guild) {
         VOUCH_TUTORIAL_IMAGES.completed
       )
       .setColor(WHITE)
-      .setFooter({
-        text: BRAND
-      }),
+      .setFooter({ text: BRAND }),
 
     new EmbedBuilder()
       .setTitle("SUCCESSFULLY SUBMITTED")
@@ -2024,9 +2842,7 @@ async function sendVouchTutorial(guild) {
         VOUCH_TUTORIAL_IMAGES.success
       )
       .setColor(WHITE)
-      .setFooter({
-        text: BRAND
-      })
+      .setFooter({ text: BRAND })
   ];
 
   for (const embed of embeds) {
@@ -2097,6 +2913,9 @@ function makeHelpEmbed() {
         value:
           "`,r @user c` — Give Chuppys role.\n" +
           "`,r @user r` — Send vouch reminder.\n" +
+          "`,r @user b <reason>` — Blacklist a member.\n" +
+          "`,appealpanel` — Post/update unblacklist appeal panel.\n" +
+          "`,unblacklistpanel` — Same as ,appealpanel.\n" +
           "`,partner` — Partnership instructions.\n" +
           "`,mod` — Moderator responsibilities.\n" +
           "`,seller` — Seller application.\n" +
@@ -2176,18 +2995,7 @@ function makePromoterEmbed() {
 }
 
 // ============================================================
-// PAYMENT METHODS
-// ============================================================
-//
-// NO QR EMBEDS.
-//
-// Venmo and Chime use the same link-button
-// style as Cash App and PayPal.
-//
-// DUPLICATE PREVENTION:
-// Search all available message history and
-// keep only the newest Payment Methods embed.
-//
+// PAYMENT URL VALIDATION
 // ============================================================
 
 function validPaymentUrl(value) {
@@ -2212,7 +3020,7 @@ function validPaymentUrl(value) {
 }
 
 // ============================================================
-// PAYMENT METHODS LIST
+// PAYMENT METHODS
 // ============================================================
 
 function paymentMethods() {
@@ -2222,31 +3030,26 @@ function paymentMethods() {
       details: CASHAPP_USERNAME,
       url: CASHAPP_URL
     },
-
     {
       name: "PayPal",
       details: PAYPAL_USERNAME,
       url: PAYPAL_URL
     },
-
     {
       name: "Venmo",
       details: VENMO_USERNAME,
       url: VENMO_URL
     },
-
     {
       name: "Chime",
       details: CHIME_USERNAME,
       url: CHIME_URL
     },
-
     {
       name: "Apple Pay",
       details: APPLE_PAY,
       url: ""
     },
-
     {
       name: "Zelle",
       details: ZELLE,
@@ -2260,7 +3063,8 @@ function paymentMethods() {
     }
 
     methods.push({
-      name: extra.name.trim(),
+      name:
+        extra.name.trim(),
 
       details:
         extra.details?.trim() ||
@@ -2341,20 +3145,7 @@ function makePaymentButtons() {
 }
 
 // ============================================================
-// PAYMENT METHODS — DUPLICATE FIX
-// ============================================================
-//
-// 1. Scan channel history.
-// 2. Find Payment Methods embeds from this bot.
-// 3. Keep newest message.
-// 4. Update newest with all payment methods.
-// 5. Delete every older matching message.
-// 6. Create a new message only when needed.
-//
-// Requires View Channel, Read Message History,
-// Send Messages, Embed Links, and permission
-// to manage/delete the bot's messages.
-//
+// PAYMENT DUPLICATE PREVENTION
 // ============================================================
 
 async function sendPaymentEmbed(channel) {
@@ -2372,26 +3163,20 @@ async function sendPaymentEmbed(channel) {
     embeds: [
       makePaymentEmbed()
     ],
-
     components:
       makePaymentButtons(),
-
     allowedMentions: {
       parse: []
     }
   };
 
   const matches = [];
-
   let before;
-
-  // Search through all accessible channel history.
 
   while (true) {
     const messages =
       await channel.messages.fetch({
         limit: 100,
-
         ...(before ? { before } : {})
       });
 
@@ -2399,7 +3184,10 @@ async function sendPaymentEmbed(channel) {
       break;
     }
 
-    for (const msg of messages.values()) {
+    for (
+      const msg
+      of messages.values()
+    ) {
       if (
         msg.author.id === client.user.id &&
         msg.embeds.some(embed =>
@@ -2414,59 +3202,48 @@ async function sendPaymentEmbed(channel) {
       break;
     }
 
-    before = messages.last().id;
+    before =
+      messages.last().id;
   }
-
-  // Newest payment embed comes first.
 
   matches.sort(
     (a, b) =>
-      b.createdTimestamp - a.createdTimestamp
+      b.createdTimestamp -
+      a.createdTimestamp
   );
 
-  const existing = matches[0];
+  const existing =
+    matches[0];
 
   if (existing) {
-    // Update the newest embed.
-
     await existing.edit(payload);
 
-    console.log(
-      `[PAY] Updated payment embed: ${existing.id}`
-    );
-
-    // Remove older duplicate embeds.
-
-    for (const duplicate of matches.slice(1)) {
+    for (
+      const duplicate
+      of matches.slice(1)
+    ) {
       try {
         await duplicate.delete();
-
-        console.log(
-          `[PAY] Removed duplicate: ${duplicate.id}`
-        );
       } catch (error) {
         console.error(
-          `[PAY] Could not remove duplicate ${duplicate.id}:`,
+          `[PAY] Duplicate removal failed: ${duplicate.id}`,
           error
         );
       }
     }
 
     console.log(
-      `[PAY] Duplicate cleanup complete. ` +
-      `Found ${matches.length} payment embeds.`
+      `[PAY] Updated ${existing.id}; cleaned ${matches.length - 1} duplicates.`
     );
 
     return existing;
   }
 
-  // No payment embed exists in accessible history.
-
   const sent =
     await channel.send(payload);
 
   console.log(
-    `[PAY] Created payment embed: ${sent.id}`
+    `[PAY] Created ${sent.id}`
   );
 
   return sent;
@@ -2535,7 +3312,10 @@ async function updateServiceMessage(
       components: []
     });
 
-    for (const duplicate of matching.values()) {
+    for (
+      const duplicate
+      of matching.values()
+    ) {
       if (
         duplicate.id !== existing.id
       ) {
@@ -2681,61 +3461,17 @@ async function sendBoostiesServices(channel) {
 
 function makeSellersEmbed() {
   const sellers = [
-    [
-      "1192248188409749684",
-      "services seller",
-      "no limit"
-    ],
-    [
-      "1079241163455873074",
-      "seller",
-      "no limit"
-    ],
-    [
-      "1032693136163622993",
-      "seller",
-      "$45"
-    ],
-    [
-      "1320199904219496530",
-      "seller",
-      "$35"
-    ],
-    [
-      "952566845939023892",
-      "seller",
-      "no limit"
-    ],
-    [
-      "1473335012769267807",
-      "seller",
-      "$100"
-    ],
-    [
-      "1472856287527309313",
-      "seller",
-      "$100"
-    ],
-    [
-      "1269188505935024141",
-      "seller",
-      "$250"
-    ],
-    [
-      "1427118849215692920",
-      "seller",
-      "$50"
-    ],
-    [
-      "1328450205774909441",
-      "seller",
-      "$100"
-    ],
-    [
-      "1475237851414401105",
-      "seller",
-      "$75"
-    ]
+    ["1192248188409749684", "services seller", "no limit"],
+    ["1079241163455873074", "seller", "no limit"],
+    ["1032693136163622993", "seller", "$45"],
+    ["1320199904219496530", "seller", "$35"],
+    ["952566845939023892", "seller", "no limit"],
+    ["1473335012769267807", "seller", "$100"],
+    ["1472856287527309313", "seller", "$100"],
+    ["1269188505935024141", "seller", "$250"],
+    ["1427118849215692920", "seller", "$50"],
+    ["1328450205774909441", "seller", "$100"],
+    ["1475237851414401105", "seller", "$75"]
   ];
 
   const lines = [
@@ -2902,7 +3638,6 @@ async function sendEmbedToChannel(
 
   return channel.send({
     embeds: [embed],
-
     allowedMentions: {
       parse: []
     }
@@ -2940,9 +3675,7 @@ async function handleAFK(message) {
 
     afkUsers.set(key, {
       reason,
-
       since: Date.now(),
-
       username:
         message.author.username
     });
@@ -3049,9 +3782,7 @@ client.once(
 
     const tasks = [
       registerQuestionCommand(),
-
       recountAllVouches(),
-
       sendOrUpdateVerificationMessage()
     ];
 
@@ -3080,15 +3811,15 @@ client.once(
     );
 
     console.log(
-      "[READY] Ping-role panel enabled: ,roles"
+      "[READY] Ping roles: ,roles"
     );
 
     console.log(
-      "[READY] Age-role panel enabled: ,age"
+      "[READY] Age roles: ,age"
     );
 
     console.log(
-      "[READY] Pronoun-role panel enabled: ,pronouns"
+      "[READY] Pronoun roles: ,pronouns"
     );
 
     console.log(
@@ -3100,15 +3831,19 @@ client.once(
     );
 
     console.log(
-      "[READY] Duplicate verification ticket handler removed."
-    );
-
-    console.log(
-      "[READY] Venmo and Chime payment links enabled."
-    );
-
-    console.log(
       "[READY] Payment duplicate prevention enabled."
+    );
+
+    console.log(
+      "[READY] Blacklist command enabled: ,r @user b reason"
+    );
+
+    console.log(
+      "[READY] Appeal panel enabled: ,appealpanel"
+    );
+
+    console.log(
+      "[READY] Appeal ticket button awaits tickets.js handler."
     );
   }
 );
@@ -3116,28 +3851,13 @@ client.once(
 // ============================================================
 // MAIN INTERACTION HANDLER
 // ============================================================
-//
-// tickets.js handles:
-// /ticketpanel
-// Ticket selects/forms
-// Claim/Close/Reopen/Delete
-// Create Verification Ticket
-//
-// index.js handles:
-// Self roles
-// Normal verification
-// Client role
-// /help, /question, /request
-// Question replies
-//
-// ============================================================
 
 client.on(
   Events.InteractionCreate,
   async interaction => {
 
     // ========================================================
-    // LEAVE ALL TICKET INTERACTIONS TO tickets.js
+    // TICKET INTERACTIONS OWNED BY tickets.js
     // ========================================================
 
     if (
@@ -3150,7 +3870,9 @@ client.on(
           "chuppys_ticket:"
         ) ||
         interaction.customId ===
-          VERIFY_TICKET_BUTTON_ID
+          VERIFY_TICKET_BUTTON_ID ||
+        interaction.customId ===
+          UNBLACKLIST_BUTTON_ID
       )
     ) {
       return;
@@ -3228,7 +3950,6 @@ client.on(
           embeds: [
             makeHelpEmbed()
           ],
-
           flags: EPHEMERAL
         });
 
@@ -3335,7 +4056,6 @@ client.on(
           embeds: [
             requestEmbed
           ],
-
           allowedMentions: {
             parse: []
           }
@@ -3351,7 +4071,7 @@ client.on(
       }
 
       // ====================================================
-      // NORMAL VERIFY BUTTON
+      // NORMAL VERIFICATION
       // ====================================================
 
       if (
@@ -3381,6 +4101,14 @@ client.on(
           return interaction.editReply({
             content:
               "I couldn't find your membership. Please try again."
+          });
+        }
+
+        if (await isBlacklisted(member)) {
+          return interaction.editReply({
+            content:
+              "You are blacklisted and cannot verify. " +
+              "Please request an unblacklist appeal."
           });
         }
 
@@ -3429,15 +4157,6 @@ client.on(
       }
 
       // ====================================================
-      // VERIFICATION TICKET BUTTON
-      // ====================================================
-      //
-      // NO HANDLER HERE.
-      // tickets.js handles this button exclusively.
-      //
-      // ====================================================
-
-      // ====================================================
       // CLIENT ROLE BUTTON
       // ====================================================
 
@@ -3468,6 +4187,13 @@ client.on(
           return interaction.editReply({
             content:
               "I couldn't find your server membership."
+          });
+        }
+
+        if (await isBlacklisted(member)) {
+          return interaction.editReply({
+            content:
+              "You cannot claim the client role while blacklisted."
           });
         }
 
@@ -3506,8 +4232,7 @@ client.on(
 
       if (
         interaction.isChatInputCommand() &&
-        interaction.commandName ===
-        "question"
+        interaction.commandName === "question"
       ) {
         if (
           interaction.channelId !==
@@ -3609,11 +4334,9 @@ client.on(
           embeds: [
             questionEmbed
           ],
-
           components: [
             buttons
           ],
-
           allowedMentions: {
             parse: []
           }
@@ -3663,9 +4386,7 @@ client.on(
           embeds: [
             ticketEmbed
           ],
-
           flags: EPHEMERAL,
-
           allowedMentions: {
             parse: []
           }
@@ -3896,7 +4617,6 @@ client.on(
             embeds: [
               responseEmbed
             ],
-
             allowedMentions: {
               parse: []
             }
@@ -4042,11 +4762,9 @@ client.on(
       await channel.send({
         content:
           `${member}`,
-
         embeds: [
           embed
         ],
-
         allowedMentions: {
           users: [
             member.id
@@ -4116,7 +4834,7 @@ client.on(
 // MESSAGE COMMANDS
 // ============================================================
 //
-// tickets.js handles:
+// tickets.js exclusively handles:
 // ,claim
 // ,forceclaim
 // ,close
@@ -4141,10 +4859,6 @@ client.on(
     const content =
       rawContent.toLowerCase();
 
-    // ========================================================
-    // LEAVE TICKET COMMANDS TO tickets.js
-    // ========================================================
-
     if (
       /^,(?:claim|forceclaim|close|reopen|delete)(?:\s|$)/i
         .test(rawContent)
@@ -4165,7 +4879,6 @@ client.on(
         await message.reply({
           content:
             `Hi ! ${AFK_RETURN_EMOJI}`,
-
           allowedMentions: {
             repliedUser: false
           }
@@ -4191,12 +4904,24 @@ client.on(
           content
         )
       ) {
-        const type =
-          ROLE_COMMANDS[content];
-
         await handleRolePanelCommand(
           message,
-          type
+          ROLE_COMMANDS[content]
+        );
+
+        return;
+      }
+
+      // ====================================================
+      // UNBLACKLIST APPEAL PANEL
+      // ====================================================
+
+      if (
+        content === ",appealpanel" ||
+        content === ",unblacklistpanel"
+      ) {
+        await handleUnblacklistPanelCommand(
+          message
         );
 
         return;
@@ -4232,11 +4957,9 @@ client.on(
             embeds: [
               makeClientEmbed()
             ],
-
             components: [
               makeClientButton()
             ],
-
             allowedMentions: {
               parse: []
             }
@@ -4250,7 +4973,10 @@ client.on(
               payload
             );
 
-            for (const duplicate of matching.values()) {
+            for (
+              const duplicate
+              of matching.values()
+            ) {
               if (
                 duplicate.id !== existing.id
               ) {
@@ -4263,7 +4989,6 @@ client.on(
               payload
             );
           }
-
         } finally {
           clientCommandLocks.delete(
             channelId
@@ -4312,11 +5037,8 @@ client.on(
             embeds: [
               makePromoterEmbed()
             ],
-
             content: "",
-
             components: [],
-
             allowedMentions: {
               parse: []
             }
@@ -4330,7 +5052,10 @@ client.on(
               payload
             );
 
-            for (const duplicate of matching.values()) {
+            for (
+              const duplicate
+              of matching.values()
+            ) {
               if (
                 duplicate.id !== existing.id
               ) {
@@ -4405,7 +5130,9 @@ client.on(
       }
 
       // ====================================================
-      // ,R @USER C / ,R @USER R
+      // ,R @USER C
+      // ,R @USER R
+      // ,R @USER B REASON
       // ====================================================
 
       if (
@@ -4413,6 +5140,51 @@ client.on(
           rawContent
         )
       ) {
+        const match =
+          rawContent.match(
+            /^,r\s+<@!?(\d{17,20})>\s+([crb])(?:\s+([\s\S]*))?$/i
+          );
+
+        if (!match) {
+          return message.reply({
+            content:
+              "**Usage:**\n" +
+              "`,r @user c` — Give Chuppys role\n" +
+              "`,r @user r` — Vouch reminder\n" +
+              "`,r @user b reason here` — Blacklist member",
+            allowedMentions: {
+              repliedUser: false
+            }
+          });
+        }
+
+        const targetId =
+          match[1];
+
+        const action =
+          match[2].toLowerCase();
+
+        const reason =
+          (match[3] || "").trim();
+
+        // ==================================================
+        // BLACKLIST
+        // ==================================================
+
+        if (action === "b") {
+          await handleBlacklistCommand(
+            message,
+            targetId,
+            reason
+          );
+
+          return;
+        }
+
+        // ==================================================
+        // ORIGINAL TICKET SUPPORT COMMANDS
+        // ==================================================
+
         if (
           !isTicketSupport(
             message.member
@@ -4422,23 +5194,6 @@ client.on(
             "Only Ticket Support can use this command."
           );
         }
-
-        const match =
-          rawContent.match(
-            /^,r\s+<@!?(\d+)>\s+([cr])$/i
-          );
-
-        if (!match) {
-          return message.reply(
-            "Usage: `,r @user c` or `,r @user r`"
-          );
-        }
-
-        const targetId =
-          match[1];
-
-        const action =
-          match[2].toLowerCase();
 
         const target =
           await message.guild.members.fetch(
@@ -4451,7 +5206,21 @@ client.on(
           );
         }
 
+        // ==================================================
+        // GIVE VERIFIED ROLE
+        // ==================================================
+
         if (action === "c") {
+          if (await isBlacklisted(target)) {
+            return message.reply({
+              content:
+                "This member is blacklisted and cannot be verified.",
+              allowedMentions: {
+                repliedUser: false
+              }
+            });
+          }
+
           if (
             target.roles.cache.has(
               CHUPPYS_ROLE_ID
@@ -4484,14 +5253,11 @@ client.on(
           await message.channel.send({
             content:
               `${target}`,
-
             embeds: [
               embed
             ],
-
             allowedMentions: {
               parse: [],
-
               users: [
                 target.id
               ]
@@ -4500,6 +5266,10 @@ client.on(
 
           return;
         }
+
+        // ==================================================
+        // VOUCH REMINDER
+        // ==================================================
 
         if (action === "r") {
           const embed =
@@ -4527,14 +5297,11 @@ client.on(
           await message.channel.send({
             content:
               `${target}`,
-
             embeds: [
               embed
             ],
-
             allowedMentions: {
               parse: [],
-
               users: [
                 target.id
               ]
@@ -4603,11 +5370,8 @@ client.on(
           embeds: [
             partnerEmbed
           ],
-
           content: "",
-
           components: [],
-
           allowedMentions: {
             parse: []
           }
@@ -4621,7 +5385,10 @@ client.on(
             payload
           );
 
-          for (const duplicate of matching.values()) {
+          for (
+            const duplicate
+            of matching.values()
+          ) {
             if (
               duplicate.id !== existing.id
             ) {
@@ -4671,11 +5438,8 @@ client.on(
           embeds: [
             makeModEmbed()
           ],
-
           content: "",
-
           components: [],
-
           allowedMentions: {
             parse: []
           }
@@ -4689,7 +5453,10 @@ client.on(
             payload
           );
 
-          for (const duplicate of matching.values()) {
+          for (
+            const duplicate
+            of matching.values()
+          ) {
             if (
               duplicate.id !== existing.id
             ) {
@@ -4774,14 +5541,10 @@ client.on(
             embeds: [
               sellerEmbed
             ],
-
             content: "",
-
             components: [],
-
             allowedMentions: {
               parse: [],
-
               roles: [
                 TICKET_SUPPORT_ROLE_ID
               ]
@@ -4796,7 +5559,10 @@ client.on(
               payload
             );
 
-            for (const duplicate of matching.values()) {
+            for (
+              const duplicate
+              of matching.values()
+            ) {
               if (
                 duplicate.id !== existing.id
               ) {
@@ -4851,31 +5617,33 @@ client.on(
       }
 
       // ====================================================
-      // ,PAY — DUPLICATE PREVENTION
-      // ====================================================
-      //
-      // Only one payment embed per channel.
-      //
-      // Other old embeds are removed automatically.
-      //
+      // ,PAY
       // ====================================================
 
       if (content === ",pay") {
         const channelId =
           message.channel.id;
 
-        if (paymentCommandLocks.has(channelId)) {
+        if (
+          paymentCommandLocks.has(
+            channelId
+          )
+        ) {
           return;
         }
 
-        paymentCommandLocks.add(channelId);
+        paymentCommandLocks.add(
+          channelId
+        );
 
         try {
           await sendPaymentEmbed(
             message.channel
           );
         } finally {
-          paymentCommandLocks.delete(channelId);
+          paymentCommandLocks.delete(
+            channelId
+          );
         }
 
         return;
@@ -4888,16 +5656,12 @@ client.on(
       const adminCommands = [
         "!nitro",
         ",nitro",
-
         "!decor",
         ",decor",
-
         "!boosties",
         ",boosties",
-
         "!sellers",
         ",sellers",
-
         "!staff",
         ",staff"
       ];
@@ -4990,11 +5754,8 @@ client.on(
       ) {
         await sendEmbedToChannel(
           message.guild,
-
           SELLERS_CHANNEL_ID,
-
           makeSellersEmbed(),
-
           "Sellers"
         );
 
@@ -5016,11 +5777,8 @@ client.on(
       ) {
         await sendEmbedToChannel(
           message.guild,
-
           STAFF_CHANNEL_ID,
-
           makeStaffEmbed(),
-
           "Staff"
         );
 
@@ -5073,7 +5831,6 @@ client.on(
         await channel.send({
           content:
             `${message.author}`,
-
           embeds: [
             embed
           ]
@@ -5135,7 +5892,6 @@ client.on(
       await message.reply({
         content:
           `Something went wrong: ${safeText(error.message)}`,
-
         allowedMentions: {
           parse: [],
           repliedUser: false
@@ -5235,38 +5991,46 @@ if (!TOKEN) {
 //
 // 1. Replace your existing index.js.
 //
-// 2. Keep these files:
+// 2. Keep:
 //    index.js
 //    tickets.js
 //    transactions.js
 //    vouch.js
 //    package.json
 //
-// 3. Run only one Render bot instance.
+// 3. Run only one Render instance.
 //
-// 4. Enable Guild Members and Message Content intents.
+// 4. Enable Guild Members intent.
 //
-// 5. Ensure tickets.js handles verification tickets.
+// 5. Enable Message Content intent.
 //
-// 6. Restart or redeploy Render.
+// 6. Make sure the bot's role is above
+//    the Blacklisted role and member roles.
 //
-// 7. Type ,pay in your admin commands channel.
+// 7. Set the Blacklisted role's channel
+//    permissions to restrict normal access.
 //
-// 8. The newest Payment Methods embed will be
-//    updated with all six payment methods.
+// 8. Allow Blacklisted members to view
+//    the channel containing the appeal panel.
 //
-// 9. Older matching payment embeds from this bot
-//    will be deleted if accessible.
+// 9. Redeploy Render.
 //
-// 10. Cash App, PayPal, Venmo and Chime
-//     keep their clickable link buttons.
+// 10. Blacklist with:
+//     ,r @user b reason here
 //
-// 11. No QR embed is sent.
+// 11. Post the appeal panel with:
+//     ,appealpanel
 //
-// 12. Repeating ,pay updates the same message.
+// 12. The appeal button requires the matching
+//     ticket handler in tickets.js.
 //
-// 13. If duplicates continue appearing, check for
-//     another running bot instance or another
-//     file handling the ,pay command.
+// 13. Existing ticket commands continue
+//     to be handled by tickets.js.
+//
+// 14. Existing /vouch commands continue
+//     to be handled by vouch.js.
+//
+// 15. Payment commands and all existing
+//     service commands remain available.
 //
 // ============================================================
