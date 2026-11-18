@@ -1,27 +1,96 @@
+
+"use strict";
+
 const {
   SlashCommandBuilder,
   EmbedBuilder,
-  PermissionsBitField
+  MessageFlags,
+  PermissionsBitField,
+  Events
 } = require("discord.js");
 
-// ==================================================
+// ============================================================
+// CHUPPYS VOUCH SYSTEM — DISCORD.JS V14 / RENDER
+// ============================================================
+//
+// RESTORED ORIGINAL VOUCH APPEARANCE:
+//
+// WHITE EMBED
+// NEW VOUCH
+// SELLER
+// BUYER
+// ITEMS PURCHASED
+// RATING
+// PROOF
+// THANK YOU MESSAGE
+// BEAR THUMBNAIL
+// LARGE PROOF IMAGE
+// TIMESTAMP
+//
+// PRESERVED:
+//
+// /vouch
+// Seller dropdown
+// Client role requirement
+// Personal vouch channel
+// Regular vouch channel
+// Seller ID mapping
+// Proof attachment
+// Rating from 1 to 5
+//
+// This file only handles /vouch.
+//
+// index.js continues handling:
+//
+// Vouch reactions
+// Vouch counters
+// Other slash commands
+//
+// ============================================================
+
+// ============================================================
+// CONFIGURATION
+// ============================================================
+
+const BRAND = ".gg/chuppys";
+
+const WHITE = 0xffffff;
+
+const EPHEMERAL = MessageFlags.Ephemeral;
+
+// ============================================================
 // VOUCH CHANNELS
-// ==================================================
+// ============================================================
 
-const PERSONAL_VOUCH_CHANNEL_ID = "1562227276051910676";
-const VOUCH_CHANNEL_ID = "1530811494168657980";
+const PERSONAL_VOUCH_CHANNEL_ID =
+  "1562227276051910676";
 
-const THANK_YOU_EMOJI = "<:uppyty:1561094713153429746>";
+const VOUCH_CHANNEL_ID =
+  "1530811494168657980";
 
-// ==================================================
+// ============================================================
+// VOUCH THUMBNAIL — ORIGINAL BEAR
+// ============================================================
+
+const VOUCH_EMOJI_ID =
+  "1561197586554036318";
+
+const VOUCH_EMOJI_URL =
+  `https://cdn.discordapp.com/emojis/${VOUCH_EMOJI_ID}.png?size=128&quality=lossless`;
+
+// index.js handles the bear reaction.
+// Do not react here a second time.
+
+// ============================================================
 // CLIENT ROLE REQUIREMENT
-// ==================================================
+// ============================================================
 
-const CLIENT_ROLE_ID = "1550373434301878282";
+const CLIENT_ROLE_ID =
+  "1550373434301878282";
 
-// ==================================================
-// SELLER ID MAPPING
-// ==================================================
+// ============================================================
+// SELLERS — ORIGINAL LIST PRESERVED
+// ============================================================
 
 const SELLERS = [
   {
@@ -29,92 +98,156 @@ const SELLERS = [
     name: "﹕𐔌・bunnii 〃・꒱",
     personal: true
   },
+
   {
     id: "1490962480963260466",
     name: "﹕𐔌・twxn 〃・꒱",
     personal: true
   },
+
   {
     id: "1192248188409749684",
     name: "﹕𐔌・angel 〃・꒱",
     personal: false
   },
+
   {
     id: "1079241163455873074",
     name: "﹕𐔌・felony 〃・꒱",
     personal: false
   },
+
   {
     id: "1032693136163622993",
     name: "﹕𐔌・cusi 〃・꒱",
     personal: false
   },
+
   {
     id: "1320199904219496530",
     name: "﹕𐔌・dav 〃・꒱",
     personal: false
   },
+
   {
     id: "952566845939023892",
     name: "﹕𐔌・momo 〃・꒱",
     personal: false
   },
+
   {
     id: "1473335012769267807",
     name: "﹕𐔌・kitako 〃・꒱",
     personal: false
   },
+
   {
     id: "1472856287527309313",
     name: "﹕𐔌・mira 〃・꒱",
     personal: false
   },
+
   {
     id: "1269188505935024141",
     name: "﹕𐔌・maya 〃・꒱",
     personal: false
   },
+
   {
     id: "1328450205774909441",
     name: "﹕𐔌・alex 〃・꒱",
     personal: false
   },
-    {
+
+  {
     id: "1475237851414401105",
     name: "﹕𐔌・replusive 〃・꒱",
     personal: false
   }
 ];
 
-// ==================================================
-// SELECT CHANNEL USING THE SELLER'S ACTUAL ID
-// ==================================================
+// ============================================================
+// SELLER LOOKUP
+// ============================================================
+
+function getSeller(sellerId) {
+  return SELLERS.find(
+    seller => seller.id === sellerId
+  ) || null;
+}
+
+// ============================================================
+// CHOOSE VOUCH CHANNEL
+// ============================================================
 
 function getVouchChannelId(sellerId) {
-  const selectedSeller = SELLERS.find(
-    seller => seller.id === sellerId
-  );
+  const seller = getSeller(sellerId);
 
-  if (!selectedSeller) {
-    throw new Error(`Unknown seller ID: ${sellerId}`);
+  if (!seller) {
+    throw new Error(
+      "That seller is not in the seller list."
+    );
   }
 
-  return selectedSeller.personal
+  return seller.personal
     ? PERSONAL_VOUCH_CHANNEL_ID
     : VOUCH_CHANNEL_ID;
 }
 
-// ==================================================
-// /VOUCH COMMAND
-// ==================================================
+// ============================================================
+// SAFE TEXT
+// ============================================================
+
+function safeText(value, max = 500) {
+  return String(value ?? "")
+    .replace(/@/g, "＠")
+    .trim()
+    .slice(0, max);
+}
+
+// ============================================================
+// EPHEMERAL RESPONSE HELPER
+// ============================================================
+
+async function replyPrivate(interaction, payload) {
+  const data =
+    typeof payload === "string"
+      ? { content: payload }
+      : payload;
+
+  if (interaction.deferred) {
+    return interaction.editReply(data);
+  }
+
+  if (interaction.replied) {
+    return interaction.followUp({
+      ...data,
+      flags: EPHEMERAL
+    });
+  }
+
+  return interaction.reply({
+    ...data,
+    flags: EPHEMERAL
+  });
+}
+
+// ============================================================
+// /VOUCH SLASH COMMAND
+// ============================================================
 
 const vouchCommand = new SlashCommandBuilder()
   .setName("vouch")
-  .setDescription("Leave a vouch for a seller.")
+  .setDescription(
+    "Leave a vouch for a seller."
+  )
+
   .addStringOption(option =>
     option
       .setName("seller")
-      .setDescription("Choose the seller you purchased from.")
+      .setDescription(
+        "Choose the seller you purchased from."
+      )
       .setRequired(true)
       .addChoices(
         ...SELLERS.map(seller => ({
@@ -123,31 +256,40 @@ const vouchCommand = new SlashCommandBuilder()
         }))
       )
   )
+
   .addIntegerOption(option =>
     option
       .setName("rating")
-      .setDescription("Rate your experience from 1 to 5.")
+      .setDescription(
+        "Rate your experience from 1 to 5."
+      )
       .setRequired(true)
       .setMinValue(1)
       .setMaxValue(5)
   )
+
   .addStringOption(option =>
     option
       .setName("order")
-      .setDescription("Describe what you purchased.")
+      .setDescription(
+        "Describe what you purchased."
+      )
       .setRequired(true)
       .setMaxLength(500)
   )
+
   .addAttachmentOption(option =>
     option
       .setName("proof")
-      .setDescription("Upload an image as proof of your order.")
+      .setDescription(
+        "Upload an image as proof of your order."
+      )
       .setRequired(true)
   );
 
-// ==================================================
-// REGISTER /VOUCH
-// ==================================================
+// ============================================================
+// REGISTER /VOUCH WITHOUT REPLACING OTHER COMMANDS
+// ============================================================
 
 async function registerVouch(client) {
   try {
@@ -156,313 +298,477 @@ async function registerVouch(client) {
       process.env.GUILD_ID;
 
     if (!guildId) {
-      console.error("[VOUCH] Missing DISCORD_GUILD_ID.");
+      console.error(
+        "[VOUCH] DISCORD_GUILD_ID is missing."
+      );
+
       return;
     }
 
-    await client.application.fetch();
+    const guild =
+      await client.guilds.fetch(guildId);
 
-    const existingCommands =
-      await client.application.commands.fetch({ guildId });
+    const commands =
+      await guild.commands.fetch();
 
-    // Preserve all other slash commands.
-    const commands = existingCommands
-      .filter(command => command.name !== "vouch")
-      .map(command => command.toJSON());
+    const existing =
+      commands.find(
+        command => command.name === "vouch"
+      );
 
-    commands.push(vouchCommand.toJSON());
+    if (existing) {
+      await guild.commands.edit(
+        existing.id,
+        vouchCommand.toJSON()
+      );
 
-    await client.application.commands.set(commands, guildId);
+      console.log(
+        "[VOUCH] Existing /vouch command updated."
+      );
+    } else {
+      await guild.commands.create(
+        vouchCommand.toJSON()
+      );
 
-    console.log("[VOUCH] /vouch registered successfully.");
-    console.log("[VOUCH] Seller choices:", SELLERS.length);
-    console.log("[VOUCH] Client role requirement enabled.");
+      console.log(
+        "[VOUCH] /vouch command registered."
+      );
+    }
+
+    console.log(
+      `[VOUCH] ${SELLERS.length} sellers available.`
+    );
+
+    console.log(
+      "[VOUCH] White embed style enabled."
+    );
+
+    console.log(
+      "[VOUCH] Client role requirement enabled."
+    );
+
+    console.log(
+      "[VOUCH] Personal and regular vouch channels enabled."
+    );
+
   } catch (error) {
-    console.error("[VOUCH] Registration failed:", error);
+    console.error(
+      "[VOUCH] Registration failed:",
+      error
+    );
   }
 }
 
-// ==================================================
-// CLIENT ROLE CHECK
-// ==================================================
+// ============================================================
+// CHECK CLIENT ROLE
+// ============================================================
 
-async function hasClientRole(interaction) {
-  if (!interaction.inGuild()) return false;
+async function getClientMember(interaction) {
+  if (!interaction.inGuild()) {
+    return null;
+  }
 
-  const member = await interaction.guild.members
-    .fetch(interaction.user.id)
-    .catch(error => {
-      console.error("[VOUCH] Could not fetch member:", error);
-      return null;
-    });
-
-  if (!member) return false;
-
-  return member.roles.cache.has(CLIENT_ROLE_ID);
+  return interaction.guild.members.fetch({
+    user: interaction.user.id,
+    force: true
+  });
 }
 
-// ==================================================
-// CLIENT ROLE DENIAL MESSAGE
-// ==================================================
+// ============================================================
+// CLIENT ROLE DENIAL EMBED
+// ============================================================
 
-async function denyNonClient(interaction) {
-  const embed = new EmbedBuilder()
-    .setColor("#FFFFFF")
+function makeClientRequiredEmbed() {
+  return new EmbedBuilder()
+    .setColor(WHITE)
     .setDescription(
       "You need the **client** role to submit a vouch!\n\n" +
       "Thank you for shopping at **.gg/chuppys**.\n\n" +
-      "Please visit the client verification message and click the " +
-      "client button to receive your role.\n\n" +
+      "Please visit the client verification message " +
+      "and click the **client** button to receive your role.\n\n" +
       "Once you have the role, you can use `/vouch` successfully."
     )
-    .setFooter({ text: ".gg/chuppys" });
-
-  const reply = {
-    embeds: [embed],
-    ephemeral: true
-  };
-
-  if (interaction.replied || interaction.deferred) {
-    return interaction.followUp(reply);
-  }
-
-  return interaction.reply(reply);
+    .setFooter({
+      text: BRAND
+    });
 }
 
-// ==================================================
-// SUBMIT VOUCH
-// ==================================================
+// ============================================================
+// IMAGE VALIDATION
+// ============================================================
+
+function isValidProof(proof) {
+  if (!proof?.url) {
+    return false;
+  }
+
+  const contentType =
+    proof.contentType || "";
+
+  const filename =
+    proof.name || "";
+
+  return (
+    contentType.startsWith("image/") ||
+    /\.(png|jpg|jpeg|gif|webp)$/i.test(filename)
+  );
+}
+
+// ============================================================
+// BUILD ORIGINAL WHITE VOUCH EMBED
+// ============================================================
+
+function makeVouchEmbed({
+  sellerId,
+  buyer,
+  rating,
+  order,
+  proof
+}) {
+  const proofFilename =
+    safeText(
+      proof.name || "Purchase proof",
+      200
+    );
+
+  const description =
+    `**seller:** <@${sellerId}>\n` +
+    `**buyer:** <@${buyer.id}>\n` +
+    `**items purchased:** ${safeText(order)}\n` +
+    `**rating:** ${rating}/5\n` +
+    `**proof:** 📎 ${proofFilename}\n\n` +
+    "*thank you for vouching! shop again ♡*";
+
+  return new EmbedBuilder()
+    .setColor(WHITE)
+    .setTitle("NEW VOUCH")
+    .setDescription(description)
+    .setThumbnail(VOUCH_EMOJI_URL)
+    .setImage(proof.url)
+    .setTimestamp();
+}
+
+// ============================================================
+// PROCESS /VOUCH
+// ============================================================
 
 async function submitVouch(interaction) {
   try {
+
+    // ========================================================
+    // SERVER CHECK
+    // ========================================================
+
     if (!interaction.inGuild()) {
-      return interaction.reply({
-        content: "You can only submit a vouch inside the server.",
-        ephemeral: true
-      });
+      return replyPrivate(
+        interaction,
+        "You can only submit a vouch inside the server."
+      );
     }
 
-    // ==================================================
-    // REQUIRE CLIENT ROLE
-    // ==================================================
+    // Acknowledge promptly before making Discord API calls.
 
-    const member = await interaction.guild.members
-      .fetch(interaction.user.id)
-      .catch(error => {
-        console.error("[VOUCH] Member fetch failed:", error);
-        return null;
-      });
+    await interaction.deferReply({
+      flags: EPHEMERAL
+    });
+
+    // ========================================================
+    // CLIENT ROLE CHECK
+    // ========================================================
+
+    const member =
+      await getClientMember(interaction);
 
     if (!member) {
-      return interaction.reply({
-        content:
-          "I couldn't verify your server membership. Please try again.",
-        ephemeral: true
-      });
+      throw new Error(
+        "I couldn't verify your server membership."
+      );
     }
 
-    if (!member.roles.cache.has(CLIENT_ROLE_ID)) {
+    if (
+      !member.roles.cache.has(CLIENT_ROLE_ID)
+    ) {
       console.log(
-        `[VOUCH] Blocked non-client: ${interaction.user.tag}`
+        `[VOUCH] Non-client blocked: ${interaction.user.tag}`
       );
 
-      return denyNonClient(interaction);
+      return replyPrivate(
+        interaction,
+        {
+          embeds: [
+            makeClientRequiredEmbed()
+          ]
+        }
+      );
     }
 
-    // ==================================================
-    // GET VOUCH INFORMATION
-    // ==================================================
+    // ========================================================
+    // GET COMMAND OPTIONS
+    // ========================================================
 
-    const sellerId = interaction.options.getString("seller");
-    const rating = interaction.options.getInteger("rating");
-    const order = interaction.options.getString("order");
-    const proof = interaction.options.getAttachment("proof");
+    const sellerId =
+      interaction.options.getString(
+        "seller",
+        true
+      );
 
-    const selectedSeller = SELLERS.find(
-      seller => seller.id === sellerId
-    );
+    const rating =
+      interaction.options.getInteger(
+        "rating",
+        true
+      );
 
-    console.log(`[VOUCH] Buyer: ${interaction.user.tag}`);
-    console.log(`[VOUCH] Selected seller ID: ${sellerId}`);
-    console.log(
-      `[VOUCH] Selected seller name: ${
-        selectedSeller?.name || "UNKNOWN"
-      }`
-    );
+    const order =
+      interaction.options.getString(
+        "order",
+        true
+      );
 
-    if (!selectedSeller) {
-      return interaction.reply({
-        content: "That seller is not in the seller list.",
-        ephemeral: true
-      });
+    const proof =
+      interaction.options.getAttachment(
+        "proof",
+        true
+      );
+
+    // ========================================================
+    // VALIDATE SELLER
+    // ========================================================
+
+    const seller =
+      getSeller(sellerId);
+
+    if (!seller) {
+      throw new Error(
+        "That seller is not in the seller list."
+      );
     }
 
-    if (!order || !order.trim()) {
-      return interaction.reply({
-        content: "Please describe what you purchased.",
-        ephemeral: true
-      });
+    // ========================================================
+    // VALIDATE RATING
+    // ========================================================
+
+    if (
+      !Number.isInteger(rating) ||
+      rating < 1 ||
+      rating > 5
+    ) {
+      throw new Error(
+        "Rating must be between 1 and 5."
+      );
     }
 
-    if (!proof || !proof.contentType?.startsWith("image/")) {
-      return interaction.reply({
-        content: "Please upload an image as your proof.",
-        ephemeral: true
-      });
+    // ========================================================
+    // VALIDATE ORDER
+    // ========================================================
+
+    if (
+      !order ||
+      !order.trim() ||
+      order.length > 500
+    ) {
+      throw new Error(
+        "Please enter a valid order description."
+      );
     }
 
-    // ==================================================
-    // RESOLVE DESTINATION CHANNEL
-    // ==================================================
+    // ========================================================
+    // VALIDATE PROOF
+    // ========================================================
 
-    const channelId = getVouchChannelId(sellerId);
+    if (!isValidProof(proof)) {
+      throw new Error(
+        "Please attach a PNG, JPG, GIF, or WEBP image as proof."
+      );
+    }
 
-    console.log(`[VOUCH] Destination channel: ${channelId}`);
+    // ========================================================
+    // PREVENT SELF-VOUCHING
+    // ========================================================
+
+    if (
+      sellerId === interaction.user.id
+    ) {
+      throw new Error(
+        "You cannot submit a vouch for yourself."
+      );
+    }
+
+    // ========================================================
+    // FIND VOUCH CHANNEL
+    // ========================================================
+
+    const channelId =
+      getVouchChannelId(sellerId);
 
     const channel =
-      await interaction.client.channels.fetch(channelId);
+      await interaction.client.channels.fetch(
+        channelId
+      );
 
     if (
       !channel ||
       !channel.isTextBased() ||
       !channel.isSendable()
     ) {
-      console.error(`[VOUCH] Destination unavailable: ${channelId}`);
-
-      return interaction.reply({
-        content: "I couldn't access the correct vouch channel.",
-        ephemeral: true
-      });
+      throw new Error(
+        "I couldn't access the correct vouch channel."
+      );
     }
 
-    // ==================================================
+    // ========================================================
     // CHECK BOT PERMISSIONS
-    // ==================================================
+    // ========================================================
 
-    const botMember = await interaction.guild.members.fetchMe();
-    const permissions = channel.permissionsFor(botMember);
+    const botMember =
+      await interaction.guild.members.fetchMe();
+
+    const permissions =
+      channel.permissionsFor(botMember);
+
+    const requiredPermissions = [
+      PermissionsBitField.Flags.ViewChannel,
+
+      PermissionsBitField.Flags.SendMessages,
+
+      PermissionsBitField.Flags.EmbedLinks,
+
+      PermissionsBitField.Flags.AttachFiles
+    ];
 
     if (
       !permissions ||
-      !permissions.has([
-        PermissionsBitField.Flags.ViewChannel,
-        PermissionsBitField.Flags.SendMessages,
-        PermissionsBitField.Flags.EmbedLinks,
-        PermissionsBitField.Flags.ReadMessageHistory,
-        PermissionsBitField.Flags.AddReactions
-      ])
+      !permissions.has(requiredPermissions)
     ) {
-      return interaction.reply({
-        content:
-          "I need permission to view the channel, send messages and embeds, read message history, and add reactions.",
-        ephemeral: true
-      });
+      throw new Error(
+        "I need View Channel, Send Messages, " +
+        "Embed Links, and Attach Files permissions " +
+        "in the vouch channel."
+      );
     }
 
-    // ==================================================
-    // FETCH SELLER
-    // ==================================================
+    // ========================================================
+    // BUILD ORIGINAL WHITE EMBED
+    // ========================================================
 
-    const sellerUser =
-      await interaction.client.users.fetch(sellerId);
+    const embed =
+      makeVouchEmbed({
+        sellerId,
 
-    // ==================================================
-    // CREATE VOUCH EMBED
-    // ==================================================
+        buyer: interaction.user,
 
-    const embed = new EmbedBuilder()
-      .setColor(0xffb6d9)
-      .setTitle("NEW VOUCH")
-      .setDescription(
-        `Thank you for leaving a vouch!\n\n` +
-        `**Seller:** ${sellerUser}\n` +
-        `**Buyer:** ${interaction.user}\n` +
-        `**Rating:** ${"⭐".repeat(rating)} (${rating}/5)\n` +
-        `**Order:** ${order.trim()}`
-      )
-      .setImage(proof.url)
-      .setFooter({
-        text: `Vouch submitted by ${interaction.user.username}`
-      })
-      .setTimestamp();
+        rating,
 
-    // ==================================================
+        order,
+
+        proof
+      });
+
+    // ========================================================
     // SEND VOUCH
-    // ==================================================
+    // ========================================================
 
-    const vouchMessage = await channel.send({
-      embeds: [embed],
-      allowedMentions: {
-        users: [sellerId],
-        parse: []
-      }
-    });
+    const vouchMessage =
+      await channel.send({
+        embeds: [
+          embed
+        ],
+
+        allowedMentions: {
+          parse: []
+        }
+      });
 
     console.log(
-      `[VOUCH] Successfully sent message ${vouchMessage.id} ` +
-      `to channel ${channelId}`
+      `[VOUCH] Vouch posted: ${vouchMessage.id}`
     );
 
-    // ==================================================
-    // ADD THANK-YOU REACTION
-    // ==================================================
+    console.log(
+      `[VOUCH] Buyer: ${interaction.user.id}`
+    );
 
-    try {
-      await vouchMessage.react(THANK_YOU_EMOJI);
-    } catch (error) {
-      console.error("[VOUCH] Reaction failed:", error.message);
-    }
+    console.log(
+      `[VOUCH] Seller: ${sellerId}`
+    );
 
-    // ==================================================
+    console.log(
+      `[VOUCH] Channel: ${channelId}`
+    );
+
+    // ========================================================
     // SUCCESS RESPONSE
-    // ==================================================
+    // ========================================================
 
-    return interaction.reply({
-      content:
-        `Your vouch for ${selectedSeller.name} was submitted successfully!`,
-      ephemeral: true
-    });
+    return replyPrivate(
+      interaction,
+      `Your vouch for ${seller.name} was submitted successfully! ♡`
+    );
 
   } catch (error) {
-    console.error("[VOUCH] Submission failed:", error);
+    console.error(
+      "[VOUCH] Submission failed:",
+      error
+    );
 
-    const reply = {
-      content:
-        "Something went wrong submitting your vouch. Please try again later.",
-      ephemeral: true
-    };
-
-    if (interaction.replied || interaction.deferred) {
-      return interaction.followUp(reply).catch(() => {});
-    }
-
-    return interaction.reply(reply).catch(() => {});
+    return replyPrivate(
+      interaction,
+      {
+        content:
+          "Your vouch could not be submitted.\n\n" +
+          safeText(error.message, 700)
+      }
+    ).catch(console.error);
   }
 }
 
-// ==================================================
-// CONNECT TO THE BOT
-// ==================================================
+// ============================================================
+// CONNECT VOUCH SYSTEM TO BOT
+// ============================================================
 
-module.exports = function (client) {
-  client.once("clientReady", async () => {
-    await registerVouch(client);
-  });
+module.exports = function setupVouch(client) {
 
-  client.on("interactionCreate", async interaction => {
-    if (!interaction.isChatInputCommand()) return;
-    if (interaction.commandName !== "vouch") return;
+  // ========================================================
+  // REGISTER COMMAND ON READY
+  // ========================================================
 
-    console.log("[VOUCH] /vouch interaction received.");
-
-    // Check client role before processing the vouch.
-    const allowed = await hasClientRole(interaction);
-
-    if (!allowed) {
-      await denyNonClient(interaction);
-      return;
+  client.once(
+    Events.ClientReady,
+    async () => {
+      await registerVouch(client);
     }
+  );
 
-    await submitVouch(interaction);
-  });
+  // ========================================================
+  // HANDLE /VOUCH INTERACTION
+  // ========================================================
+
+  client.on(
+    Events.InteractionCreate,
+    async interaction => {
+      if (
+        !interaction.isChatInputCommand()
+      ) {
+        return;
+      }
+
+      if (
+        interaction.commandName !== "vouch"
+      ) {
+        return;
+      }
+
+      console.log(
+        "[VOUCH] /vouch interaction received."
+      );
+
+      await submitVouch(interaction);
+    }
+  );
+
+  console.log(
+    "[VOUCH] Chuppys Vouch System loaded."
+  );
 };
+
+// ============================================================
+// END OF VOUCH.JS
+// ============================================================
