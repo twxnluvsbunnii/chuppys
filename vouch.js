@@ -2,44 +2,70 @@
 "use strict";
 
 // ============================================================
-// CHUPPYS VOUCH SYSTEM — DISCORD.JS V14 / RENDER
+// CHUPPYS VOUCH SYSTEM
+// DISCORD.JS V14 / RENDER
+// COMPLETE REPLACEMENT VOUCH.JS
 // ============================================================
 //
-// VOUCH TYPES:
-// - Market
-// - Giveaway
-// - Invite Challenge
+// VOUCH CATEGORY IS SELECTED FIRST:
 //
-// CUSTOM EMOJI:
-// <:zymochadance:1565501941675462719>
+// /vouch market
+// /vouch giveaway
+// /vouch invite
 //
-// MARKET:
-// - Purchase
-// - Cash Out
-// - Items purchased/cashed out
-// - bunnii and twxn personal channel
-// - Other sellers regular market channel
+// MARKET VOUCH:
+// - All original 12 sellers
+// - Required Purchase / Cash Out selection
+// - Required items description
+// - Required rating 1–5
+// - Required image proof
+// - bunnii/twxn -> personal vouch channel
+// - Other sellers -> regular market channel
 //
-// GIVEAWAY:
+// GIVEAWAY VOUCH:
 // - Only bunnii and twxn
-// - Separate giveaway vouch channel
+// - Required rating 1–5
+// - Required image proof
+// - No items purchased field
+// - Separate giveaway channel
 //
-// INVITE CHALLENGE:
-// - Separate invite challenge vouch channel
+// INVITE CHALLENGE VOUCH:
+// - Only bunnii and twxn
+// - Required rating 1–5
+// - Required image proof
+// - No items purchased field
+// - Separate invite challenge channel
 //
-// PRESERVED:
-// - Original sellers
-// - Client role check
-// - White embeds
+// ALL VOUCH EMBEDS:
+// - White color
+// - NEW VOUCH title
+// - Seller/host mention
+// - Buyer/person who vouched mention
+// - Vouch type
+// - Custom zymochadance emoji
+// - Rating
+// - Proof filename
 // - Original bear thumbnail
-// - Rating 1–5
-// - Required proof image
 // - Large proof image
 // - Thank-you message
-// - Self-vouch protection
-// - Private responses
+// - Timestamp
 //
-// Counters and reactions handled by index.js.
+// PROTECTION:
+// - Client role required
+// - Self-vouch prevention
+// - Valid seller/host validation
+// - Valid rating validation
+// - Required image proof
+// - Bot permission checks
+// - Private success/error responses
+//
+// index.js continues handling:
+// - Vouch reactions
+// - Vouch counters
+// - Forwarded vouch counting
+// - Duplicate counting protection
+//
+// This module does not increment counters directly.
 //
 // ============================================================
 // IMPORTS
@@ -50,37 +76,39 @@ const {
   EmbedBuilder,
   MessageFlags,
   PermissionsBitField,
-  Events,
-  ActionRowBuilder,
-  StringSelectMenuBuilder,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle
+  Events
 } = require("discord.js");
-
-const {
-  randomBytes
-} = require("node:crypto");
 
 // ============================================================
 // CONFIGURATION
 // ============================================================
 
 const BRAND = ".gg/chuppys";
+
 const WHITE = 0xffffff;
+
 const EPHEMERAL = MessageFlags.Ephemeral;
 
-const EMOJI =
+// ============================================================
+// CUSTOM VOUCH EMOJI
+// ============================================================
+
+const VOUCH_EMOJI =
   "<:zymochadance:1565501941675462719>";
 
-const MENU_EMOJI = {
-  id: "1565501941675462719",
-  name: "zymochadance",
-  animated: false
-};
+// ============================================================
+// ORIGINAL BEAR THUMBNAIL
+// ============================================================
 
-const BEAR =
-  "https://cdn.discordapp.com/emojis/1561197586554036318.png?size=128&quality=lossless";
+const BEAR_EMOJI_ID =
+  "1561197586554036318";
+
+const BEAR_THUMBNAIL_URL =
+  `https://cdn.discordapp.com/emojis/${BEAR_EMOJI_ID}.png?size=128&quality=lossless`;
+
+// ============================================================
+// CLIENT ROLE
+// ============================================================
 
 const CLIENT_ROLE_ID =
   "1550373434301878282";
@@ -89,15 +117,39 @@ const CLIENT_ROLE_ID =
 // VOUCH CHANNELS
 // ============================================================
 
+// Market vouches for bunnii and twxn.
+
+const PERSONAL_VOUCH_CHANNEL_ID =
+  "1562227276051910676";
+
+// Market vouches for other sellers.
+
+const MARKET_VOUCH_CHANNEL_ID =
+  "1530811494168657980";
+
+// Giveaway vouches.
+
+const GIVEAWAY_VOUCH_CHANNEL_ID =
+  "1572974320781885450";
+
+// Invite Challenge vouches.
+
+const INVITE_VOUCH_CHANNEL_ID =
+  "1572972324930724041";
+
+// ============================================================
+// CHANNEL EXPORT CONFIGURATION
+// ============================================================
+
 const CHANNELS = Object.freeze({
-  personal: "1562227276051910676",
-  market: "1530811494168657980",
-  giveaway: "1572974320781885450",
-  invite: "1572972324930724041"
+  personal: PERSONAL_VOUCH_CHANNEL_ID,
+  market: MARKET_VOUCH_CHANNEL_ID,
+  giveaway: GIVEAWAY_VOUCH_CHANNEL_ID,
+  invite: INVITE_VOUCH_CHANNEL_ID
 });
 
 // ============================================================
-// SELLERS — ORIGINAL LIST
+// ORIGINAL SELLER LIST — ALL PRESERVED
 // ============================================================
 
 const SELLERS = [
@@ -106,56 +158,67 @@ const SELLERS = [
     name: "﹕𐔌・bunnii 〃・꒱",
     personal: true
   },
+
   {
     id: "1490962480963260466",
     name: "﹕𐔌・twxn 〃・꒱",
     personal: true
   },
+
   {
     id: "1192248188409749684",
     name: "﹕𐔌・angel 〃・꒱",
     personal: false
   },
+
   {
     id: "1079241163455873074",
     name: "﹕𐔌・felony 〃・꒱",
     personal: false
   },
+
   {
     id: "1032693136163622993",
     name: "﹕𐔌・cusi 〃・꒱",
     personal: false
   },
+
   {
     id: "1320199904219496530",
     name: "﹕𐔌・dav 〃・꒱",
     personal: false
   },
+
   {
     id: "952566845939023892",
     name: "﹕𐔌・momo 〃・꒱",
     personal: false
   },
+
   {
     id: "1473335012769267807",
     name: "﹕𐔌・kitako 〃・꒱",
     personal: false
   },
+
   {
     id: "1472856287527309313",
     name: "﹕𐔌・mira 〃・꒱",
     personal: false
   },
+
   {
     id: "1269188505935024141",
     name: "﹕𐔌・maya 〃・꒱",
     personal: false
   },
+
   {
     id: "1328450205774909441",
     name: "﹕𐔌・alex 〃・꒱",
     personal: false
   },
+
   {
     id: "1475237851414401105",
     name: "﹕𐔌・replusive 〃・꒱",
@@ -164,38 +227,58 @@ const SELLERS = [
 ];
 
 // ============================================================
-// INTERACTION IDS
+// GIVEAWAY AND INVITE HOSTS
+// ============================================================
+//
+// Only bunnii and twxn appear in these selections.
+//
 // ============================================================
 
-const TYPE_ID =
-  "chuppys_vouch_type:";
-
-const MARKET_ID =
-  "chuppys_vouch_market:";
-
-const MODAL_ID =
-  "chuppys_vouch_order:";
+const SPECIAL_HOSTS =
+  SELLERS.filter(seller => seller.personal);
 
 // ============================================================
-// SESSIONS
+// VOUCH TYPES
 // ============================================================
 
-const sessions = new Map();
+const VOUCH_TYPES = Object.freeze({
+  MARKET: "market",
+  GIVEAWAY: "giveaway",
+  INVITE: "invite"
+});
 
-const SESSION_MS =
-  10 * 60 * 1000;
+const MARKET_TRANSACTIONS = Object.freeze({
+  PURCHASE: "purchase",
+  CASHOUT: "cashout"
+});
 
 // ============================================================
-// HELPERS
+// SELLER LOOKUP
 // ============================================================
 
-function getSeller(id) {
-  return SELLERS.find(
-    seller => seller.id === id
-  ) || null;
+function getSeller(sellerId) {
+  return (
+    SELLERS.find(
+      seller => seller.id === sellerId
+    ) || null
+  );
 }
 
-function safe(value, max = 500) {
+// ============================================================
+// SPECIAL HOST LOOKUP
+// ============================================================
+
+function isSpecialHost(sellerId) {
+  return SPECIAL_HOSTS.some(
+    seller => seller.id === sellerId
+  );
+}
+
+// ============================================================
+// SAFE TEXT
+// ============================================================
+
+function safeText(value, max = 500) {
   return String(value ?? "")
     .replace(/@/g, "＠")
     .replace(/</g, "‹")
@@ -205,443 +288,369 @@ function safe(value, max = 500) {
 }
 
 // ============================================================
-// CHANNEL ROUTING
+// PRIVATE RESPONSE HELPER
 // ============================================================
 
-function destination(sellerId, type) {
+async function replyPrivate(
+  interaction,
+  payload
+) {
+  const data =
+    typeof payload === "string"
+      ? { content: payload }
+      : payload;
+
+  if (interaction.deferred) {
+    return interaction.editReply(data);
+  }
+
+  if (interaction.replied) {
+    return interaction.followUp({
+      ...data,
+      flags: EPHEMERAL,
+      allowedMentions: {
+        parse: []
+      }
+    });
+  }
+
+  return interaction.reply({
+    ...data,
+    flags: EPHEMERAL,
+    allowedMentions: {
+      parse: []
+    }
+  });
+}
+
+// ============================================================
+// IMAGE PROOF VALIDATION
+// ============================================================
+
+function isValidProof(proof) {
+  if (!proof?.url) {
+    return false;
+  }
+
+  const contentType =
+    proof.contentType || "";
+
+  const filename =
+    proof.name || "";
+
+  return (
+    contentType.startsWith("image/") ||
+    /\.(png|jpg|jpeg|gif|webp)$/i.test(filename)
+  );
+}
+
+// ============================================================
+// CHOOSE CORRECT VOUCH CHANNEL
+// ============================================================
+
+function getVouchChannelId(
+  sellerId,
+  vouchType
+) {
   const seller =
     getSeller(sellerId);
 
   if (!seller) {
     throw new Error(
-      "This seller is not available."
+      "That seller is not in the seller list."
     );
   }
 
-  if (type === "giveaway") {
-    if (!seller.personal) {
+  // ========================================================
+  // MARKET VOUCH
+  // ========================================================
+
+  if (
+    vouchType === VOUCH_TYPES.MARKET
+  ) {
+    return seller.personal
+      ? PERSONAL_VOUCH_CHANNEL_ID
+      : MARKET_VOUCH_CHANNEL_ID;
+  }
+
+  // ========================================================
+  // GIVEAWAY VOUCH
+  // ========================================================
+
+  if (
+    vouchType === VOUCH_TYPES.GIVEAWAY
+  ) {
+    if (!isSpecialHost(sellerId)) {
       throw new Error(
-        "Giveaway vouches are only for bunnii and twxn."
+        "Giveaway vouches can only be submitted " +
+        "for bunnii or twxn."
       );
     }
 
-    return CHANNELS.giveaway;
+    return GIVEAWAY_VOUCH_CHANNEL_ID;
   }
 
-  if (type === "invite") {
-    return CHANNELS.invite;
-  }
+  // ========================================================
+  // INVITE CHALLENGE VOUCH
+  // ========================================================
 
-  if (type === "market") {
-    return seller.personal
-      ? CHANNELS.personal
-      : CHANNELS.market;
+  if (
+    vouchType === VOUCH_TYPES.INVITE
+  ) {
+    if (!isSpecialHost(sellerId)) {
+      throw new Error(
+        "Invite Challenge vouches can only be " +
+        "submitted for bunnii or twxn."
+      );
+    }
+
+    return INVITE_VOUCH_CHANNEL_ID;
   }
 
   throw new Error(
-    "Invalid vouch type."
+    "Invalid vouch category."
   );
 }
 
 // ============================================================
-// /VOUCH COMMAND
+// SELLER OPTION CHOICES
 // ============================================================
 
-const command =
+function sellerChoices(sellers) {
+  return sellers.map(seller => ({
+    name: seller.name,
+    value: seller.id
+  }));
+}
+
+// ============================================================
+// /VOUCH SLASH COMMAND
+// ============================================================
+//
+// Discord subcommands make the category selection
+// happen FIRST.
+//
+// User types:
+//
+// /vouch
+//
+// Discord displays:
+//
+// market
+// giveaway
+// invite
+//
+// Each category has its own required options.
+//
+// ============================================================
+
+const vouchCommand =
   new SlashCommandBuilder()
     .setName("vouch")
     .setDescription(
-      "Leave a Market, Giveaway, or Invite Challenge vouch."
+      "Submit a Chuppys Market, Giveaway, or Invite Challenge vouch."
     )
-    .addStringOption(option =>
-      option
-        .setName("seller")
+
+    // ======================================================
+    // /VOUCH MARKET
+    // ======================================================
+
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName("market")
         .setDescription(
-          "Choose who you are vouching for."
+          "Vouch for a Market Purchase or Cash Out."
         )
-        .setRequired(true)
-        .addChoices(
-          ...SELLERS.map(seller => ({
-            name: seller.name,
-            value: seller.id
-          }))
+
+        // All 12 sellers.
+
+        .addStringOption(option =>
+          option
+            .setName("seller")
+            .setDescription(
+              "Choose the seller you purchased from or cashed out with."
+            )
+            .setRequired(true)
+            .addChoices(
+              ...sellerChoices(SELLERS)
+            )
+        )
+
+        // Required Purchase / Cash Out.
+
+        .addStringOption(option =>
+          option
+            .setName("transaction")
+            .setDescription(
+              "Choose Purchase or Cash Out."
+            )
+            .setRequired(true)
+            .addChoices(
+              {
+                name: "Purchase",
+                value: MARKET_TRANSACTIONS.PURCHASE
+              },
+              {
+                name: "Cash Out",
+                value: MARKET_TRANSACTIONS.CASHOUT
+              }
+            )
+        )
+
+        // Required item description.
+
+        .addStringOption(option =>
+          option
+            .setName("items")
+            .setDescription(
+              "Type what you purchased or cashed out."
+            )
+            .setRequired(true)
+            .setMinLength(1)
+            .setMaxLength(500)
+        )
+
+        // Required rating.
+
+        .addIntegerOption(option =>
+          option
+            .setName("rating")
+            .setDescription(
+              "Rate your experience from 1 to 5."
+            )
+            .setRequired(true)
+            .setMinValue(1)
+            .setMaxValue(5)
+        )
+
+        // Required proof.
+
+        .addAttachmentOption(option =>
+          option
+            .setName("proof")
+            .setDescription(
+              "Upload a screenshot of your purchase or cash out."
+            )
+            .setRequired(true)
         )
     )
-    .addIntegerOption(option =>
-      option
-        .setName("rating")
+
+    // ======================================================
+    // /VOUCH GIVEAWAY
+    // ======================================================
+
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName("giveaway")
         .setDescription(
-          "Rate your experience from 1 to 5."
+          "Vouch for a giveaway hosted by bunnii or twxn."
         )
-        .setRequired(true)
-        .setMinValue(1)
-        .setMaxValue(5)
+
+        // Only bunnii and twxn.
+
+        .addStringOption(option =>
+          option
+            .setName("host")
+            .setDescription(
+              "Choose bunnii or twxn."
+            )
+            .setRequired(true)
+            .addChoices(
+              ...sellerChoices(SPECIAL_HOSTS)
+            )
+        )
+
+        // Required rating.
+
+        .addIntegerOption(option =>
+          option
+            .setName("rating")
+            .setDescription(
+              "Rate your giveaway experience from 1 to 5."
+            )
+            .setRequired(true)
+            .setMinValue(1)
+            .setMaxValue(5)
+        )
+
+        // Required proof.
+
+        .addAttachmentOption(option =>
+          option
+            .setName("proof")
+            .setDescription(
+              "Upload a screenshot proving you received the giveaway."
+            )
+            .setRequired(true)
+        )
     )
-    .addAttachmentOption(option =>
-      option
-        .setName("proof")
+
+    // ======================================================
+    // /VOUCH INVITE
+    // ======================================================
+
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName("invite")
         .setDescription(
-          "Upload a screenshot of proof."
+          "Vouch for a completed Invite Challenge."
         )
-        .setRequired(true)
-    );
 
-// ============================================================
-// PROOF VALIDATION
-// ============================================================
+        // Only bunnii and twxn.
 
-function validProof(proof) {
-  return Boolean(
-    proof?.url &&
-    (
-      (proof.contentType || "").startsWith(
-        "image/"
-      ) ||
-      /\.(?:png|jpe?g|gif|webp)$/i.test(
-        proof.name || ""
-      )
-    )
-  );
-}
-
-// ============================================================
-// PRIVATE RESPONSE
-// ============================================================
-
-async function privateReply(
-  interaction,
-  content
-) {
-  const payload =
-    typeof content === "string"
-      ? { content }
-      : content;
-
-  if (interaction.deferred) {
-    return interaction.editReply(payload);
-  }
-
-  if (interaction.replied) {
-    return interaction.followUp({
-      ...payload,
-      flags: EPHEMERAL
-    });
-  }
-
-  return interaction.reply({
-    ...payload,
-    flags: EPHEMERAL
-  });
-}
-
-// ============================================================
-// CLIENT ROLE CHECK
-// ============================================================
-
-async function checkClient(interaction) {
-  if (!interaction.inGuild()) {
-    throw new Error(
-      "Vouches can only be submitted inside the server."
-    );
-  }
-
-  const member =
-    await interaction.guild.members.fetch({
-      user: interaction.user.id,
-      force: true
-    });
-
-  if (
-    !member.roles.cache.has(
-      CLIENT_ROLE_ID
-    )
-  ) {
-    throw new Error(
-      "You need the client role before submitting a vouch. " +
-      "Please claim it using the client verification button."
-    );
-  }
-}
-
-// ============================================================
-// CREATE DROPDOWN
-// ============================================================
-
-function row(
-  customId,
-  placeholder,
-  options
-) {
-  const menu =
-    new StringSelectMenuBuilder()
-      .setCustomId(customId)
-      .setPlaceholder(placeholder)
-      .setMinValues(1)
-      .setMaxValues(1)
-      .addOptions(
-        options.map(
-          ([
-            label,
-            value,
-            description
-          ]) => ({
-            label,
-            value,
-            description,
-            emoji: MENU_EMOJI
-          })
+        .addStringOption(option =>
+          option
+            .setName("host")
+            .setDescription(
+              "Choose bunnii or twxn."
+            )
+            .setRequired(true)
+            .addChoices(
+              ...sellerChoices(SPECIAL_HOSTS)
+            )
         )
-      );
 
-  return new ActionRowBuilder()
-    .addComponents(menu);
-}
+        // Required rating.
+
+        .addIntegerOption(option =>
+          option
+            .setName("rating")
+            .setDescription(
+              "Rate your Invite Challenge experience from 1 to 5."
+            )
+            .setRequired(true)
+            .setMinValue(1)
+            .setMaxValue(5)
+        )
+
+        // Required proof.
+
+        .addAttachmentOption(option =>
+          option
+            .setName("proof")
+            .setDescription(
+              "Upload a screenshot proving your Invite Challenge reward."
+            )
+            .setRequired(true)
+        )
+    );
 
 // ============================================================
-// SESSION VALIDATION
+// REGISTER /VOUCH WITHOUT REPLACING OTHER COMMANDS
 // ============================================================
 
-function sessionFor(
-  interaction,
-  prefix
-) {
-  const id =
-    interaction.customId.slice(
-      prefix.length
-    );
-
-  const session =
-    sessions.get(id);
-
-  if (
-    !session ||
-    session.expiresAt <= Date.now()
-  ) {
-    sessions.delete(id);
-
-    throw new Error(
-      "This vouch expired. Run /vouch again."
-    );
-  }
-
-  if (
-    session.userId !== interaction.user.id ||
-    session.guildId !== interaction.guildId
-  ) {
-    throw new Error(
-      "This menu belongs to another member's vouch."
-    );
-  }
-
-  if (session.busy) {
-    throw new Error(
-      "This vouch is already being submitted."
-    );
-  }
-
-  return [
-    id,
-    session
-  ];
-}
-
-// ============================================================
-// BUILD VOUCH EMBED
-// ============================================================
-
-function embedFor(
-  session,
-  interaction,
-  type,
-  transaction,
-  order
-) {
-  const filename =
-    safe(
-      session.proof.name || "Vouch proof",
-      200
-    );
-
-  let description =
-    `**seller:** <@${session.sellerId}>\n` +
-    `**buyer:** <@${interaction.user.id}>\n`;
-
-  // MARKET PURCHASE / CASH OUT
-
-  if (type === "market") {
-    const name =
-      transaction === "cashout"
-        ? "Cash Out"
-        : "Purchase";
-
-    const itemsLabel =
-      transaction === "cashout"
-        ? "items cashed out"
-        : "items purchased";
-
-    description +=
-      `**vouch type:** ${EMOJI} Market ${name}\n` +
-      `**${itemsLabel}:** ${safe(order)}\n`;
-  }
-
-  // GIVEAWAY
-
-  else if (type === "giveaway") {
-    description +=
-      `**vouch type:** ${EMOJI} Giveaway\n`;
-  }
-
-  // INVITE CHALLENGE
-
-  else if (type === "invite") {
-    description +=
-      `**vouch type:** ${EMOJI} Invite Challenge\n`;
-  }
-
-  // ORIGINAL RATING / PROOF / THANK YOU
-
-  description +=
-    `**rating:** ${session.rating}/5\n` +
-    `**proof:** 📎 ${filename}\n\n` +
-    "*thank you for vouching! shop again ♡*";
-
-  return new EmbedBuilder()
-    .setTitle("NEW VOUCH")
-    .setColor(WHITE)
-    .setDescription(description)
-    .setThumbnail(BEAR)
-    .setImage(session.proof.url)
-    .setTimestamp();
-}
-
-// ============================================================
-// POST VOUCH
-// ============================================================
-
-async function post(
-  interaction,
-  session,
-  type,
-  transaction = null,
-  order = null
-) {
-  await checkClient(interaction);
-
-  if (
-    session.sellerId === interaction.user.id
-  ) {
-    throw new Error(
-      "You cannot vouch for yourself."
-    );
-  }
-
-  if (
-    type === "market" &&
-    (
-      !["purchase", "cashout"].includes(
-        transaction
-      ) ||
-      !order?.trim()
-    )
-  ) {
-    throw new Error(
-      "Select Purchase or Cash Out and describe the items."
-    );
-  }
-
-  const channelId =
-    destination(
-      session.sellerId,
-      type
-    );
-
-  const channel =
-    await interaction.guild.channels.fetch(
-      channelId
-    );
-
-  if (
-    !channel ||
-    typeof channel.send !== "function"
-  ) {
-    throw new Error(
-      "The destination vouch channel could not be accessed."
-    );
-  }
-
-  const bot =
-    await interaction.guild.members.fetchMe();
-
-  const permissions =
-    channel.permissionsFor(bot);
-
-  const needed = [
-    PermissionsBitField.Flags.ViewChannel,
-    PermissionsBitField.Flags.SendMessages,
-    PermissionsBitField.Flags.EmbedLinks,
-    PermissionsBitField.Flags.AttachFiles
-  ];
-
-  if (
-    !permissions?.has(needed)
-  ) {
-    throw new Error(
-      "The bot needs View Channel, Send Messages, " +
-      "Embed Links and Attach Files permissions " +
-      "in the vouch channel."
-    );
-  }
-
-  const embed =
-    embedFor(
-      session,
-      interaction,
-      type,
-      transaction,
-      order
-    );
-
-  const message =
-    await channel.send({
-      embeds: [embed],
-      allowedMentions: {
-        parse: []
-      }
-    });
-
-  console.log(
-    `[VOUCH] ${type} ${transaction || ""} posted=${message.id}`
-  );
-
-  console.log(
-    `[VOUCH] Channel=${channelId}`
-  );
-
-  console.log(
-    `[VOUCH] Seller=${session.sellerId}`
-  );
-
-  console.log(
-    `[VOUCH] Buyer=${interaction.user.id}`
-  );
-
-  return channel;
-}
-
-// ============================================================
-// REGISTER /VOUCH
-// ============================================================
-
-async function register(client) {
+async function registerVouch(client) {
   try {
     const guildId =
       process.env.DISCORD_GUILD_ID ||
       process.env.GUILD_ID;
 
     if (!guildId) {
-      throw new Error(
-        "Missing DISCORD_GUILD_ID or GUILD_ID."
+      console.error(
+        "[VOUCH] DISCORD_GUILD_ID or GUILD_ID is missing."
       );
+
+      return;
     }
 
     const guild =
@@ -652,32 +661,56 @@ async function register(client) {
 
     const existing =
       commands.find(
-        command =>
-          command.name === "vouch"
+        command => command.name === "vouch"
       );
 
     if (existing) {
       await guild.commands.edit(
         existing.id,
-        command.toJSON()
+        vouchCommand.toJSON()
+      );
+
+      console.log(
+        "[VOUCH] Existing /vouch command updated."
       );
     } else {
       await guild.commands.create(
-        command.toJSON()
+        vouchCommand.toJSON()
+      );
+
+      console.log(
+        "[VOUCH] /vouch command registered."
       );
     }
 
     console.log(
-      "[VOUCH] /vouch registered."
+      "[VOUCH] Category-first subcommands enabled."
     );
 
     console.log(
-      `[VOUCH] ${SELLERS.length} sellers preserved.`
+      "[VOUCH] /vouch market enabled."
     );
 
     console.log(
-      "[VOUCH] Three categories enabled."
+      "[VOUCH] /vouch giveaway enabled."
     );
+
+    console.log(
+      "[VOUCH] /vouch invite enabled."
+    );
+
+    console.log(
+      `[VOUCH] ${SELLERS.length} market sellers available.`
+    );
+
+    console.log(
+      "[VOUCH] Giveaway and Invite hosts: bunnii, twxn."
+    );
+
+    console.log(
+      "[VOUCH] All four destination channels configured."
+    );
+
   } catch (error) {
     console.error(
       "[VOUCH] Registration failed:",
@@ -687,47 +720,72 @@ async function register(client) {
 }
 
 // ============================================================
-// START /VOUCH
+// CLIENT ROLE REQUIREMENT
 // ============================================================
 
-async function start(interaction) {
-  await interaction.deferReply({
-    flags: EPHEMERAL
+async function getClientMember(interaction) {
+  if (!interaction.inGuild()) {
+    return null;
+  }
+
+  return interaction.guild.members.fetch({
+    user: interaction.user.id,
+    force: true
   });
+}
 
-  await checkClient(interaction);
+// ============================================================
+// CLIENT ROLE DENIAL EMBED
+// ============================================================
 
-  const sellerId =
-    interaction.options.getString(
-      "seller",
-      true
-    );
+function makeClientRequiredEmbed() {
+  return new EmbedBuilder()
+    .setColor(WHITE)
+    .setDescription(
+      "You need the **client** role to submit a vouch!\n\n" +
+      "Thank you for shopping at **.gg/chuppys**.\n\n" +
+      "Please visit the client verification message " +
+      "and click the **client** button to receive your role.\n\n" +
+      "Once you have the role, you can use `/vouch` successfully."
+    )
+    .setFooter({
+      text: BRAND
+    });
+}
 
-  const rating =
-    interaction.options.getInteger(
-      "rating",
-      true
-    );
+// ============================================================
+// VALIDATE VOUCH INFORMATION
+// ============================================================
 
-  const proof =
-    interaction.options.getAttachment(
-      "proof",
-      true
-    );
+function validateVouch({
+  sellerId,
+  userId,
+  rating,
+  proof,
+  vouchType,
+  transaction,
+  items
+}) {
+  // Valid seller.
 
-  if (!getSeller(sellerId)) {
+  const seller =
+    getSeller(sellerId);
+
+  if (!seller) {
     throw new Error(
-      "Invalid seller."
+      "That seller is not in the seller list."
     );
   }
 
-  if (
-    sellerId === interaction.user.id
-  ) {
+  // No self-vouching.
+
+  if (sellerId === userId) {
     throw new Error(
-      "You cannot vouch for yourself."
+      "You cannot submit a vouch for yourself."
     );
   }
+
+  // Rating 1–5.
 
   if (
     !Number.isInteger(rating) ||
@@ -739,450 +797,556 @@ async function start(interaction) {
     );
   }
 
-  if (!validProof(proof)) {
+  // Required valid proof image.
+
+  if (!isValidProof(proof)) {
     throw new Error(
-      "Attach a PNG, JPG, GIF or WEBP image as proof."
+      "Please attach a PNG, JPG, GIF, or WEBP image as proof."
     );
   }
 
-  // Clean expired sessions.
-
-  for (const [id, session] of sessions) {
-    if (
-      session.expiresAt <= Date.now()
-    ) {
-      sessions.delete(id);
-    }
-  }
-
-  const id =
-    randomBytes(12).toString("hex");
-
-  sessions.set(id, {
-    userId: interaction.user.id,
-    guildId: interaction.guildId,
-    sellerId,
-    rating,
-    proof: {
-      url: proof.url,
-      name: proof.name,
-      contentType: proof.contentType
-    },
-    expiresAt:
-      Date.now() + SESSION_MS,
-    busy: false,
-    type: null,
-    transaction: null
-  });
-
-  const embed =
-    new EmbedBuilder()
-      .setColor(WHITE)
-      .setTitle("CHUPPYS VOUCH SYSTEM")
-      .setDescription(
-        `${EMOJI} **Choose your vouch category!**\n\n` +
-        `**seller:** <@${sellerId}>\n` +
-        `**rating:** ${rating}/5\n` +
-        "**proof:** uploaded\n\n" +
-        "**Market:** Purchase or Cash Out\n" +
-        "**Giveaway:** bunnii and twxn only\n" +
-        "**Invite Challenge:** Completed invite challenges"
-      )
-      .setThumbnail(BEAR)
-      .setFooter({
-        text: BRAND
-      });
-
-  return interaction.editReply({
-    embeds: [embed],
-    components: [
-      row(
-        TYPE_ID + id,
-        "Choose your vouch category",
-        [
-          [
-            "Market Vouch",
-            "market",
-            "Purchase or Cash Out"
-          ],
-          [
-            "Giveaway Vouch",
-            "giveaway",
-            "bunnii or twxn only"
-          ],
-          [
-            "Invite Challenge Vouch",
-            "invite",
-            "Completed invite challenge"
-          ]
-        ]
-      )
-    ]
-  });
-}
-
-// ============================================================
-// CHOOSE VOUCH CATEGORY
-// ============================================================
-
-async function chooseType(interaction) {
-  const [
-    id,
-    session
-  ] = sessionFor(
-    interaction,
-    TYPE_ID
-  );
-
-  const type =
-    interaction.values[0];
+  // Valid category.
 
   if (
-    ![
-      "market",
-      "giveaway",
-      "invite"
-    ].includes(type)
+    !Object.values(VOUCH_TYPES).includes(
+      vouchType
+    )
   ) {
     throw new Error(
       "Invalid vouch category."
     );
   }
 
-  // Validate routing and Giveaway restriction.
+  // Validate Market Purchase or Cash Out.
 
-  destination(
-    session.sellerId,
-    type
-  );
+  if (
+    vouchType === VOUCH_TYPES.MARKET
+  ) {
+    if (
+      !Object.values(MARKET_TRANSACTIONS).includes(
+        transaction
+      )
+    ) {
+      throw new Error(
+        "You must select Purchase or Cash Out."
+      );
+    }
 
-  session.type = type;
+    if (
+      !items ||
+      !items.trim() ||
+      items.length > 500
+    ) {
+      throw new Error(
+        "Please enter what you purchased or cashed out."
+      );
+    }
+  }
+
+  // Giveaway/Invite only bunnii and twxn.
+
+  if (
+    (
+      vouchType === VOUCH_TYPES.GIVEAWAY ||
+      vouchType === VOUCH_TYPES.INVITE
+    ) &&
+    !isSpecialHost(sellerId)
+  ) {
+    throw new Error(
+      "Only bunnii and twxn can receive Giveaway or Invite Challenge vouches."
+    );
+  }
+
+  return seller;
+}
+
+// ============================================================
+// VOUCH TYPE DISPLAY
+// ============================================================
+
+function getVouchTypeName(
+  vouchType,
+  transaction
+) {
+  if (
+    vouchType === VOUCH_TYPES.GIVEAWAY
+  ) {
+    return "Giveaway";
+  }
+
+  if (
+    vouchType === VOUCH_TYPES.INVITE
+  ) {
+    return "Invite Challenge";
+  }
+
+  if (
+    transaction ===
+    MARKET_TRANSACTIONS.CASHOUT
+  ) {
+    return "Market Cash Out";
+  }
+
+  return "Market Purchase";
+}
+
+// ============================================================
+// ORIGINAL WHITE VOUCH EMBED
+// ============================================================
+
+function makeVouchEmbed({
+  sellerId,
+  userId,
+  rating,
+  proof,
+  vouchType,
+  transaction,
+  items
+}) {
+  const proofFilename =
+    safeText(
+      proof.name || "Vouch proof",
+      200
+    );
+
+  const typeName =
+    getVouchTypeName(
+      vouchType,
+      transaction
+    );
+
+  let description = "";
 
   // ========================================================
-  // MARKET SELECTION
+  // MARKET
   // ========================================================
 
-  if (type === "market") {
-    const embed =
-      new EmbedBuilder()
-        .setColor(WHITE)
-        .setTitle("MARKET VOUCH")
-        .setDescription(
-          `${EMOJI} Choose whether this is a ` +
-          "**Purchase** or **Cash Out**.\n\n" +
-          "Next, you'll type the items you " +
-          "purchased or cashed out."
-        )
-        .setThumbnail(BEAR);
+  if (
+    vouchType === VOUCH_TYPES.MARKET
+  ) {
+    description +=
+      `**seller:** <@${sellerId}>\n` +
+      `**buyer:** <@${userId}>\n` +
+      `**vouch type:** ${VOUCH_EMOJI} ${typeName}\n`;
 
-    return interaction.update({
-      embeds: [embed],
-      components: [
-        row(
-          MARKET_ID + id,
-          "Choose transaction type",
-          [
-            [
-              "Purchase",
-              "purchase",
-              "Items purchased"
-            ],
-            [
-              "Cash Out",
-              "cashout",
-              "Items cashed out"
-            ]
+    if (
+      transaction ===
+      MARKET_TRANSACTIONS.PURCHASE
+    ) {
+      description +=
+        `**items purchased:** ${safeText(items)}\n`;
+    } else {
+      description +=
+        `**items cashed out:** ${safeText(items)}\n`;
+    }
+  }
+
+  // ========================================================
+  // GIVEAWAY
+  // ========================================================
+
+  if (
+    vouchType === VOUCH_TYPES.GIVEAWAY
+  ) {
+    description +=
+      `**host:** <@${sellerId}>\n` +
+      `**vouched by:** <@${userId}>\n` +
+      `**vouch type:** ${VOUCH_EMOJI} Giveaway\n`;
+  }
+
+  // ========================================================
+  // INVITE CHALLENGE
+  // ========================================================
+
+  if (
+    vouchType === VOUCH_TYPES.INVITE
+  ) {
+    description +=
+      `**host:** <@${sellerId}>\n` +
+      `**vouched by:** <@${userId}>\n` +
+      `**vouch type:** ${VOUCH_EMOJI} Invite Challenge\n`;
+  }
+
+  // ========================================================
+  // RATING / PROOF / THANK YOU
+  // ========================================================
+
+  description +=
+    `**rating:** ${rating}/5\n` +
+    `**proof:** 📎 ${proofFilename}\n\n` +
+    "*thank you for vouching! shop again ♡*";
+
+  return new EmbedBuilder()
+    .setColor(WHITE)
+    .setTitle("NEW VOUCH")
+    .setDescription(description)
+    .setThumbnail(BEAR_THUMBNAIL_URL)
+    .setImage(proof.url)
+    .setTimestamp();
+}
+
+// ============================================================
+// FETCH DESTINATION CHANNEL
+// ============================================================
+
+async function getDestinationChannel(
+  interaction,
+  sellerId,
+  vouchType
+) {
+  const channelId =
+    getVouchChannelId(
+      sellerId,
+      vouchType
+    );
+
+  const channel =
+    await interaction.guild.channels.fetch(
+      channelId
+    );
+
+  if (
+    !channel ||
+    !channel.isTextBased() ||
+    typeof channel.send !== "function"
+  ) {
+    throw new Error(
+      "I couldn't access the correct vouch channel."
+    );
+  }
+
+  // ========================================================
+  // CHECK BOT PERMISSIONS
+  // ========================================================
+
+  const botMember =
+    await interaction.guild.members.fetchMe();
+
+  const permissions =
+    channel.permissionsFor(botMember);
+
+  const requiredPermissions = [
+    PermissionsBitField.Flags.ViewChannel,
+    PermissionsBitField.Flags.SendMessages,
+    PermissionsBitField.Flags.EmbedLinks,
+    PermissionsBitField.Flags.AttachFiles
+  ];
+
+  if (
+    !permissions ||
+    !permissions.has(requiredPermissions)
+  ) {
+    throw new Error(
+      "The bot needs View Channel, Send Messages, " +
+      "Embed Links, and Attach Files permissions " +
+      "in the destination vouch channel."
+    );
+  }
+
+  return channel;
+}
+
+// ============================================================
+// PROCESS /VOUCH
+// ============================================================
+
+async function submitVouch(interaction) {
+  try {
+    // ======================================================
+    // SERVER CHECK
+    // ======================================================
+
+    if (!interaction.inGuild()) {
+      return replyPrivate(
+        interaction,
+        "You can only submit vouches inside the server."
+      );
+    }
+
+    // Acknowledge immediately.
+
+    await interaction.deferReply({
+      flags: EPHEMERAL
+    });
+
+    // ======================================================
+    // CLIENT ROLE CHECK
+    // ======================================================
+
+    const member =
+      await getClientMember(interaction);
+
+    if (!member) {
+      throw new Error(
+        "I couldn't verify your server membership."
+      );
+    }
+
+    if (
+      !member.roles.cache.has(CLIENT_ROLE_ID)
+    ) {
+      return replyPrivate(
+        interaction,
+        {
+          embeds: [
+            makeClientRequiredEmbed()
           ]
-        )
-      ]
-    });
-  }
+        }
+      );
+    }
 
-  // ========================================================
-  // GIVEAWAY OR INVITE CHALLENGE
-  // ========================================================
+    // ======================================================
+    // CATEGORY FIRST
+    // ======================================================
 
-  session.busy = true;
+    const vouchType =
+      interaction.options.getSubcommand(true);
 
-  await interaction.deferUpdate();
+    if (
+      !Object.values(VOUCH_TYPES).includes(
+        vouchType
+      )
+    ) {
+      throw new Error(
+        "Invalid vouch category."
+      );
+    }
 
-  try {
+    // ======================================================
+    // GET SELLER OR HOST
+    // ======================================================
+
+    const sellerId =
+      vouchType === VOUCH_TYPES.MARKET
+        ? interaction.options.getString(
+            "seller",
+            true
+          )
+        : interaction.options.getString(
+            "host",
+            true
+          );
+
+    // ======================================================
+    // RATING AND PROOF
+    // ======================================================
+
+    const rating =
+      interaction.options.getInteger(
+        "rating",
+        true
+      );
+
+    const proof =
+      interaction.options.getAttachment(
+        "proof",
+        true
+      );
+
+    // ======================================================
+    // MARKET TRANSACTION AND ITEMS
+    // ======================================================
+
+    let transaction = null;
+    let items = null;
+
+    if (
+      vouchType === VOUCH_TYPES.MARKET
+    ) {
+      transaction =
+        interaction.options.getString(
+          "transaction",
+          true
+        );
+
+      items =
+        interaction.options.getString(
+          "items",
+          true
+        ).trim();
+    }
+
+    // ======================================================
+    // VALIDATE ALL INFORMATION
+    // ======================================================
+
+    const seller =
+      validateVouch({
+        sellerId,
+        userId: interaction.user.id,
+        rating,
+        proof,
+        vouchType,
+        transaction,
+        items
+      });
+
+    // ======================================================
+    // FIND CORRECT CHANNEL
+    // ======================================================
+
     const channel =
-      await post(
+      await getDestinationChannel(
         interaction,
-        session,
-        type
+        sellerId,
+        vouchType
       );
 
-    sessions.delete(id);
+    // ======================================================
+    // CREATE WHITE EMBED
+    // ======================================================
 
-    const name =
-      type === "giveaway"
-        ? "Giveaway"
-        : "Invite Challenge";
+    const embed =
+      makeVouchEmbed({
+        sellerId,
+        userId: interaction.user.id,
+        rating,
+        proof,
+        vouchType,
+        transaction,
+        items
+      });
 
-    return interaction.editReply({
-      content:
-        `${EMOJI} Your **${name}** vouch ` +
-        `was sent to <#${channel.id}>! ♡`,
-      embeds: [],
-      components: [],
-      allowedMentions: {
-        parse: []
+    // ======================================================
+    // SEND VOUCH TO CORRECT CHANNEL
+    // ======================================================
+
+    const vouchMessage =
+      await channel.send({
+        embeds: [
+          embed
+        ],
+        allowedMentions: {
+          parse: []
+        }
+      });
+
+    // ======================================================
+    // SUCCESS LOG
+    // ======================================================
+
+    const typeName =
+      getVouchTypeName(
+        vouchType,
+        transaction
+      );
+
+    console.log(
+      `[VOUCH] ${typeName} successfully posted.`
+    );
+
+    console.log(
+      `[VOUCH] Message: ${vouchMessage.id}`
+    );
+
+    console.log(
+      `[VOUCH] Channel: ${channel.id}`
+    );
+
+    console.log(
+      `[VOUCH] Submitted by: ${interaction.user.id}`
+    );
+
+    console.log(
+      `[VOUCH] Seller/Host: ${sellerId}`
+    );
+
+    // ======================================================
+    // PRIVATE SUCCESS RESPONSE
+    // ======================================================
+
+    return replyPrivate(
+      interaction,
+      {
+        content:
+          `${VOUCH_EMOJI} Your **${typeName}** vouch ` +
+          `for ${seller.name} was submitted successfully! ♡\n\n` +
+          `**Sent to:** <#${channel.id}>`,
+        allowedMentions: {
+          parse: []
+        }
       }
-    });
+    );
+
   } catch (error) {
-    session.busy = false;
-    throw error;
-  }
-}
-
-// ============================================================
-// CHOOSE MARKET TRANSACTION
-// ============================================================
-
-async function chooseMarket(interaction) {
-  const [
-    id,
-    session
-  ] = sessionFor(
-    interaction,
-    MARKET_ID
-  );
-
-  const type =
-    interaction.values[0];
-
-  if (
-    session.type !== "market" ||
-    ![
-      "purchase",
-      "cashout"
-    ].includes(type)
-  ) {
-    throw new Error(
-      "Invalid market selection."
+    console.error(
+      "[VOUCH] Submission failed:",
+      error
     );
-  }
 
-  session.transaction = type;
-
-  const input =
-    new TextInputBuilder()
-      .setCustomId("order")
-      .setLabel(
-        type === "cashout"
-          ? "What did you cash out?"
-          : "What did you purchase?"
-      )
-      .setPlaceholder(
-        type === "cashout"
-          ? "Example: 2B Baddies Cash"
-          : "Example: 500M Baddies Cash"
-      )
-      .setStyle(
-        TextInputStyle.Paragraph
-      )
-      .setRequired(true)
-      .setMinLength(1)
-      .setMaxLength(500);
-
-  const modal =
-    new ModalBuilder()
-      .setCustomId(
-        MODAL_ID + id
-      )
-      .setTitle(
-        type === "cashout"
-          ? "Chuppys Cash Out Vouch"
-          : "Chuppys Purchase Vouch"
-      )
-      .addComponents(
-        new ActionRowBuilder()
-          .addComponents(input)
-      );
-
-  return interaction.showModal(modal);
-}
-
-// ============================================================
-// SUBMIT MARKET VOUCH
-// ============================================================
-
-async function submitMarket(interaction) {
-  const [
-    id,
-    session
-  ] = sessionFor(
-    interaction,
-    MODAL_ID
-  );
-
-  if (
-    session.type !== "market"
-  ) {
-    throw new Error(
-      "Invalid market session."
-    );
-  }
-
-  const order =
-    interaction.fields
-      .getTextInputValue("order")
-      .trim();
-
-  if (!order) {
-    throw new Error(
-      "Please describe the purchased or cashed-out items."
-    );
-  }
-
-  session.busy = true;
-
-  await interaction.deferReply({
-    flags: EPHEMERAL
-  });
-
-  try {
-    const channel =
-      await post(
-        interaction,
-        session,
-        "market",
-        session.transaction,
-        order
-      );
-
-    sessions.delete(id);
-
-    const name =
-      session.transaction === "cashout"
-        ? "Cash Out"
-        : "Purchase";
-
-    return interaction.editReply({
-      content:
-        `${EMOJI} Your **Market ${name}** vouch ` +
-        `was sent to <#${channel.id}>! ♡`,
-      allowedMentions: {
-        parse: []
+    return replyPrivate(
+      interaction,
+      {
+        content:
+          "Your vouch could not be submitted.\n\n" +
+          safeText(
+            error.message,
+            700
+          ),
+        allowedMentions: {
+          parse: []
+        }
       }
-    });
-  } catch (error) {
-    session.busy = false;
-    throw error;
+    ).catch(console.error);
   }
 }
 
 // ============================================================
-// SETUP VOUCH MODULE
+// CONNECT VOUCH SYSTEM
 // ============================================================
 
 function setupVouch(client) {
+  // Prevent duplicate module loading.
+
   if (client.__chuppysVouchLoaded) {
+    console.log(
+      "[VOUCH] System already loaded."
+    );
+
     return;
   }
 
   client.__chuppysVouchLoaded = true;
 
-  // Register slash command when ready.
+  // ========================================================
+  // REGISTER ON READY
+  // ========================================================
 
   if (client.isReady()) {
-    void register(client);
+    void registerVouch(client);
   } else {
     client.once(
       Events.ClientReady,
-      () => void register(client)
+      async () => {
+        await registerVouch(client);
+      }
     );
   }
 
   // ========================================================
-  // INTERACTION HANDLER
+  // /VOUCH INTERACTION HANDLER
   // ========================================================
 
   client.on(
     Events.InteractionCreate,
     async interaction => {
-      const ours =
-        (
-          interaction.isChatInputCommand() &&
-          interaction.commandName === "vouch"
-        ) ||
-        (
-          interaction.isStringSelectMenu() &&
-          (
-            interaction.customId.startsWith(
-              TYPE_ID
-            ) ||
-            interaction.customId.startsWith(
-              MARKET_ID
-            )
-          )
-        ) ||
-        (
-          interaction.isModalSubmit() &&
-          interaction.customId.startsWith(
-            MODAL_ID
-          )
-        );
-
-      if (!ours) {
+      if (
+        !interaction.isChatInputCommand()
+      ) {
         return;
       }
 
-      try {
-        // /VOUCH
-
-        if (
-          interaction.isChatInputCommand()
-        ) {
-          await start(interaction);
-        }
-
-        // VOUCH TYPE
-
-        else if (
-          interaction.isStringSelectMenu() &&
-          interaction.customId.startsWith(
-            TYPE_ID
-          )
-        ) {
-          await chooseType(interaction);
-        }
-
-        // MARKET TYPE
-
-        else if (
-          interaction.isStringSelectMenu()
-        ) {
-          await chooseMarket(interaction);
-        }
-
-        // ORDER MODAL
-
-        else {
-          await submitMarket(interaction);
-        }
-
-      } catch (error) {
-        console.error(
-          "[VOUCH] Interaction error:",
-          error
-        );
-
-        try {
-          await privateReply(
-            interaction,
-            "Your vouch could not be submitted.\n\n" +
-            safe(error.message, 600)
-          );
-        } catch (replyError) {
-          console.error(
-            "[VOUCH] Reply error:",
-            replyError
-          );
-        }
+      if (
+        interaction.commandName !== "vouch"
+      ) {
+        return;
       }
+
+      console.log(
+        "[VOUCH] /vouch interaction received."
+      );
+
+      await submitVouch(interaction);
     }
   );
 
@@ -1191,11 +1355,27 @@ function setupVouch(client) {
   );
 
   console.log(
-    "[VOUCH] Market, Giveaway and Invite Challenge enabled."
+    "[VOUCH] Market / Giveaway / Invite subcommands enabled."
   );
 
   console.log(
     "[VOUCH] Original seller list preserved."
+  );
+
+  console.log(
+    "[VOUCH] bunnii/twxn special host restriction enabled."
+  );
+
+  console.log(
+    "[VOUCH] Buyer/vouched-by mentions enabled."
+  );
+
+  console.log(
+    "[VOUCH] Original white embed appearance preserved."
+  );
+
+  console.log(
+    "[VOUCH] All four destination channels configured."
   );
 }
 
@@ -1211,9 +1391,21 @@ module.exports.VOUCH_CHANNEL_IDS =
 module.exports.SELLERS =
   SELLERS;
 
+module.exports.SPECIAL_HOSTS =
+  SPECIAL_HOSTS;
+
+module.exports.VOUCH_TYPES =
+  VOUCH_TYPES;
+
+module.exports.MARKET_TRANSACTIONS =
+  MARKET_TRANSACTIONS;
+
+module.exports.getSeller =
+  getSeller;
+
 module.exports.getVouchChannelId =
-  destination;
+  getVouchChannelId;
 
 // ============================================================
-// END OF VOUCH.JS
+// END OF CHUPPYS VOUCH.JS
 // ============================================================
