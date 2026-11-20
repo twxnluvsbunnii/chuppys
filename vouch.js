@@ -2,40 +2,78 @@
 "use strict";
 
 // ============================================================
-// CHUPPYS VOUCH SYSTEM — DISCORD.JS V14 / RENDER
+// CHUPPYS VOUCH SYSTEM
+// DISCORD.JS V14 / RENDER
 // COMPLETE REPLACEMENT VOUCH.JS
 // ============================================================
 //
-// CATEGORIES:
+// VOUCH COMMANDS:
+//
 // /vouch market
 // /vouch giveaway
 // /vouch invite
 // /vouch converter
 //
-// NEW:
-// - Converter Fees category
-// - Converter limited to bunnii and twxn
-// - Conversion description and fee fields
-// - Converter vouches use personal channel by default
-// - Dance emoji removed from posted vouch embeds
-// - Dance emoji removed from success messages
-// - Dance emoji added to slash category descriptions
-//
-// PRESERVED:
-// - All 12 original market sellers
+// MARKET:
+// - All original 12 sellers
 // - Purchase / Cash Out selection
-// - Separate giveaway and invite channels
-// - Client role requirement
-// - Self-vouch protection
-// - Rating 1–5
+// - Required items description
+// - Required rating 1–5
 // - Required image proof
-// - White NEW VOUCH embeds
+// - bunnii/twxn -> personal market channel
+// - Other sellers -> regular market channel
+//
+// GIVEAWAY:
+// - Only bunnii and twxn
+// - Rating and image proof required
+// - Separate giveaway channel
+//
+// INVITE CHALLENGE:
+// - Only bunnii and twxn
+// - Rating and image proof required
+// - Separate invite challenge channel
+//
+// CONVERTER FEES:
+// - Only bunnii and twxn
+// - Required conversion details
+// - Required converter fee
+// - Required rating 1–5
+// - Required image proof
+// - Separate converter channel
+// - Converter channel: 1573189115162402857
+//
+// EMBEDS:
+// - White color
+// - NEW VOUCH title
 // - Original bear thumbnail
-// - Large proof image
+// - Large proof screenshot
+// - Seller/host/converter mentions
+// - Buyer/customer mentions
+// - Rating
+// - Proof filename
 // - Thank-you message
-// - Private success and error responses
-// - Existing exported helpers
-// - index.js handles reactions and counters
+// - Timestamp
+// - No mocha dance emoji in posted vouches
+//
+// COMMAND CATEGORIES:
+// - Mocha dance emoji in descriptions only
+// - No emoji in actual subcommand names
+//
+// PROTECTION:
+// - Client role required
+// - Self-vouch prevention
+// - Valid seller/host/converter checks
+// - Rating validation
+// - Required image proof
+// - Bot permission checks
+// - Private success/error responses
+// - Immediate interaction acknowledgement
+//
+// COUNTERS:
+// - index.js handles counters and reactions
+// - This file does not increment counters
+// - Converter vouches have their own channel
+// - Counter integration will be added to index.js
 //
 // ============================================================
 // IMPORTS
@@ -50,7 +88,7 @@ const {
 } = require("discord.js");
 
 // ============================================================
-// BASIC CONFIGURATION
+// BASIC SETTINGS
 // ============================================================
 
 const BRAND = ".gg/chuppys";
@@ -63,13 +101,15 @@ const EPHEMERAL = MessageFlags.Ephemeral;
 // CATEGORY EMOJI
 // ============================================================
 //
-// Used in slash-command category descriptions ONLY.
+// Discord slash-command names cannot contain
+// custom emoji syntax.
 //
-// No dance emoji is inserted into a posted vouch,
-// its type field, or its success confirmation.
+// The emoji is placed in category descriptions.
 //
-// Discord may display custom emoji syntax as plain
-// text in command descriptions on some clients.
+// Discord may render the custom emoji syntax as
+// plain text depending on the client.
+//
+// No dance emoji appears in the actual vouches.
 //
 // ============================================================
 
@@ -98,42 +138,32 @@ const CLIENT_ROLE_ID =
 // ============================================================
 
 // bunnii and twxn market vouches.
+
 const PERSONAL_VOUCH_CHANNEL_ID =
   "1562227276051910676";
 
-// Other market sellers.
+// Other sellers' market vouches.
+
 const MARKET_VOUCH_CHANNEL_ID =
   "1530811494168657980";
 
-// Giveaway.
+// Giveaway vouches.
+
 const GIVEAWAY_VOUCH_CHANNEL_ID =
   "1572974320781885450";
 
-// Invite Challenge.
+// Invite Challenge vouches.
+
 const INVITE_VOUCH_CHANNEL_ID =
   "1572972324930724041";
 
-// ============================================================
-// CONVERTER FEES CHANNEL
-// ============================================================
-//
-// Uses the personal vouch channel by default.
-//
-// To use a separate converter channel, add this
-// environment variable on Render:
-//
-// CONVERTER_VOUCH_CHANNEL_ID=YOUR_CHANNEL_ID
-//
-// Or replace the fallback ID below.
-//
-// ============================================================
+// NEW: Converter Fees vouches.
 
 const CONVERTER_VOUCH_CHANNEL_ID =
-  process.env.CONVERTER_VOUCH_CHANNEL_ID ||
-  PERSONAL_VOUCH_CHANNEL_ID;
+  "1573189115162402857";
 
 // ============================================================
-// CHANNEL EXPORTS
+// CHANNEL EXPORT CONFIGURATION
 // ============================================================
 
 const CHANNELS = Object.freeze({
@@ -145,7 +175,7 @@ const CHANNELS = Object.freeze({
 });
 
 // ============================================================
-// ORIGINAL 12 SELLERS — PRESERVED
+// ORIGINAL SELLER LIST — ALL 12 PRESERVED
 // ============================================================
 
 const SELLERS = [
@@ -154,56 +184,67 @@ const SELLERS = [
     name: "﹕𐔌・bunnii 〃・꒱",
     personal: true
   },
+
   {
     id: "1490962480963260466",
     name: "﹕𐔌・twxn 〃・꒱",
     personal: true
   },
+
   {
     id: "1192248188409749684",
     name: "﹕𐔌・angel 〃・꒱",
     personal: false
   },
+
   {
     id: "1079241163455873074",
     name: "﹕𐔌・felony 〃・꒱",
     personal: false
   },
+
   {
     id: "1032693136163622993",
     name: "﹕𐔌・cusi 〃・꒱",
     personal: false
   },
+
   {
     id: "1320199904219496530",
     name: "﹕𐔌・dav 〃・꒱",
     personal: false
   },
+
   {
     id: "952566845939023892",
     name: "﹕𐔌・momo 〃・꒱",
     personal: false
   },
+
   {
     id: "1473335012769267807",
     name: "﹕𐔌・kitako 〃・꒱",
     personal: false
   },
+
   {
     id: "1472856287527309313",
     name: "﹕𐔌・mira 〃・꒱",
     personal: false
   },
+
   {
     id: "1269188505935024141",
     name: "﹕𐔌・maya 〃・꒱",
     personal: false
   },
+
   {
     id: "1328450205774909441",
     name: "﹕𐔌・alex 〃・꒱",
     personal: false
   },
+
   {
     id: "1475237851414401105",
     name: "﹕𐔌・replusive 〃・꒱",
@@ -215,7 +256,7 @@ const SELLERS = [
 // SPECIAL HOSTS
 // ============================================================
 //
-// Only bunnii and twxn can receive:
+// Only bunnii and twxn appear in:
 //
 // Giveaway
 // Invite Challenge
@@ -243,20 +284,30 @@ const MARKET_TRANSACTIONS = Object.freeze({
 });
 
 // ============================================================
-// SELLER HELPERS
+// SELLER LOOKUP
 // ============================================================
 
 function getSeller(sellerId) {
-  return SELLERS.find(
-    seller => seller.id === sellerId
-  ) || null;
+  return (
+    SELLERS.find(
+      seller => seller.id === sellerId
+    ) || null
+  );
 }
+
+// ============================================================
+// SPECIAL HOST LOOKUP
+// ============================================================
 
 function isSpecialHost(sellerId) {
   return SPECIAL_HOSTS.some(
     seller => seller.id === sellerId
   );
 }
+
+// ============================================================
+// SELLER OPTION CHOICES
+// ============================================================
 
 function sellerChoices(sellers) {
   return sellers.map(seller => ({
@@ -266,7 +317,7 @@ function sellerChoices(sellers) {
 }
 
 // ============================================================
-// SAFE USER INPUT
+// SAFE TEXT
 // ============================================================
 
 function safeText(value, max = 500) {
@@ -279,10 +330,13 @@ function safeText(value, max = 500) {
 }
 
 // ============================================================
-// PRIVATE RESPONSE
+// PRIVATE RESPONSE HELPER
 // ============================================================
 
-async function replyPrivate(interaction, payload) {
+async function replyPrivate(
+  interaction,
+  payload
+) {
   const data =
     typeof payload === "string"
       ? { content: payload }
@@ -319,7 +373,8 @@ function isValidProof(proof) {
   }
 
   const contentType =
-    String(proof.contentType || "").toLowerCase();
+    String(proof.contentType || "")
+      .toLowerCase();
 
   const filename =
     String(proof.name || "");
@@ -335,7 +390,10 @@ function isValidProof(proof) {
         "image/gif",
         "image/webp"
       ].includes(contentType) &&
-      (!filename.includes(".") || validExtension)
+      (
+        !filename.includes(".") ||
+        validExtension
+      )
     );
   }
 
@@ -343,11 +401,15 @@ function isValidProof(proof) {
 }
 
 // ============================================================
-// CORRECT DESTINATION CHANNEL
+// CHOOSE CORRECT VOUCH CHANNEL
 // ============================================================
 
-function getVouchChannelId(sellerId, vouchType) {
-  const seller = getSeller(sellerId);
+function getVouchChannelId(
+  sellerId,
+  vouchType
+) {
+  const seller =
+    getSeller(sellerId);
 
   if (!seller) {
     throw new Error(
@@ -355,40 +417,85 @@ function getVouchChannelId(sellerId, vouchType) {
     );
   }
 
-  // Market: personal or regular channel.
+  // ========================================================
+  // MARKET
+  // ========================================================
 
-  if (vouchType === VOUCH_TYPES.MARKET) {
+  if (
+    vouchType === VOUCH_TYPES.MARKET
+  ) {
     return seller.personal
       ? PERSONAL_VOUCH_CHANNEL_ID
       : MARKET_VOUCH_CHANNEL_ID;
   }
 
-  // All remaining categories are special-host only.
+  // ========================================================
+  // GIVEAWAY
+  // ========================================================
 
-  if (!isSpecialHost(sellerId)) {
-    throw new Error(
-      "Only bunnii and twxn can receive " +
-      "Giveaway, Invite Challenge, or Converter Fees vouches."
-    );
-  }
+  if (
+    vouchType === VOUCH_TYPES.GIVEAWAY
+  ) {
+    if (!isSpecialHost(sellerId)) {
+      throw new Error(
+        "Giveaway vouches can only be submitted " +
+        "for bunnii or twxn."
+      );
+    }
 
-  if (vouchType === VOUCH_TYPES.GIVEAWAY) {
     return GIVEAWAY_VOUCH_CHANNEL_ID;
   }
 
-  if (vouchType === VOUCH_TYPES.INVITE) {
+  // ========================================================
+  // INVITE CHALLENGE
+  // ========================================================
+
+  if (
+    vouchType === VOUCH_TYPES.INVITE
+  ) {
+    if (!isSpecialHost(sellerId)) {
+      throw new Error(
+        "Invite Challenge vouches can only be " +
+        "submitted for bunnii or twxn."
+      );
+    }
+
     return INVITE_VOUCH_CHANNEL_ID;
   }
 
-  if (vouchType === VOUCH_TYPES.CONVERTER) {
+  // ========================================================
+  // CONVERTER FEES
+  // ========================================================
+
+  if (
+    vouchType === VOUCH_TYPES.CONVERTER
+  ) {
+    if (!isSpecialHost(sellerId)) {
+      throw new Error(
+        "Converter Fees vouches can only be " +
+        "submitted for bunnii or twxn."
+      );
+    }
+
     return CONVERTER_VOUCH_CHANNEL_ID;
   }
 
-  throw new Error("Invalid vouch category.");
+  throw new Error(
+    "Invalid vouch category."
+  );
 }
 
 // ============================================================
-// SLASH COMMAND
+// /VOUCH SLASH COMMAND
+// ============================================================
+//
+// Categories:
+//
+// /vouch market
+// /vouch giveaway
+// /vouch invite
+// /vouch converter
+//
 // ============================================================
 
 const vouchCommand =
@@ -399,7 +506,7 @@ const vouchCommand =
     )
 
     // ======================================================
-    // MARKET
+    // /VOUCH MARKET
     // ======================================================
 
     .addSubcommand(subcommand =>
@@ -408,6 +515,8 @@ const vouchCommand =
         .setDescription(
           `${CATEGORY_EMOJI} Market Purchase or Cash Out vouch.`
         )
+
+        // All 12 sellers.
 
         .addStringOption(option =>
           option
@@ -420,6 +529,8 @@ const vouchCommand =
               ...sellerChoices(SELLERS)
             )
         )
+
+        // Purchase or Cash Out.
 
         .addStringOption(option =>
           option
@@ -440,16 +551,20 @@ const vouchCommand =
             )
         )
 
+        // Items.
+
         .addStringOption(option =>
           option
             .setName("items")
             .setDescription(
-              "What did you purchase or cash out?"
+              "Type what you purchased or cashed out."
             )
             .setRequired(true)
             .setMinLength(1)
             .setMaxLength(500)
         )
+
+        // Rating.
 
         .addIntegerOption(option =>
           option
@@ -462,26 +577,30 @@ const vouchCommand =
             .setMaxValue(5)
         )
 
+        // Proof.
+
         .addAttachmentOption(option =>
           option
             .setName("proof")
             .setDescription(
-              "Upload a screenshot of your transaction."
+              "Upload a screenshot of your purchase or cash out."
             )
             .setRequired(true)
         )
     )
 
     // ======================================================
-    // GIVEAWAY
+    // /VOUCH GIVEAWAY
     // ======================================================
 
     .addSubcommand(subcommand =>
       subcommand
         .setName("giveaway")
         .setDescription(
-          `${CATEGORY_EMOJI} Giveaway reward vouch.`
+          `${CATEGORY_EMOJI} Vouch for a Giveaway reward.`
         )
+
+        // bunnii and twxn only.
 
         .addStringOption(option =>
           option
@@ -494,6 +613,8 @@ const vouchCommand =
               ...sellerChoices(SPECIAL_HOSTS)
             )
         )
+
+        // Rating.
 
         .addIntegerOption(option =>
           option
@@ -506,6 +627,8 @@ const vouchCommand =
             .setMaxValue(5)
         )
 
+        // Proof.
+
         .addAttachmentOption(option =>
           option
             .setName("proof")
@@ -517,15 +640,17 @@ const vouchCommand =
     )
 
     // ======================================================
-    // INVITE CHALLENGE
+    // /VOUCH INVITE
     // ======================================================
 
     .addSubcommand(subcommand =>
       subcommand
         .setName("invite")
         .setDescription(
-          `${CATEGORY_EMOJI} Invite Challenge reward vouch.`
+          `${CATEGORY_EMOJI} Vouch for an Invite Challenge reward.`
         )
+
+        // bunnii and twxn only.
 
         .addStringOption(option =>
           option
@@ -539,16 +664,20 @@ const vouchCommand =
             )
         )
 
+        // Rating.
+
         .addIntegerOption(option =>
           option
             .setName("rating")
             .setDescription(
-              "Rate your Invite Challenge experience."
+              "Rate your Invite Challenge experience from 1 to 5."
             )
             .setRequired(true)
             .setMinValue(1)
             .setMaxValue(5)
         )
+
+        // Proof.
 
         .addAttachmentOption(option =>
           option
@@ -561,17 +690,19 @@ const vouchCommand =
     )
 
     // ======================================================
-    // CONVERTER FEES — NEW CATEGORY
+    // /VOUCH CONVERTER
     // ======================================================
+    //
+    // NEW CONVERTER FEES CATEGORY
     //
     // Only bunnii and twxn.
     //
     // Required:
     // - Converter
     // - Conversion details
-    // - Fee paid
+    // - Fee
     // - Rating
-    // - Proof image
+    // - Proof
     //
     // ======================================================
 
@@ -579,8 +710,10 @@ const vouchCommand =
       subcommand
         .setName("converter")
         .setDescription(
-          `${CATEGORY_EMOJI} Converter Fees vouch.`
+          `${CATEGORY_EMOJI} Vouch for Converter Fees.`
         )
+
+        // Converter.
 
         .addStringOption(option =>
           option
@@ -594,27 +727,33 @@ const vouchCommand =
             )
         )
 
+        // Conversion details.
+
         .addStringOption(option =>
           option
             .setName("conversion")
             .setDescription(
-              "What payment or currency did you convert?"
+              "What money or payment method did you convert?"
             )
             .setRequired(true)
             .setMinLength(1)
             .setMaxLength(500)
         )
 
+        // Converter fee.
+
         .addStringOption(option =>
           option
             .setName("fee")
             .setDescription(
-              "What converter fee did you pay? Example: $2"
+              "How much was the converter fee? Example: $2"
             )
             .setRequired(true)
             .setMinLength(1)
             .setMaxLength(100)
         )
+
+        // Rating.
 
         .addIntegerOption(option =>
           option
@@ -627,18 +766,26 @@ const vouchCommand =
             .setMaxValue(5)
         )
 
+        // Proof.
+
         .addAttachmentOption(option =>
           option
             .setName("proof")
             .setDescription(
-              "Upload a screenshot proving your conversion."
+              "Upload a screenshot proving the conversion."
             )
             .setRequired(true)
         )
     );
 
 // ============================================================
-// REGISTER COMMAND WITHOUT REMOVING OTHER COMMANDS
+// REGISTER /VOUCH
+// ============================================================
+//
+// Updates existing guild /vouch command.
+//
+// Does NOT delete or replace unrelated commands.
+//
 // ============================================================
 
 async function registerVouch(client) {
@@ -649,8 +796,9 @@ async function registerVouch(client) {
 
     if (!guildId) {
       console.error(
-        "[VOUCH] Missing DISCORD_GUILD_ID or GUILD_ID."
+        "[VOUCH] DISCORD_GUILD_ID or GUILD_ID is missing."
       );
+
       return;
     }
 
@@ -672,7 +820,7 @@ async function registerVouch(client) {
       );
 
       console.log(
-        "[VOUCH] Existing guild /vouch updated."
+        "[VOUCH] Existing /vouch command updated."
       );
     } else {
       await guild.commands.create(
@@ -680,16 +828,32 @@ async function registerVouch(client) {
       );
 
       console.log(
-        "[VOUCH] Guild /vouch created."
+        "[VOUCH] /vouch command registered."
       );
     }
 
     console.log(
-      "[VOUCH] Market, Giveaway, Invite and Converter enabled."
+      "[VOUCH] Category-first commands enabled."
     );
 
     console.log(
-      `[VOUCH] ${SELLERS.length} market sellers preserved.`
+      "[VOUCH] /vouch market enabled."
+    );
+
+    console.log(
+      "[VOUCH] /vouch giveaway enabled."
+    );
+
+    console.log(
+      "[VOUCH] /vouch invite enabled."
+    );
+
+    console.log(
+      "[VOUCH] /vouch converter enabled."
+    );
+
+    console.log(
+      `[VOUCH] ${SELLERS.length} market sellers available.`
     );
 
     console.log(
@@ -697,7 +861,7 @@ async function registerVouch(client) {
     );
 
     console.log(
-      `[VOUCH] Converter channel: ${CONVERTER_VOUCH_CHANNEL_ID}`
+      `[VOUCH] Converter destination: ${CONVERTER_VOUCH_CHANNEL_ID}`
     );
 
   } catch (error) {
@@ -709,7 +873,7 @@ async function registerVouch(client) {
 }
 
 // ============================================================
-// MEMBER ROLE VALIDATION
+// CLIENT ROLE CHECK
 // ============================================================
 
 async function getClientMember(interaction) {
@@ -724,7 +888,7 @@ async function getClientMember(interaction) {
 }
 
 // ============================================================
-// CLIENT REQUIRED EMBED
+// CLIENT ROLE DENIAL EMBED
 // ============================================================
 
 function makeClientRequiredEmbed() {
@@ -735,7 +899,7 @@ function makeClientRequiredEmbed() {
       "Thank you for shopping at **.gg/chuppys**.\n\n" +
       "Please visit the client verification message " +
       "and click the **client** button to receive your role.\n\n" +
-      "Once verified, you can use `/vouch`."
+      "Once you have the role, you can use `/vouch` successfully."
     )
     .setFooter({
       text: BRAND
@@ -743,7 +907,7 @@ function makeClientRequiredEmbed() {
 }
 
 // ============================================================
-// VALIDATE VOUCH
+// VALIDATE VOUCH INFORMATION
 // ============================================================
 
 function validateVouch({
@@ -757,7 +921,10 @@ function validateVouch({
   conversion,
   fee
 }) {
-  const seller = getSeller(sellerId);
+  // Valid seller.
+
+  const seller =
+    getSeller(sellerId);
 
   if (!seller) {
     throw new Error(
@@ -765,7 +932,7 @@ function validateVouch({
     );
   }
 
-  // Self-vouch protection.
+  // Self-vouch prevention.
 
   if (sellerId === userId) {
     throw new Error(
@@ -781,11 +948,11 @@ function validateVouch({
     rating > 5
   ) {
     throw new Error(
-      "Your rating must be between 1 and 5."
+      "Rating must be between 1 and 5."
     );
   }
 
-  // Image validation.
+  // Required image proof.
 
   if (!isValidProof(proof)) {
     throw new Error(
@@ -793,25 +960,32 @@ function validateVouch({
     );
   }
 
-  // Category validation.
+  // Valid category.
 
   if (
-    !Object.values(VOUCH_TYPES).includes(vouchType)
+    !Object.values(VOUCH_TYPES).includes(
+      vouchType
+    )
   ) {
     throw new Error(
       "Invalid vouch category."
     );
   }
 
-  // Market validation.
+  // ========================================================
+  // MARKET VALIDATION
+  // ========================================================
 
-  if (vouchType === VOUCH_TYPES.MARKET) {
+  if (
+    vouchType === VOUCH_TYPES.MARKET
+  ) {
     if (
-      !Object.values(MARKET_TRANSACTIONS)
-        .includes(transaction)
+      !Object.values(MARKET_TRANSACTIONS).includes(
+        transaction
+      )
     ) {
       throw new Error(
-        "Choose Purchase or Cash Out."
+        "You must select Purchase or Cash Out."
       );
     }
 
@@ -821,26 +995,32 @@ function validateVouch({
       items.length > 500
     ) {
       throw new Error(
-        "Enter the items purchased or cashed out."
+        "Please enter what you purchased or cashed out."
       );
     }
   }
 
-  // Restricted categories.
+  // ========================================================
+  // GIVEAWAY / INVITE / CONVERTER HOST VALIDATION
+  // ========================================================
 
   if (
     vouchType !== VOUCH_TYPES.MARKET &&
     !isSpecialHost(sellerId)
   ) {
     throw new Error(
-      "Only bunnii and twxn can receive " +
-      "Giveaway, Invite, and Converter Fees vouches."
+      "Only bunnii and twxn can receive Giveaway, " +
+      "Invite Challenge, or Converter Fees vouches."
     );
   }
 
-  // Converter validation.
+  // ========================================================
+  // CONVERTER FEES VALIDATION
+  // ========================================================
 
-  if (vouchType === VOUCH_TYPES.CONVERTER) {
+  if (
+    vouchType === VOUCH_TYPES.CONVERTER
+  ) {
     if (
       !conversion ||
       !conversion.trim() ||
@@ -866,19 +1046,28 @@ function validateVouch({
 }
 
 // ============================================================
-// VOUCH TYPE DISPLAY
+// VOUCH TYPE DISPLAY NAMES
 // ============================================================
 
-function getVouchTypeName(vouchType, transaction) {
-  if (vouchType === VOUCH_TYPES.GIVEAWAY) {
+function getVouchTypeName(
+  vouchType,
+  transaction
+) {
+  if (
+    vouchType === VOUCH_TYPES.GIVEAWAY
+  ) {
     return "Giveaway";
   }
 
-  if (vouchType === VOUCH_TYPES.INVITE) {
+  if (
+    vouchType === VOUCH_TYPES.INVITE
+  ) {
     return "Invite Challenge";
   }
 
-  if (vouchType === VOUCH_TYPES.CONVERTER) {
+  if (
+    vouchType === VOUCH_TYPES.CONVERTER
+  ) {
     return "Converter Fees";
   }
 
@@ -895,7 +1084,7 @@ function getVouchTypeName(vouchType, transaction) {
 // CREATE WHITE VOUCH EMBED
 // ============================================================
 //
-// No zymochadance emoji is present here.
+// No mocha dance emoji in any vouch.
 //
 // ============================================================
 
@@ -911,18 +1100,26 @@ function makeVouchEmbed({
   fee
 }) {
   const proofFilename =
-    safeText(proof.name || "Vouch proof", 200);
+    safeText(
+      proof.name || "Vouch proof",
+      200
+    );
 
   const typeName =
-    getVouchTypeName(vouchType, transaction);
+    getVouchTypeName(
+      vouchType,
+      transaction
+    );
 
   let description = "";
 
   // ========================================================
-  // MARKET
+  // MARKET VOUCH
   // ========================================================
 
-  if (vouchType === VOUCH_TYPES.MARKET) {
+  if (
+    vouchType === VOUCH_TYPES.MARKET
+  ) {
     description +=
       `**seller:** <@${sellerId}>\n` +
       `**buyer:** <@${userId}>\n` +
@@ -940,10 +1137,12 @@ function makeVouchEmbed({
   }
 
   // ========================================================
-  // GIVEAWAY
+  // GIVEAWAY VOUCH
   // ========================================================
 
-  if (vouchType === VOUCH_TYPES.GIVEAWAY) {
+  if (
+    vouchType === VOUCH_TYPES.GIVEAWAY
+  ) {
     description +=
       `**host:** <@${sellerId}>\n` +
       `**vouched by:** <@${userId}>\n` +
@@ -951,10 +1150,12 @@ function makeVouchEmbed({
   }
 
   // ========================================================
-  // INVITE CHALLENGE
+  // INVITE CHALLENGE VOUCH
   // ========================================================
 
-  if (vouchType === VOUCH_TYPES.INVITE) {
+  if (
+    vouchType === VOUCH_TYPES.INVITE
+  ) {
     description +=
       `**host:** <@${sellerId}>\n` +
       `**vouched by:** <@${userId}>\n` +
@@ -962,10 +1163,12 @@ function makeVouchEmbed({
   }
 
   // ========================================================
-  // CONVERTER FEES
+  // CONVERTER FEES VOUCH
   // ========================================================
 
-  if (vouchType === VOUCH_TYPES.CONVERTER) {
+  if (
+    vouchType === VOUCH_TYPES.CONVERTER
+  ) {
     description +=
       `**converter:** <@${sellerId}>\n` +
       `**customer:** <@${userId}>\n` +
@@ -975,7 +1178,7 @@ function makeVouchEmbed({
   }
 
   // ========================================================
-  // RATING, PROOF, AND THANK YOU
+  // RATING / PROOF / THANK YOU
   // ========================================================
 
   description +=
@@ -993,7 +1196,7 @@ function makeVouchEmbed({
 }
 
 // ============================================================
-// DESTINATION CHANNEL AND BOT PERMISSIONS
+// FETCH DESTINATION CHANNEL
 // ============================================================
 
 async function getDestinationChannel(
@@ -1002,7 +1205,10 @@ async function getDestinationChannel(
   vouchType
 ) {
   const channelId =
-    getVouchChannelId(sellerId, vouchType);
+    getVouchChannelId(
+      sellerId,
+      vouchType
+    );
 
   const channel =
     await interaction.guild.channels.fetch(
@@ -1018,6 +1224,10 @@ async function getDestinationChannel(
       "I couldn't access the correct vouch channel."
     );
   }
+
+  // ========================================================
+  // CHECK BOT PERMISSIONS
+  // ========================================================
 
   const botMember =
     await interaction.guild.members.fetchMe();
@@ -1047,13 +1257,13 @@ async function getDestinationChannel(
 }
 
 // ============================================================
-// PROCESS VOUCH
+// PROCESS /VOUCH
 // ============================================================
 
 async function submitVouch(interaction) {
   try {
     // ======================================================
-    // GUILD ONLY
+    // SERVER CHECK
     // ======================================================
 
     if (!interaction.inGuild()) {
@@ -1063,7 +1273,7 @@ async function submitVouch(interaction) {
       );
     }
 
-    // Acknowledge immediately to avoid interaction timeout.
+    // Acknowledge immediately.
 
     await interaction.deferReply({
       flags: EPHEMERAL
@@ -1085,22 +1295,27 @@ async function submitVouch(interaction) {
     if (
       !member.roles.cache.has(CLIENT_ROLE_ID)
     ) {
-      return replyPrivate(interaction, {
-        embeds: [
-          makeClientRequiredEmbed()
-        ]
-      });
+      return replyPrivate(
+        interaction,
+        {
+          embeds: [
+            makeClientRequiredEmbed()
+          ]
+        }
+      );
     }
 
     // ======================================================
-    // CATEGORY
+    // CATEGORY FIRST
     // ======================================================
 
     const vouchType =
       interaction.options.getSubcommand(true);
 
     if (
-      !Object.values(VOUCH_TYPES).includes(vouchType)
+      !Object.values(VOUCH_TYPES).includes(
+        vouchType
+      )
     ) {
       throw new Error(
         "Invalid vouch category."
@@ -1113,7 +1328,9 @@ async function submitVouch(interaction) {
 
     let sellerId;
 
-    if (vouchType === VOUCH_TYPES.MARKET) {
+    if (
+      vouchType === VOUCH_TYPES.MARKET
+    ) {
       sellerId =
         interaction.options.getString(
           "seller",
@@ -1152,7 +1369,7 @@ async function submitVouch(interaction) {
       );
 
     // ======================================================
-    // OPTIONAL CATEGORY-SPECIFIC VALUES
+    // CATEGORY-SPECIFIC VALUES
     // ======================================================
 
     let transaction = null;
@@ -1160,7 +1377,11 @@ async function submitVouch(interaction) {
     let conversion = null;
     let fee = null;
 
-    if (vouchType === VOUCH_TYPES.MARKET) {
+    // Market values.
+
+    if (
+      vouchType === VOUCH_TYPES.MARKET
+    ) {
       transaction =
         interaction.options.getString(
           "transaction",
@@ -1173,6 +1394,8 @@ async function submitVouch(interaction) {
           true
         ).trim();
     }
+
+    // Converter values.
 
     if (
       vouchType === VOUCH_TYPES.CONVERTER
@@ -1191,7 +1414,7 @@ async function submitVouch(interaction) {
     }
 
     // ======================================================
-    // VALIDATE
+    // VALIDATE INFORMATION
     // ======================================================
 
     const seller =
@@ -1208,7 +1431,7 @@ async function submitVouch(interaction) {
       });
 
     // ======================================================
-    // GET CHANNEL
+    // FIND CORRECT CHANNEL
     // ======================================================
 
     const channel =
@@ -1236,7 +1459,7 @@ async function submitVouch(interaction) {
       });
 
     // ======================================================
-    // SEND
+    // SEND TO DESTINATION CHANNEL
     // ======================================================
 
     const vouchMessage =
@@ -1250,7 +1473,7 @@ async function submitVouch(interaction) {
       });
 
     // ======================================================
-    // SUCCESS LOGGING
+    // SUCCESS LOG
     // ======================================================
 
     const typeName =
@@ -1283,16 +1506,19 @@ async function submitVouch(interaction) {
     // PRIVATE SUCCESS RESPONSE
     // ======================================================
     //
-    // No dance emoji in confirmation.
+    // No mocha dance emoji in success messages.
     //
     // ======================================================
 
-    return replyPrivate(interaction, {
-      content:
-        `Your **${typeName}** vouch ` +
-        `for ${seller.name} was submitted successfully! ♡\n\n` +
-        `**Sent to:** <#${channel.id}>`
-    });
+    return replyPrivate(
+      interaction,
+      {
+        content:
+          `Your **${typeName}** vouch ` +
+          `for ${seller.name} was submitted successfully! ♡\n\n` +
+          `**Sent to:** <#${channel.id}>`
+      }
+    );
 
   } catch (error) {
     console.error(
@@ -1305,19 +1531,27 @@ async function submitVouch(interaction) {
         ? error.message
         : "An unknown error occurred.";
 
-    return replyPrivate(interaction, {
-      content:
-        "Your vouch could not be submitted.\n\n" +
-        safeText(errorMessage, 700)
-    }).catch(console.error);
+    return replyPrivate(
+      interaction,
+      {
+        content:
+          "Your vouch could not be submitted.\n\n" +
+          safeText(
+            errorMessage,
+            700
+          )
+      }
+    ).catch(console.error);
   }
 }
 
 // ============================================================
-// SETUP VOUCH SYSTEM
+// CONNECT VOUCH SYSTEM
 // ============================================================
 
 function setupVouch(client) {
+  // Prevent duplicate module loading.
+
   if (client.__chuppysVouchLoaded) {
     console.log(
       "[VOUCH] System already loaded."
@@ -1344,17 +1578,21 @@ function setupVouch(client) {
   }
 
   // ========================================================
-  // INTERACTION HANDLER
+  // /VOUCH INTERACTION HANDLER
   // ========================================================
 
   client.on(
     Events.InteractionCreate,
     async interaction => {
-      if (!interaction.isChatInputCommand()) {
+      if (
+        !interaction.isChatInputCommand()
+      ) {
         return;
       }
 
-      if (interaction.commandName !== "vouch") {
+      if (
+        interaction.commandName !== "vouch"
+      ) {
         return;
       }
 
@@ -1403,6 +1641,10 @@ function setupVouch(client) {
   );
 
   console.log(
+    "[VOUCH] Self-vouch protection enabled."
+  );
+
+  console.log(
     "[VOUCH] White vouch embeds preserved."
   );
 
@@ -1411,11 +1653,15 @@ function setupVouch(client) {
   );
 
   console.log(
-    "[VOUCH] Category descriptions configured."
+    "[VOUCH] All destination channels configured."
   );
 
   console.log(
-    "[VOUCH] All destination channels configured."
+    `[VOUCH] Converter channel: ${CONVERTER_VOUCH_CHANNEL_ID}`
+  );
+
+  console.log(
+    "[VOUCH] Counters handled by index.js."
   );
 }
 
