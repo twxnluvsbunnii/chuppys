@@ -1,4 +1,3 @@
-
 "use strict";
 
 // ============================================================
@@ -12,18 +11,16 @@
 // - tickets.js
 //
 // VERIFICATION:
-// - Ticket-only manual verification
-// - Dedicated private verification-tickets category
-// - Category created automatically if needed
-// - Private ticket for each member
-// - Duplicate verification tickets prevented
-// - Only authorized staff can approve verification
-// - Approval must match ticket owner
-// - Staff commands are NOT listed in public embeds
-// - Staff commands are NOT listed in /help
-// - Typed verification commands are deleted before use
-// - No automatic verification role grants
-// - Client role requires verified role
+// - No automatic verification
+// - Verification tickets are created by tickets.js ONLY
+// - No duplicate verification ticket system in index.js
+// - Uses the verification category managed by tickets.js
+// - Manual staff approval only
+// - Approval only inside the correct verification ticket
+// - Verification commands hidden from public help
+// - Verification approval command deleted before execution
+// - No verification or closing commands in ticket embeds
+// - Normal ticket closing is handled by tickets.js
 //
 // VOUCH REMINDERS:
 // ,r @user r
@@ -33,7 +30,7 @@
 // ,r @user rconv
 // ,r @user rall
 //
-// VOUCH TUTORIALS:
+// VOUCH TUTORIAL COMMANDS:
 // !vouchtut
 // !personalvouchtut
 // !marketvouchtut
@@ -41,7 +38,7 @@
 // !giveawayvouchtut
 // !convertervouchtut
 //
-// COUNTER NAMES:
+// COUNTER DISPLAY:
 // ╭・chuppy total vouches : ##
 // ┃・invite・vouches : ##
 // ┃・giveaway・vouches : ##
@@ -49,18 +46,26 @@
 // ╰・server total vouches : ##
 //
 // CHUPPY TOTAL:
-// Personal + Invite + Giveaway + Converter
+// Personal Market + Invite + Giveaway + Converter
 //
 // SERVER TOTAL:
-// Personal + Regular Market + Invite + Giveaway
-// + Converter
+// Personal Market + Regular Market + Invite
+// + Giveaway + Converter
+//
+// IMPORTANT:
+// Run only ONE instance of this bot on Render.
+// Keep vouch.js, transactions.js and tickets.js
+// in the same project.
 //
 // ============================================================
 // IMPORTS
 // ============================================================
 
 const http = require("http");
-const { createHash } = require("node:crypto");
+
+const {
+  createHash
+} = require("node:crypto");
 
 const {
   Client,
@@ -85,10 +90,11 @@ const {
 } = require("discord.js");
 
 // ============================================================
-// RENDER SERVER
+// RENDER WEB SERVER
 // ============================================================
 
-const PORT = Number(process.env.PORT) || 3000;
+const PORT =
+  Number(process.env.PORT) || 3000;
 
 http.createServer((req, res) => {
   res.writeHead(200, {
@@ -97,19 +103,26 @@ http.createServer((req, res) => {
 
   res.end("Chuppys bot is running!");
 }).listen(PORT, "0.0.0.0", () => {
-  console.log(`[WEB] Server running on ${PORT}`);
+  console.log(
+    `[WEB] Server running on ${PORT}`
+  );
 });
 
 // ============================================================
 // ENVIRONMENT
 // ============================================================
 
-const TOKEN = process.env.DISCORD_BOT_TOKEN;
-const GUILD_ID = process.env.DISCORD_GUILD_ID;
+const TOKEN =
+  process.env.DISCORD_BOT_TOKEN;
+
+const GUILD_ID =
+  process.env.DISCORD_GUILD_ID;
 
 const BRAND = ".gg/chuppys";
 const WHITE = 0xffffff;
-const EPHEMERAL = MessageFlags.Ephemeral;
+
+const EPHEMERAL =
+  MessageFlags.Ephemeral;
 
 const NONE = {
   parse: []
@@ -326,10 +339,29 @@ const UNBLACKLIST_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1561103471325745242.png";
 
 // ============================================================
-// VERIFICATION — SECURE TICKET ONLY
+// VERIFICATION — TICKETS.JS OWNS CREATION
 // ============================================================
-
-// Legacy button IDs are retained for handling old panels.
+//
+// IMPORTANT:
+//
+// index.js DOES NOT create verification tickets.
+//
+// tickets.js handles:
+// - Creation
+// - Category selection
+// - Duplicate tickets
+// - Ticket buttons
+// - Claiming
+// - Closing
+// - Reopening
+// - Deleting
+// - Transcripts
+//
+// index.js handles:
+// - Verification panel
+// - Manual staff approval
+//
+// ============================================================
 
 const VERIFY_BUTTON_ID =
   "chuppys_verify";
@@ -337,7 +369,8 @@ const VERIFY_BUTTON_ID =
 const VERIFY_TICKET_BUTTON_ID =
   "chuppys_create_verification_ticket";
 
-// New button exclusively handled by index.js.
+// Old custom ID retained only to recognize old panels.
+// It is NOT used by the new verification message.
 
 const VERIFY_SECURE_TICKET_BUTTON_ID =
   "chuppys_secure_verification_ticket_v2";
@@ -366,24 +399,13 @@ const CLIENT_EMOJI =
 const WELCOME_ROLE_ID =
   "1531039846871728248";
 
-// Dedicated category configuration.
-//
-// If VERIFICATION_TICKET_CATEGORY_ID is provided in
-// Render, the bot uses that category.
-//
-// Otherwise it finds or creates a category named
-// "verification-tickets".
-//
-// It does NOT use the parent category of #verify.
+// This must match the category used by tickets.js.
+
+const VERIFICATION_CATEGORY_NAME =
+  "chuppys-verification";
 
 const VERIFICATION_TICKET_CATEGORY_ID =
   process.env.VERIFICATION_TICKET_CATEGORY_ID || "";
-
-const VERIFICATION_CATEGORY_NAME =
-  "verification-tickets";
-
-const VERIFICATION_TICKET_TOPIC_PREFIX =
-  "CHUPPYS_VERIFY_TICKET:";
 
 // ============================================================
 // PING ROLES
@@ -584,16 +606,17 @@ const PAYMENT_METHODS_TEXT =
   "> Cash App\n" +
   "> Chime";
 
-const EXTRA_PAYMENT_METHODS = [5, 6].map(n => ({
-  name:
-    process.env[`PAYMENT_METHOD_${n}_NAME`] || "",
+const EXTRA_PAYMENT_METHODS =
+  [5, 6].map(n => ({
+    name:
+      process.env[`PAYMENT_METHOD_${n}_NAME`] || "",
 
-  details:
-    process.env[`PAYMENT_METHOD_${n}_DETAILS`] || "",
+    details:
+      process.env[`PAYMENT_METHOD_${n}_DETAILS`] || "",
 
-  url:
-    process.env[`PAYMENT_METHOD_${n}_URL`] || ""
-}));
+    url:
+      process.env[`PAYMENT_METHOD_${n}_URL`] || ""
+  }));
 
 // ============================================================
 // SLASH COMMANDS
@@ -683,10 +706,7 @@ const locks = {
   appeal: new Set(),
   vouchRoute: new Set(),
   vouchTutorial: new Set(),
-  verifyTicket: new Set(),
-  verifyApprove: new Set(),
-  verifyClose: new Set(),
-  verifyCategory: new Set()
+  verifyApprove: new Set()
 };
 
 const blacklistRoleJobs = new Map();
@@ -786,7 +806,7 @@ function isVerificationStaff(member) {
     return false;
   }
 
-  return (
+  return Boolean(
     member.id === member.guild.ownerId ||
     member.permissions?.has(
       PermissionFlagsBits.Administrator
@@ -803,7 +823,6 @@ function lock(set, key) {
   }
 
   set.add(key);
-
   return true;
 }
 
@@ -820,10 +839,7 @@ async function privateNotice(user, content) {
   }
 }
 
-async function interactionError(
-  interaction,
-  error
-) {
+async function interactionError(interaction, error) {
   console.error(
     "[INTERACTION]",
     error
@@ -867,9 +883,7 @@ async function interactionError(
 async function findBlacklistRole(guild) {
   if (BLACKLIST_ROLE_ID) {
     const configured =
-      guild.roles.cache.get(
-        BLACKLIST_ROLE_ID
-      ) ||
+      guild.roles.cache.get(BLACKLIST_ROLE_ID) ||
       await guild.roles.fetch(
         BLACKLIST_ROLE_ID
       ).catch(() => null);
@@ -930,9 +944,7 @@ async function ensureBlacklistRole(guild) {
   try {
     return await job;
   } finally {
-    blacklistRoleJobs.delete(
-      guild.id
-    );
+    blacklistRoleJobs.delete(guild.id);
   }
 }
 
@@ -942,9 +954,7 @@ async function isBlacklisted(member) {
   }
 
   const role =
-    await findBlacklistRole(
-      member.guild
-    );
+    await findBlacklistRole(member.guild);
 
   return Boolean(
     role &&
@@ -957,7 +967,7 @@ function canBlacklist(member) {
     return false;
   }
 
-  return (
+  return Boolean(
     member.id === member.guild.ownerId ||
     [
       OWNER_ROLE_ID,
@@ -1011,10 +1021,7 @@ function makeBlacklistEmbed(
     .setTimestamp();
 }
 
-function makeBlacklistDMEmbed(
-  guild,
-  reason
-) {
+function makeBlacklistDMEmbed(guild, reason) {
   return whiteEmbed(
     "You Have Been Blacklisted",
 
@@ -1680,6 +1687,13 @@ async function handleRoleSelection(
 // ============================================================
 // VERIFICATION PANEL
 // ============================================================
+//
+// ONLY ONE BUTTON:
+// Create Verification Ticket
+//
+// This button is handled by tickets.js.
+//
+// ============================================================
 
 function makeVerificationEmbed() {
   return whiteEmbed(
@@ -1717,7 +1731,7 @@ function makeVerificationButton() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(
-        VERIFY_SECURE_TICKET_BUTTON_ID
+        VERIFY_TICKET_BUTTON_ID
       )
       .setLabel(
         "Create Verification Ticket"
@@ -1780,7 +1794,11 @@ async function sendOrUpdateVerificationMessage() {
     );
 
     console.log(
-      "[VERIFY] Ticket-only panel updated."
+      "[VERIFY] Verification panel updated."
+    );
+
+    console.log(
+      "[VERIFY] Ticket creation delegated to tickets.js."
     );
   } catch (error) {
     console.error(
@@ -1791,509 +1809,209 @@ async function sendOrUpdateVerificationMessage() {
 }
 
 // ============================================================
-// VERIFICATION CATEGORY
+// IDENTIFY OFFICIAL VERIFICATION TICKET
 // ============================================================
 //
-// IMPORTANT:
-// This always uses a dedicated verification category.
+// tickets.js creates channels named:
 //
-// It never falls back to the category containing #verify.
+// verification-0001
+// verification-0002
+// closed-verification-0001
+//
+// The verification category is managed by tickets.js.
+//
+// This check DOES NOT create a category.
 //
 // ============================================================
-
-async function getVerificationCategory(guild) {
-  await guild.channels.fetch();
-
-  if (VERIFICATION_TICKET_CATEGORY_ID) {
-    const configured =
-      await guild.channels.fetch(
-        VERIFICATION_TICKET_CATEGORY_ID
-      ).catch(() => null);
-
-    if (
-      !configured ||
-      configured.type !== ChannelType.GuildCategory
-    ) {
-      throw new Error(
-        "VERIFICATION_TICKET_CATEGORY_ID is invalid."
-      );
-    }
-
-    if (configured.children.cache.size >= 50) {
-      throw new Error(
-        "The verification category is full."
-      );
-    }
-
-    return configured;
-  }
-
-  const existing =
-    guild.channels.cache.find(
-      channel =>
-        channel.type === ChannelType.GuildCategory &&
-        channel.name === VERIFICATION_CATEGORY_NAME &&
-        channel.children.cache.size < 50
-    );
-
-  if (existing) {
-    return existing;
-  }
-
-  const key = guild.id;
-
-  if (!lock(locks.verifyCategory, key)) {
-    // Another category creation is processing.
-    // Fetch again after that operation completes.
-    for (let attempt = 0; attempt < 20; attempt++) {
-      await new Promise(resolve =>
-        setTimeout(resolve, 250)
-      );
-
-      await guild.channels.fetch();
-
-      const found =
-        guild.channels.cache.find(
-          channel =>
-            channel.type === ChannelType.GuildCategory &&
-            channel.name === VERIFICATION_CATEGORY_NAME &&
-            channel.children.cache.size < 50
-        );
-
-      if (found) {
-        return found;
-      }
-    }
-
-    throw new Error(
-      "Verification category creation is already processing."
-    );
-  }
-
-  try {
-    // Recheck after obtaining the lock.
-
-    await guild.channels.fetch();
-
-    const found =
-      guild.channels.cache.find(
-        channel =>
-          channel.type === ChannelType.GuildCategory &&
-          channel.name === VERIFICATION_CATEGORY_NAME &&
-          channel.children.cache.size < 50
-      );
-
-    if (found) {
-      return found;
-    }
-
-    const bot =
-      await guild.members.fetchMe();
-
-    if (!bot.permissions.has(
-      PermissionFlagsBits.ManageChannels
-    )) {
-      throw new Error(
-        "The bot requires Manage Channels."
-      );
-    }
-
-    const staffIds = [];
-
-    for (const roleId of VERIFICATION_STAFF_ROLE_IDS) {
-      const role =
-        guild.roles.cache.get(roleId) ||
-        await guild.roles.fetch(roleId)
-          .catch(() => null);
-
-      if (role) {
-        staffIds.push(role.id);
-      }
-    }
-
-    const overwrites = [
-      {
-        id: guild.id,
-        deny: [
-          PermissionFlagsBits.ViewChannel
-        ]
-      },
-
-      {
-        id: client.user.id,
-        allow: [
-          PermissionFlagsBits.ViewChannel,
-          PermissionFlagsBits.SendMessages,
-          PermissionFlagsBits.ReadMessageHistory,
-          PermissionFlagsBits.ManageChannels,
-          PermissionFlagsBits.ManageMessages,
-          PermissionFlagsBits.EmbedLinks
-        ]
-      },
-
-      ...[...new Set(staffIds)].map(id => ({
-        id,
-        allow: [
-          PermissionFlagsBits.ViewChannel,
-          PermissionFlagsBits.SendMessages,
-          PermissionFlagsBits.ReadMessageHistory
-        ]
-      }))
-    ];
-
-    const category =
-      await guild.channels.create({
-        name: VERIFICATION_CATEGORY_NAME,
-        type: ChannelType.GuildCategory,
-        permissionOverwrites: overwrites,
-        reason:
-          "Chuppys private verification ticket category"
-      });
-
-    console.log(
-      `[VERIFY] Category created: ${category.id}`
-    );
-
-    return category;
-  } finally {
-    locks.verifyCategory.delete(key);
-  }
-}
-
-// ============================================================
-// VERIFICATION TICKET IDENTIFICATION
-// ============================================================
-
-function verificationTicketOwnerId(channel) {
-  if (
-    !channel ||
-    typeof channel.topic !== "string"
-  ) {
-    return null;
-  }
-
-  const match =
-    channel.topic.match(
-      /CHUPPYS_VERIFY_TICKET:(\d{17,20})/
-    );
-
-  return match?.[1] || null;
-}
-
-function isVerificationTicket(channel) {
-  return Boolean(
-    verificationTicketOwnerId(channel)
-  );
-}
 
 async function isOfficialVerificationTicket(channel) {
   if (
     !channel?.guild ||
-    !isVerificationTicket(channel)
+    channel.type !== ChannelType.GuildText
   ) {
     return false;
   }
 
-  await channel.guild.channels.fetch();
+  if (
+    !/^(?:closed-)?verification-\d+$/i.test(
+      channel.name
+    )
+  ) {
+    return false;
+  }
+
+  if (!channel.parentId) {
+    return false;
+  }
+
+  const parent =
+    await channel.guild.channels.fetch(
+      channel.parentId
+    ).catch(() => null);
+
+  if (
+    !parent ||
+    parent.type !== ChannelType.GuildCategory
+  ) {
+    return false;
+  }
 
   if (VERIFICATION_TICKET_CATEGORY_ID) {
     return (
-      channel.parentId ===
+      parent.id ===
       VERIFICATION_TICKET_CATEGORY_ID
     );
   }
 
-  const parent =
-    channel.parent ||
-    channel.guild.channels.cache.get(
-      channel.parentId
-    );
+  const normalized =
+    parent.name.toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
 
-  return Boolean(
-    parent &&
-    parent.type === ChannelType.GuildCategory &&
-    parent.name === VERIFICATION_CATEGORY_NAME
-  );
+  const approvedNames = new Set([
+    "chuppysverification",
+    "verificationtickets",
+    "verificationticket",
+    "verification",
+    "verifytickets",
+    "verify"
+  ]);
+
+  return approvedNames.has(normalized);
 }
 
-async function findExistingVerificationTicket(
-  guild,
-  userId
-) {
-  await guild.channels.fetch();
+// ============================================================
+// IDENTIFY VERIFICATION TICKET OWNER
+// ============================================================
+//
+// IMPORTANT:
+//
+// The ticket opener is identified from the
+// original tickets.js welcome message.
+//
+// The welcome message must:
+// - Be authored by this bot
+// - Match the verification ticket number
+// - Include the opener's user mention
+// - Contain original ticket controls
+//
+// This prevents verifying someone just because
+// they were mentioned in an unrelated message.
+//
+// ============================================================
 
-  for (const channel of guild.channels.cache.values()) {
-    if (
-      channel.type === ChannelType.GuildText &&
-      verificationTicketOwnerId(channel) === userId &&
-      await isOfficialVerificationTicket(channel)
-    ) {
-      return channel;
+async function verificationTicketOwnerId(channel) {
+  if (
+    !(await isOfficialVerificationTicket(channel))
+  ) {
+    return null;
+  }
+
+  const numberMatch =
+    channel.name.match(
+      /verification-(\d+)$/i
+    );
+
+  if (!numberMatch) {
+    return null;
+  }
+
+  const expectedNumber =
+    Number(numberMatch[1]);
+
+  let before;
+
+  for (let page = 0; page < 10; page++) {
+    const messages =
+      await channel.messages.fetch({
+        limit: 100,
+        ...(before ? { before } : {})
+      });
+
+    if (!messages.size) {
+      break;
     }
+
+    for (const message of messages.values()) {
+      if (
+        message.author.id !== client.user.id
+      ) {
+        continue;
+      }
+
+      const hasControls =
+        message.components.some(row =>
+          row.components.some(component =>
+            [
+              "chuppys_ticket_claim",
+              "chuppys_ticket_close"
+            ].includes(component.customId) ||
+            String(
+              component.customId || ""
+            ).startsWith("chuppys_ticket:")
+          )
+        );
+
+      if (!hasControls) {
+        continue;
+      }
+
+      for (const embed of message.embeds) {
+        const title =
+          String(embed.title || "");
+
+        if (
+          !/verification\s+ticket/i.test(title)
+        ) {
+          continue;
+        }
+
+        const titleNumber =
+          title.match(/#\s*0*(\d+)/);
+
+        if (
+          !titleNumber ||
+          Number(titleNumber[1]) !==
+            expectedNumber
+        ) {
+          continue;
+        }
+
+        const description =
+          String(embed.description || "");
+
+        const ownerMatch =
+          description.match(
+            /welcome\s*<@!?(\d{17,20})>/i
+          );
+
+        if (ownerMatch) {
+          return ownerMatch[1];
+        }
+      }
+    }
+
+    if (messages.size < 100) {
+      break;
+    }
+
+    before =
+      messages.last().id;
   }
 
   return null;
 }
 
 // ============================================================
-// VERIFICATION TICKET EMBED
+// HIDE MANUAL VERIFICATION COMMAND
 // ============================================================
 //
-// NO APPROVAL COMMANDS.
-// NO CLOSING COMMANDS.
-// NO STAFF COMMAND INSTRUCTIONS.
+// The command is deleted before approval.
 //
-// ============================================================
-
-function makeVerificationTicketEmbed(userId) {
-  return whiteEmbed(
-    "Chuppys Verification Ticket",
-
-    `Welcome <@${userId}>!\n\n` +
-
-    "Thank you for joining **.gg/chuppys**.\n\n" +
-
-    "Your private verification ticket has been created.\n\n" +
-
-    "**HOW VERIFICATION WORKS**\n\n" +
-
-    "**1.** Wait for a member of our verification team.\n\n" +
-
-    "**2.** Answer the verification questions honestly.\n\n" +
-
-    "**3.** Review the rules and follow staff instructions.\n\n" +
-
-    "**4.** Our team will review your information " +
-    "and approve your verification when appropriate.\n\n" +
-
-    "**IMPORTANT**\n\n" +
-
-    "Verification is completed manually by staff.\n\n" +
-
-    "Opening a ticket does not automatically " +
-    "give you access to the server.\n\n" +
-
-    "Please remain patient while our team " +
-    "reviews your ticket.\n\n" +
-
-    "**SAFETY REMINDER**\n\n" +
-
-    "Never share passwords, account tokens, " +
-    "or two-factor authentication codes.\n\n" +
-
-    "Thank you for choosing **.gg/chuppys**!"
-  ).setTimestamp();
-}
-
-// ============================================================
-// CREATE PRIVATE VERIFICATION TICKET
-// ============================================================
-
-async function createVerificationTicket(interaction) {
-  if (!interaction.inGuild()) {
-    return interaction.reply(
-      ephemeral(
-        "Verification tickets can only be created in the server."
-      )
-    );
-  }
-
-  await interaction.deferReply({
-    flags: EPHEMERAL
-  });
-
-  const guild = interaction.guild;
-  const userId = interaction.user.id;
-  const key = `${guild.id}:${userId}`;
-
-  if (!lock(locks.verifyTicket, key)) {
-    return interaction.editReply(
-      "Your verification ticket is already being created."
-    );
-  }
-
-  try {
-    const member =
-      await guild.members.fetch({
-        user: userId,
-        force: true
-      });
-
-    if (await isBlacklisted(member)) {
-      return interaction.editReply(
-        "You are blacklisted and cannot open " +
-        "a verification ticket."
-      );
-    }
-
-    if (
-      member.roles.cache.has(
-        CHUPPYS_ROLE_ID
-      )
-    ) {
-      return interaction.editReply(
-        "You are already verified!"
-      );
-    }
-
-    const existing =
-      await findExistingVerificationTicket(
-        guild,
-        userId
-      );
-
-    if (existing) {
-      return interaction.editReply(
-        `You already have a private verification ticket: <#${existing.id}>`
-      );
-    }
-
-    const bot =
-      await guild.members.fetchMe();
-
-    if (!bot.permissions.has(
-      PermissionFlagsBits.ManageChannels
-    )) {
-      return interaction.editReply(
-        "The bot needs Manage Channels permission."
-      );
-    }
-
-    const category =
-      await getVerificationCategory(guild);
-
-    const staffIds = [];
-
-    for (const id of VERIFICATION_STAFF_ROLE_IDS) {
-      const role =
-        guild.roles.cache.get(id) ||
-        await guild.roles.fetch(id)
-          .catch(() => null);
-
-      if (role) {
-        staffIds.push(role.id);
-      }
-    }
-
-    const overwrites = [
-      {
-        id: guild.id,
-        deny: [
-          PermissionFlagsBits.ViewChannel
-        ]
-      },
-
-      {
-        id: userId,
-        allow: [
-          PermissionFlagsBits.ViewChannel,
-          PermissionFlagsBits.SendMessages,
-          PermissionFlagsBits.ReadMessageHistory,
-          PermissionFlagsBits.AttachFiles
-        ]
-      },
-
-      {
-        id: client.user.id,
-        allow: [
-          PermissionFlagsBits.ViewChannel,
-          PermissionFlagsBits.SendMessages,
-          PermissionFlagsBits.ReadMessageHistory,
-          PermissionFlagsBits.ManageChannels,
-          PermissionFlagsBits.ManageMessages,
-          PermissionFlagsBits.EmbedLinks,
-          PermissionFlagsBits.AttachFiles
-        ]
-      },
-
-      ...[...new Set(staffIds)].map(id => ({
-        id,
-        allow: [
-          PermissionFlagsBits.ViewChannel,
-          PermissionFlagsBits.SendMessages,
-          PermissionFlagsBits.ReadMessageHistory,
-          PermissionFlagsBits.AttachFiles
-        ]
-      }))
-    ];
-
-    const safeName =
-      interaction.user.username
-        .toLowerCase()
-        .replace(/[^a-z0-9-]/g, "-")
-        .replace(/-+/g, "-")
-        .slice(0, 25) || "member";
-
-    const channel =
-      await guild.channels.create({
-        name: `verify-${safeName}`,
-        type: ChannelType.GuildText,
-        parent: category.id,
-
-        topic:
-          `${VERIFICATION_TICKET_TOPIC_PREFIX}${userId}`,
-
-        permissionOverwrites: overwrites,
-
-        reason:
-          `Private verification ticket for ${interaction.user.tag}`
-      });
-
-    console.log(
-      `[VERIFY] Ticket created: ${channel.id}`
-    );
-
-    try {
-      await channel.send({
-        content: `<@${userId}>`,
-
-        embeds: [
-          makeVerificationTicketEmbed(userId)
-        ],
-
-        allowedMentions: {
-          users: [userId],
-          parse: []
-        }
-      });
-    } catch (error) {
-      console.error(
-        "[VERIFY] Ticket welcome message:",
-        error
-      );
-    }
-
-    return interaction.editReply(
-      `Your private verification ticket has been created: <#${channel.id}>\n\n` +
-      "Please open it and wait for the verification team."
-    );
-
-  } catch (error) {
-    console.error(
-      "[VERIFY] Ticket creation:",
-      error
-    );
-
-    return interaction.editReply(
-      "I couldn't create your verification ticket. " +
-      "Please contact staff."
-    );
-  } finally {
-    locks.verifyTicket.delete(key);
-  }
-}
-
-// ============================================================
-// HIDE VERIFICATION COMMANDS
-// ============================================================
+// Discord may still briefly display a prefix
+// command before it is deleted.
 //
-// The command is deleted BEFORE execution.
-//
-// IMPORTANT:
-// Deletion is not completely invisible.
-// Discord may briefly display a typed message.
-//
-// For fully private commands, use ephemeral slash commands.
+// For truly invisible commands, an ephemeral
+// slash command would be required.
 //
 // ============================================================
 
@@ -2311,8 +2029,8 @@ async function hideVerificationCommand(message) {
   ) {
     await privateNotice(
       message.author,
-      "The verification command was not executed. " +
-      "The bot requires Manage Messages permission."
+      "Verification was not processed because " +
+      "the bot needs Manage Messages permission."
     );
 
     return false;
@@ -2320,18 +2038,17 @@ async function hideVerificationCommand(message) {
 
   try {
     await message.delete();
-
     return true;
   } catch (error) {
     console.error(
-      "[VERIFY] Command deletion failed:",
+      "[VERIFY] Could not delete command:",
       error
     );
 
     await privateNotice(
       message.author,
-      "The verification command could not be hidden, " +
-      "so it was not executed."
+      "Verification was not processed because " +
+      "the command could not be hidden."
     );
 
     return false;
@@ -2342,37 +2059,55 @@ async function hideVerificationCommand(message) {
 // MANUAL VERIFICATION APPROVAL
 // ============================================================
 //
-// Only authorized staff may approve.
+// Staff command:
 //
-// The target user MUST match the ticket owner.
+// ,r @user c
 //
-// Commands must be used in the official verification
-// category, not another ticket.
+// REQUIREMENTS:
+// - Owner/Admin/Mod/Ticket Support
+// - Official verification ticket
+// - Mentioned user matches ticket opener
+// - Target is not blacklisted
+// - Target is not already verified
+// - Bot can manage verified role
 //
 // ============================================================
 
-async function approveVerification(message, targetId) {
-  const guild = message.guild;
-
-  if (!isVerificationStaff(message.member)) {
+async function approveVerification(
+  message,
+  targetId
+) {
+  if (
+    !isVerificationStaff(message.member)
+  ) {
     return;
   }
-
-  const ticketOwnerId =
-    verificationTicketOwnerId(
-      message.channel
-    );
 
   const official =
     await isOfficialVerificationTicket(
       message.channel
     );
 
-  if (!ticketOwnerId || !official) {
+  if (!official) {
     await privateNotice(
       message.author,
-      "Verification approval is only available " +
+      "Verification approval only works " +
       "inside an official verification ticket."
+    );
+
+    return;
+  }
+
+  const ticketOwnerId =
+    await verificationTicketOwnerId(
+      message.channel
+    );
+
+  if (!ticketOwnerId) {
+    await privateNotice(
+      message.author,
+      "I couldn't verify the owner of this ticket. " +
+      "Make sure the original ticket message still exists."
     );
 
     return;
@@ -2381,26 +2116,29 @@ async function approveVerification(message, targetId) {
   if (ticketOwnerId !== targetId) {
     await privateNotice(
       message.author,
-      "You can only approve the member who owns " +
-      "this verification ticket."
+      "You can only verify the member " +
+      "who opened this verification ticket."
     );
 
     return;
   }
 
   const key =
-    `${guild.id}:${targetId}`;
+    `${message.guild.id}:${targetId}`;
 
   if (!lock(locks.verifyApprove, key)) {
     await privateNotice(
       message.author,
-      "Verification approval is already processing."
+      "Verification is already processing."
     );
 
     return;
   }
 
   try {
+    const guild =
+      message.guild;
+
     const member =
       await guild.members.fetch({
         user: targetId,
@@ -2423,7 +2161,8 @@ async function approveVerification(message, targetId) {
     if (await isBlacklisted(member)) {
       await privateNotice(
         message.author,
-        "This member is blacklisted and cannot be verified."
+        "This member is blacklisted " +
+        "and cannot be verified."
       );
 
       return;
@@ -2480,7 +2219,6 @@ async function approveVerification(message, targetId) {
 
     await member.roles.add(
       CHUPPYS_ROLE_ID,
-
       `Manually verified by ${message.author.tag} in ticket ${message.channel.id}`
     );
 
@@ -2502,7 +2240,6 @@ async function approveVerification(message, targetId) {
     await message.channel.send({
       content: `<@${member.id}>`,
       embeds: [embed],
-
       allowedMentions: {
         users: [member.id]
       }
@@ -2519,108 +2256,10 @@ async function approveVerification(message, targetId) {
 
     await privateNotice(
       message.author,
-      "Verification approval failed. Check bot permissions."
+      "Verification failed. Check the bot's permissions."
     );
   } finally {
     locks.verifyApprove.delete(key);
-  }
-}
-
-// ============================================================
-// VERIFICATION TICKET CLOSE / CANCEL
-// ============================================================
-//
-// These commands are not displayed in ticket embeds.
-//
-// ============================================================
-
-async function closeVerificationTicket(
-  message,
-  cancel = false
-) {
-  const ownerId =
-    verificationTicketOwnerId(
-      message.channel
-    );
-
-  const official =
-    await isOfficialVerificationTicket(
-      message.channel
-    );
-
-  if (!ownerId || !official) {
-    return;
-  }
-
-  const staff =
-    isVerificationStaff(
-      message.member
-    );
-
-  const allowed =
-    cancel
-      ? (
-          message.author.id === ownerId ||
-          staff
-        )
-      : staff;
-
-  if (!allowed) {
-    return;
-  }
-
-  if (!lock(
-    locks.verifyClose,
-    message.channel.id
-  )) {
-    return;
-  }
-
-  try {
-    const bot =
-      await message.guild.members.fetchMe();
-
-    if (!bot.permissions.has(
-      PermissionFlagsBits.ManageChannels
-    )) {
-      await privateNotice(
-        message.author,
-        "The bot needs Manage Channels permission."
-      );
-
-      return;
-    }
-
-    await message.channel.send({
-      embeds: [
-        whiteEmbed(
-          cancel
-            ? "Verification Ticket Cancelled"
-            : "Verification Ticket Closed",
-
-          "This verification ticket is being closed."
-        )
-      ],
-      allowedMentions: NONE
-    }).catch(console.error);
-
-    await message.channel.delete(
-      `Verification ticket ${cancel ? "cancelled" : "closed"} by ${message.author.tag}`
-    );
-  } catch (error) {
-    console.error(
-      "[VERIFY] Close failed:",
-      error
-    );
-
-    await privateNotice(
-      message.author,
-      "The verification ticket could not be closed."
-    );
-  } finally {
-    locks.verifyClose.delete(
-      message.channel.id
-    );
   }
 }
 
@@ -2774,6 +2413,10 @@ function makeClientButton() {
 // VOUCH ENGINE
 // ============================================================
 
+// ============================================================
+// FORWARD DETECTION
+// ============================================================
+
 function isForward(message) {
   const type =
     message.reference?.type ??
@@ -2817,6 +2460,10 @@ function getAttachments(message) {
   ];
 }
 
+// ============================================================
+// ORIGINAL FORWARD REFERENCE
+// ============================================================
+
 function getOriginalReference(message) {
   const reference =
     message.reference ||
@@ -2841,6 +2488,10 @@ function getOriginalReference(message) {
   return null;
 }
 
+// ============================================================
+// MOVED VOUCH ORIGIN
+// ============================================================
+
 function getMoveOrigin(message) {
   for (const embed of getEmbeds(message)) {
     const footer =
@@ -2858,6 +2509,10 @@ function getMoveOrigin(message) {
 
   return null;
 }
+
+// ============================================================
+// NORMALIZED FINGERPRINT
+// ============================================================
 
 function normalizedVouchText(value) {
   return String(value || "")
@@ -2926,6 +2581,10 @@ function vouchFingerprint(message) {
     .digest("hex");
 }
 
+// ============================================================
+// UNIQUE VOUCH KEY
+// ============================================================
+
 function originalVouchKey(message) {
   const movedOrigin =
     getMoveOrigin(message);
@@ -2952,6 +2611,10 @@ function originalVouchKey(message) {
 
   return `${message.channel.id}:${message.id}`;
 }
+
+// ============================================================
+// DETECT VOUCH TYPE
+// ============================================================
 
 function detectVouchType(message) {
   const embeds =
@@ -3043,6 +2706,10 @@ function detectVouchType(message) {
     : null;
 }
 
+// ============================================================
+// RECOGNIZE VALID VOUCH
+// ============================================================
+
 function looksLikeVouch(message) {
   if (message.system) {
     return false;
@@ -3085,6 +2752,10 @@ function looksLikeVouch(message) {
   return /\bvouch\b/i.test(text);
 }
 
+// ============================================================
+// VOUCH DESTINATION
+// ============================================================
+
 function vouchDestination(type, message) {
   if (type === "converter") {
     return CONVERTER_VOUCH_CHANNEL_ID;
@@ -3124,6 +2795,10 @@ function vouchDestination(type, message) {
 
   return null;
 }
+
+// ============================================================
+// BUILD MOVED VOUCH
+// ============================================================
 
 function buildMovedVouch(message) {
   const data =
@@ -3187,6 +2862,10 @@ function buildMovedVouch(message) {
   };
 }
 
+// ============================================================
+// AUTOMATIC VOUCH REACTION
+// ============================================================
+
 async function reactToVouch(message) {
   if (!looksLikeVouch(message)) {
     return;
@@ -3203,6 +2882,10 @@ async function reactToVouch(message) {
     );
   }
 }
+
+// ============================================================
+// AUTOMATIC VOUCH ROUTING
+// ============================================================
 
 async function routeVouch(message) {
   if (!AUTO_ROUTE_VOUCHES) {
@@ -3423,6 +3106,10 @@ function makeVouchRecord(message) {
   };
 }
 
+// ============================================================
+// FETCH CHANNEL VOUCH HISTORY
+// ============================================================
+
 async function fetchChannelVouches(channelId) {
   const channel =
     await client.channels.fetch(
@@ -3514,6 +3201,10 @@ async function fetchChannelVouches(channelId) {
   return results;
 }
 
+// ============================================================
+// DEDUPLICATE VOUCH RECORDS
+// ============================================================
+
 function uniqueVouchRecords(records) {
   const byKey = new Map();
 
@@ -3564,7 +3255,7 @@ function uniqueVouches(records) {
 }
 
 // ============================================================
-// COUNTER CHANNELS
+// COUNTER CHANNEL CREATION
 // ============================================================
 
 async function findOrCreateCountChannel(
@@ -3655,6 +3346,10 @@ async function findOrCreateCountChannel(
   return created;
 }
 
+// ============================================================
+// RENAME COUNTERS
+// ============================================================
+
 async function renameCounterChannel(
   channel,
   name
@@ -3675,6 +3370,10 @@ async function renameCounterChannel(
     );
   }
 }
+
+// ============================================================
+// COUNTER ORDER
+// ============================================================
 
 async function orderVouchCounters(
   guild,
@@ -3768,9 +3467,8 @@ async function recountAllVouches() {
 
   try {
     const guild =
-      await client.guilds.fetch(
-        GUILD_ID
-      );
+      client.guilds.cache.get(GUILD_ID) ||
+      await client.guilds.fetch(GUILD_ID);
 
     const [
       personalMessages,
@@ -3825,6 +3523,9 @@ async function recountAllVouches() {
         converterMessages
       );
 
+    // CHUPPY TOTAL:
+    // Personal + Invite + Giveaway + Converter
+
     const chuppyTotal =
       uniqueVouches([
         ...personalMessages,
@@ -3832,6 +3533,9 @@ async function recountAllVouches() {
         ...giveawayMessages,
         ...converterMessages
       ]);
+
+    // SERVER TOTAL:
+    // ALL FIVE VOUCH SOURCE CHANNELS
 
     const serverTotal =
       uniqueVouches([
@@ -3970,18 +3674,28 @@ function scheduleVouchCounterUpdate() {
 // VOUCH TUTORIAL SETTINGS
 // ============================================================
 //
-// Small inline /vouch display, not a large code block.
+// SMALL INLINE /VOUCH DISPLAY.
 //
 // ============================================================
 
-const VOUCH_COMMAND_BOX = "`/vouch`";
+const VOUCH_COMMAND_BOX =
+  "`/vouch`";
 
 const VOUCH_TUTORIAL_CHANNELS = Object.freeze({
-  personal: VOUCH_TUTORIAL_CHANNEL_ID,
-  market: VOUCH_TUTORIAL_CHANNEL_ID,
-  invite: INVITE_VOUCH_TUTORIAL_CHANNEL_ID,
-  giveaway: GIVEAWAY_VOUCH_TUTORIAL_CHANNEL_ID,
-  converter: CONVERTER_VOUCH_TUTORIAL_CHANNEL_ID
+  personal:
+    VOUCH_TUTORIAL_CHANNEL_ID,
+
+  market:
+    VOUCH_TUTORIAL_CHANNEL_ID,
+
+  invite:
+    INVITE_VOUCH_TUTORIAL_CHANNEL_ID,
+
+  giveaway:
+    GIVEAWAY_VOUCH_TUTORIAL_CHANNEL_ID,
+
+  converter:
+    CONVERTER_VOUCH_TUTORIAL_CHANNEL_ID
 });
 
 // ============================================================
@@ -3990,7 +3704,8 @@ const VOUCH_TUTORIAL_CHANNELS = Object.freeze({
 
 const VOUCH_TUTORIALS = {
   personal: {
-    title: "HOW TO VOUCH — CHUPPYS MARKET",
+    title:
+      "HOW TO VOUCH — CHUPPYS MARKET",
 
     description:
       "Thank you for shopping at **.gg/chuppys**!\n\n" +
@@ -4032,7 +3747,8 @@ const VOUCH_TUTORIALS = {
   },
 
   market: {
-    title: "HOW TO VOUCH — MARKET SELLERS",
+    title:
+      "HOW TO VOUCH — MARKET SELLERS",
 
     description:
       "Thank you for shopping with a seller at **.gg/chuppys**!\n\n" +
@@ -4070,7 +3786,8 @@ const VOUCH_TUTORIALS = {
   },
 
   invite: {
-    title: "HOW TO VOUCH — INVITE CHALLENGE",
+    title:
+      "HOW TO VOUCH — INVITE CHALLENGE",
 
     description:
       "Congratulations on completing an **Invite Challenge** " +
@@ -4104,7 +3821,8 @@ const VOUCH_TUTORIALS = {
   },
 
   giveaway: {
-    title: "HOW TO VOUCH — GIVEAWAY",
+    title:
+      "HOW TO VOUCH — GIVEAWAY",
 
     description:
       "Congratulations on winning a giveaway " +
@@ -4139,7 +3857,8 @@ const VOUCH_TUTORIALS = {
   },
 
   converter: {
-    title: "HOW TO VOUCH — CONVERTER FEES",
+    title:
+      "HOW TO VOUCH — CONVERTER FEES",
 
     description:
       "Thank you for using payment conversion services " +
@@ -4184,7 +3903,7 @@ const VOUCH_TUTORIALS = {
 };
 
 // ============================================================
-// VOUCH TUTORIAL COMMANDS
+// TUTORIAL COMMANDS
 // ============================================================
 
 const VOUCH_TUTORIAL_COMMANDS = Object.freeze({
@@ -4385,10 +4104,23 @@ async function handleVouchTutorialCommand(
       const successful =
         results.filter(r => r.success);
 
+      const failed =
+        results.filter(r => !r.success);
+
       const details =
         successful.map(r =>
           `**${r.type}:** <#${r.channelId}>`
         );
+
+      if (failed.length) {
+        details.push(
+          "",
+          "**Failed:**",
+          ...failed.map(r =>
+            `${r.type}: ${safeText(r.error, 150)}`
+          )
+        );
+      }
 
       return message.reply({
         content:
@@ -4601,7 +4333,12 @@ async function sendVouchReminder(
 }
 
 // ============================================================
-// HELP EMBED — NO VERIFICATION/CLOSING COMMANDS
+// HELP EMBED
+// ============================================================
+//
+// NO VERIFICATION APPROVAL COMMANDS.
+// NO TICKET CLOSE/DELETE COMMANDS.
+//
 // ============================================================
 
 function makeHelpEmbed() {
@@ -4664,7 +4401,7 @@ function makeHelpEmbed() {
         name: "Tickets",
         value:
           "`/ticketpanel` — Open the ticket panel\n" +
-          "Use the ticket controls provided by staff."
+          "Use the controls inside your ticket."
       },
 
       {
@@ -5409,23 +5146,27 @@ client.once(
     );
 
     console.log(
-      "[READY] Manual verification enabled."
+      "[READY] Transactions module loaded."
     );
 
     console.log(
-      "[READY] Dedicated private verification category enabled."
+      "[READY] Verification creation owned by tickets.js."
     );
 
     console.log(
-      "[READY] Verification commands hidden from ticket embeds and /help."
+      "[READY] Duplicate index.js verification ticket system removed."
     );
 
     console.log(
-      "[READY] Verification commands deleted before execution when permitted."
+      "[READY] Manual verification approval enabled."
     );
 
     console.log(
-      "[READY] Automatic verification disabled in index.js."
+      "[READY] No automatic verification role grants."
+    );
+
+    console.log(
+      "[READY] Verification commands hidden from /help."
     );
 
     console.log(
@@ -5433,7 +5174,27 @@ client.once(
     );
 
     console.log(
-      "[READY] Vouch counter names preserved."
+      "[READY] Five vouch tutorial commands enabled."
+    );
+
+    console.log(
+      "[READY] Original vouch counter names preserved."
+    );
+
+    console.log(
+      "[READY] Chuppy total = personal + invite + giveaway + converter."
+    );
+
+    console.log(
+      "[READY] Server total = all five vouch sources."
+    );
+
+    console.log(
+      "[READY] Vouch duplicate recognition enabled."
+    );
+
+    console.log(
+      "[READY] Automatic vouch reactions enabled."
     );
 
     console.log(
@@ -5463,6 +5224,10 @@ client.on(
     // MODULE INTERACTIONS
     // ========================================================
 
+    // tickets.js owns its own ticket buttons,
+    // verification button, unblacklist button,
+    // ticket select menu and ticket modals.
+
     if (
       interaction.isButton() &&
       (
@@ -5472,6 +5237,8 @@ client.on(
         interaction.customId.startsWith(
           "chuppys_ticket:"
         ) ||
+        interaction.customId ===
+          VERIFY_TICKET_BUTTON_ID ||
         interaction.customId ===
           UNBLACKLIST_BUTTON_ID
       )
@@ -5525,38 +5292,25 @@ client.on(
     try {
 
       // ======================================================
-      // OLD AUTOMATIC VERIFY BUTTON — DISABLED
+      // OLD AUTO-VERIFY BUTTON — DISABLED
       // ======================================================
 
       if (
         interaction.isButton() &&
-        interaction.customId === VERIFY_BUTTON_ID
+        interaction.customId ===
+          VERIFY_BUTTON_ID
       ) {
         return interaction.reply(
           ephemeral(
             "Automatic verification is disabled.\n\n" +
-            `Please visit <#${VERIFY_CHANNEL_ID}> ` +
+            `Visit <#${VERIFY_CHANNEL_ID}> ` +
             "and create a verification ticket."
           )
         );
       }
 
       // ======================================================
-      // LEGACY VERIFICATION TICKET BUTTON
-      // ======================================================
-
-      if (
-        interaction.isButton() &&
-        interaction.customId ===
-          VERIFY_TICKET_BUTTON_ID
-      ) {
-        return createVerificationTicket(
-          interaction
-        );
-      }
-
-      // ======================================================
-      // NEW SECURE VERIFICATION BUTTON
+      // OLD INDEPENDENT VERIFICATION BUTTON
       // ======================================================
 
       if (
@@ -5564,8 +5318,12 @@ client.on(
         interaction.customId ===
           VERIFY_SECURE_TICKET_BUTTON_ID
       ) {
-        return createVerificationTicket(
-          interaction
+        return interaction.reply(
+          ephemeral(
+            "This verification panel has been updated.\n\n" +
+            `Visit <#${VERIFY_CHANNEL_ID}> ` +
+            "and use the current Create Verification Ticket button."
+          )
         );
       }
 
@@ -5687,7 +5445,8 @@ client.on(
 
       if (
         interaction.isButton() &&
-        interaction.customId === CLIENT_BUTTON_ID
+        interaction.customId ===
+          CLIENT_BUTTON_ID
       ) {
         if (!interaction.inGuild()) {
           return interaction.reply(
@@ -6104,7 +5863,7 @@ client.on(
     const cmd =
       raw.toLowerCase();
 
-    // Normal ticket commands remain in tickets.js.
+    // Normal ticket commands are handled by tickets.js.
 
     if (
       /^,(?:claim|forceclaim|close|reopen|delete)(?:\s|$)/i
@@ -6127,46 +5886,40 @@ client.on(
     try {
 
       // ======================================================
-      // HIDDEN VERIFICATION CLOSE / CANCEL
+      // OLD VERIFICATION CLOSE COMMANDS
+      // ======================================================
+      //
+      // These old commands are no longer used.
+      // tickets.js owns ticket closing.
+      //
+      // Delete an old typed command when possible.
+      //
       // ======================================================
 
       if (
         cmd === ",vclose" ||
         cmd === ",vcancel"
       ) {
-        const ownerId =
-          verificationTicketOwnerId(
-            message.channel
-          );
-
-        const official =
+        if (
           await isOfficialVerificationTicket(
             message.channel
-          );
+          )
+        ) {
+          const hidden =
+            await hideVerificationCommand(
+              message
+            );
 
-        const allowed =
-          official &&
-          (
-            isVerificationStaff(message.member) ||
-            (
-              cmd === ",vcancel" &&
-              message.author.id === ownerId
-            )
-          );
-
-        // Hide the typed command even when it is invalid.
-
-        const hidden =
-          await hideVerificationCommand(message);
-
-        if (!hidden || !allowed) {
-          return;
+          if (hidden) {
+            await privateNotice(
+              message.author,
+              "Verification tickets now use " +
+              "the normal ticket controls."
+            );
+          }
         }
 
-        return closeVerificationTicket(
-          message,
-          cmd === ",vcancel"
-        );
+        return;
       }
 
       // ======================================================
@@ -6179,31 +5932,20 @@ client.on(
         );
 
       if (verifyCommand) {
-        const hidden =
-          await hideVerificationCommand(message);
-
-        if (!hidden) {
-          return;
-        }
-
         if (
-          !isVerificationStaff(message.member)
+          !isVerificationStaff(
+            message.member
+          )
         ) {
           return;
         }
 
-        const official =
-          await isOfficialVerificationTicket(
-            message.channel
+        const hidden =
+          await hideVerificationCommand(
+            message
           );
 
-        if (!official) {
-          await privateNotice(
-            message.author,
-            "Verification approval is only available " +
-            "inside an official verification ticket."
-          );
-
+        if (!hidden) {
           return;
         }
 
@@ -6406,6 +6148,7 @@ client.on(
             "**Chuppys Vouch Reminders**\n\n" +
 
             "`,r @user r` — Market\n" +
+            "`,r @user rmarket` — Market\n" +
             "`,r @user rinv` — Invite Challenge\n" +
             "`,r @user rgive` — Giveaway\n" +
             "`,r @user rconv` — Converter\n" +
@@ -6919,12 +6662,19 @@ client.on(
       return;
     }
 
-    if (looksLikeVouch(message)) {
-      await reactToVouch(message);
-    }
+    try {
+      if (looksLikeVouch(message)) {
+        await reactToVouch(message);
+      }
 
-    if (AUTO_ROUTE_VOUCHES) {
-      await routeVouch(message);
+      if (AUTO_ROUTE_VOUCHES) {
+        await routeVouch(message);
+      }
+    } catch (error) {
+      console.error(
+        "[VOUCH MESSAGE] Error:",
+        error
+      );
     }
 
     scheduleVouchCounterUpdate();
