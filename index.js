@@ -7,31 +7,33 @@
 // ============================================================
 //
 // MODULES:
-// vouch.js
-// transactions.js
-// tickets.js
+// - vouch.js
+// - transactions.js
+// - tickets.js
 //
-// NEW VERIFICATION SECURITY:
-// - No automatic verification
-// - Verification requires a private ticket
-// - Staff must manually approve verification
-// - ,r @user c works ONLY in that user's verification ticket
-// - Only Owner/Admin/Mod/Ticket Support may approve
-// - Old Verify button never grants a role
+// VERIFICATION:
+// - Ticket-only manual verification
+// - Dedicated private verification-tickets category
+// - Category created automatically if needed
+// - Private ticket for each member
 // - Duplicate verification tickets prevented
-// - Private channel permissions
-// - ,vclose closes a verification ticket (staff)
-// - ,vcancel cancels own verification ticket
+// - Only authorized staff can approve verification
+// - Approval must match ticket owner
+// - Staff commands are NOT listed in public embeds
+// - Staff commands are NOT listed in /help
+// - Typed verification commands are deleted before use
+// - No automatic verification role grants
+// - Client role requires verified role
 //
 // VOUCH REMINDERS:
-// ,r @user r        Market reminder
-// ,r @user rmarket  Market reminder
-// ,r @user rinv     Invite Challenge reminder
-// ,r @user rgive    Giveaway reminder
-// ,r @user rconv    Converter reminder
-// ,r @user rall     All vouch tutorial reminders
+// ,r @user r
+// ,r @user rmarket
+// ,r @user rinv
+// ,r @user rgive
+// ,r @user rconv
+// ,r @user rall
 //
-// VOUCH TUTORIAL COMMANDS:
+// VOUCH TUTORIALS:
 // !vouchtut
 // !personalvouchtut
 // !marketvouchtut
@@ -39,13 +41,7 @@
 // !giveawayvouchtut
 // !convertervouchtut
 //
-// TUTORIAL DESTINATIONS:
-// Personal + Market: 1562958688896028802
-// Invite: 1572990426351407287
-// Giveaway: 1572990469506596934
-// Converter: 1573509380366925844
-//
-// COUNTER NAMES UNCHANGED:
+// COUNTER NAMES:
 // ╭・chuppy total vouches : ##
 // ┃・invite・vouches : ##
 // ┃・giveaway・vouches : ##
@@ -56,44 +52,15 @@
 // Personal + Invite + Giveaway + Converter
 //
 // SERVER TOTAL:
-// Personal + Market + Invite + Giveaway + Converter
-//
-// PRESERVED:
-// - All original counter IDs and names
-// - All tutorial channels
-// - Existing vouch modules
-// - Ticket module
-// - Transactions module
-// - Vouch reactions
-// - Forward recognition
-// - Vouch routing
-// - Historical recount
-// - Duplicate detection
-// - Blacklist and appeal system
-// - Self roles
-// - Questions
-// - Requests
-// - Payments
-// - Seller/staff embeds
-// - Service prices
-// - AFK
-// - Welcome/goodbye
-//
-// IMPORTANT:
-// This file implements its own verification ticket button
-// with a new custom ID to avoid conflicting with tickets.js.
-// Any OTHER role-granting paths in tickets.js must also be
-// reviewed if that module performs verification.
+// Personal + Regular Market + Invite + Giveaway
+// + Converter
 //
 // ============================================================
 // IMPORTS
 // ============================================================
 
 const http = require("http");
-
-const {
-  createHash
-} = require("node:crypto");
+const { createHash } = require("node:crypto");
 
 const {
   Client,
@@ -118,7 +85,7 @@ const {
 } = require("discord.js");
 
 // ============================================================
-// RENDER WEB SERVER
+// RENDER SERVER
 // ============================================================
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -137,17 +104,12 @@ http.createServer((req, res) => {
 // ENVIRONMENT
 // ============================================================
 
-const TOKEN =
-  process.env.DISCORD_BOT_TOKEN;
-
-const GUILD_ID =
-  process.env.DISCORD_GUILD_ID;
+const TOKEN = process.env.DISCORD_BOT_TOKEN;
+const GUILD_ID = process.env.DISCORD_GUILD_ID;
 
 const BRAND = ".gg/chuppys";
 const WHITE = 0xffffff;
-
-const EPHEMERAL =
-  MessageFlags.Ephemeral;
+const EPHEMERAL = MessageFlags.Ephemeral;
 
 const NONE = {
   parse: []
@@ -292,7 +254,7 @@ const CONVERTER_COUNT_CHANNEL_ID =
   process.env.CONVERTER_COUNT_CHANNEL_ID || "";
 
 // ============================================================
-// COUNTER NAMES — PRESERVED EXACTLY
+// COUNTER NAMES — PRESERVED
 // ============================================================
 
 const COUNT_NAMES = Object.freeze({
@@ -310,14 +272,16 @@ const COUNT_NAMES = Object.freeze({
 const CHUPPY_TY_EMOJI =
   "<:uppyty:1561094713153429746>";
 
-const VOUCH_TYPE_EMOJI =
-  "<:zymochadance:1565501941675462719>";
-
 const AUTO_ROUTE_VOUCHES =
   process.env.AUTO_ROUTE_VOUCHES !== "false";
 
 const VOUCH_ORIGIN_MARKER =
   "CHUPPYS_VOUCH_ORIGIN";
+
+const PERSONAL_SELLER_IDS = [
+  "1530733554869473320",
+  "1490962480963260466"
+];
 
 // ============================================================
 // STAFF ROLES
@@ -362,23 +326,18 @@ const UNBLACKLIST_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1561103471325745242.png";
 
 // ============================================================
-// VERIFICATION — TICKET ONLY
+// VERIFICATION — SECURE TICKET ONLY
 // ============================================================
 
-// Old button ID retained for safe rejection.
-// It will NEVER automatically verify a member.
+// Legacy button IDs are retained for handling old panels.
 
 const VERIFY_BUTTON_ID =
   "chuppys_verify";
 
-// Existing tickets.js button ID.
-// Do not use this ID for the new panel.
-
 const VERIFY_TICKET_BUTTON_ID =
   "chuppys_create_verification_ticket";
 
-// New independent verification ticket button.
-// Owned by index.js.
+// New button exclusively handled by index.js.
 
 const VERIFY_SECURE_TICKET_BUTTON_ID =
   "chuppys_secure_verification_ticket_v2";
@@ -407,16 +366,21 @@ const CLIENT_EMOJI =
 const WELCOME_ROLE_ID =
   "1531039846871728248";
 
-// Optional:
-// Configure this in Render if you have a dedicated
-// verification-ticket category.
-// Otherwise the parent category of #verify is used.
+// Dedicated category configuration.
+//
+// If VERIFICATION_TICKET_CATEGORY_ID is provided in
+// Render, the bot uses that category.
+//
+// Otherwise it finds or creates a category named
+// "verification-tickets".
+//
+// It does NOT use the parent category of #verify.
 
 const VERIFICATION_TICKET_CATEGORY_ID =
   process.env.VERIFICATION_TICKET_CATEGORY_ID || "";
 
-// Marker stored in Discord channel topics.
-// Used to prevent cross-ticket verification.
+const VERIFICATION_CATEGORY_NAME =
+  "verification-tickets";
 
 const VERIFICATION_TICKET_TOPIC_PREFIX =
   "CHUPPYS_VERIFY_TICKET:";
@@ -441,15 +405,6 @@ const PING_ROLES = Object.freeze({
 
 const PING_ROLE_IDS =
   Object.values(PING_ROLES);
-
-const VERIFICATION_PING_ROLE_IDS = [
-  ...new Set([
-    ...PING_ROLE_IDS,
-    "1551276593425685333",
-    "1569731217799127210",
-    "1569731506706849872"
-  ])
-];
 
 const AGE_ROLES = Object.freeze({
   under18: "1531084465126772877",
@@ -485,6 +440,7 @@ const ROLE_MENU_CONFIG = {
     title: "• pings // •",
     placeholder: "♡ choose your roles",
     roles: PING_ROLE_IDS,
+
     options: [
       ["Welcome Ping", PING_ROLES.welcome],
       ["Announcement Ping", PING_ROLES.announcement],
@@ -498,8 +454,10 @@ const ROLE_MENU_CONFIG = {
       ["Robux Ping", PING_ROLES.robux],
       ["MM2 Ping", PING_ROLES.mm2]
     ],
+
     thumbnail:
       "https://cdn.discordapp.com/emojis/1561034658311966761.png?size=128&quality=lossless",
+
     success:
       "﹕𐔌・your roles have been updated〃・꒱ 🤍"
   },
@@ -509,11 +467,13 @@ const ROLE_MENU_CONFIG = {
     title: "• age // •",
     placeholder: "♡ choose your roles",
     roles: AGE_ROLE_IDS,
+
     options: [
       ["﹕𐔌・- 18 〃・꒱", AGE_ROLES.under18],
       ["﹕𐔌・18 - 20 〃・꒱", AGE_ROLES.age18to20],
       ["﹕𐔌・21 + 〃・꒱", AGE_ROLES.age21plus]
     ],
+
     success:
       "﹕𐔌・your age roles have been updated〃・꒱ 🤍"
   },
@@ -523,11 +483,13 @@ const ROLE_MENU_CONFIG = {
     title: "• pronouns // •",
     placeholder: "♡ choose your pronouns",
     roles: PRONOUN_ROLE_IDS,
+
     options: [
       ["﹕𐔌・she / her〃・꒱", PRONOUN_ROLES.sheher],
       ["﹕𐔌・he / him〃・꒱", PRONOUN_ROLES.hehim],
       ["﹕𐔌・they / them〃・꒱", PRONOUN_ROLES.theythem]
     ],
+
     success:
       "﹕𐔌・your pronouns have been updated〃・꒱ 🤍"
   }
@@ -603,8 +565,10 @@ const WELCOME_IMAGE =
 const VOUCH_TUTORIAL_IMAGES = {
   command:
     "https://raw.githubusercontent.com/twxnluvsbunnii/chuppys/main/IMG_5265.jpeg",
+
   completed:
     "https://raw.githubusercontent.com/twxnluvsbunnii/chuppys/main/IMG_5267.jpeg",
+
   success:
     "https://raw.githubusercontent.com/twxnluvsbunnii/chuppys/main/IMG_5266.jpeg"
 };
@@ -623,8 +587,10 @@ const PAYMENT_METHODS_TEXT =
 const EXTRA_PAYMENT_METHODS = [5, 6].map(n => ({
   name:
     process.env[`PAYMENT_METHOD_${n}_NAME`] || "",
+
   details:
     process.env[`PAYMENT_METHOD_${n}_DETAILS`] || "",
+
   url:
     process.env[`PAYMENT_METHOD_${n}_URL`] || ""
 }));
@@ -636,29 +602,39 @@ const EXTRA_PAYMENT_METHODS = [5, 6].map(n => ({
 const QUESTION_COMMAND =
   new SlashCommandBuilder()
     .setName("question")
-    .setDescription("Submit a question to the Chuppys team.")
+    .setDescription(
+      "Submit a question to the Chuppys team."
+    )
     .addStringOption(option =>
       option
         .setName("question")
-        .setDescription("Type the question you want to ask.")
+        .setDescription(
+          "Type the question you want to ask."
+        )
         .setRequired(true)
         .setMaxLength(2000)
     )
     .addAttachmentOption(option =>
       option
         .setName("picture")
-        .setDescription("Optionally attach a picture.")
+        .setDescription(
+          "Optionally attach a picture."
+        )
         .setRequired(false)
     );
 
 const REQUEST_COMMAND =
   new SlashCommandBuilder()
     .setName("request")
-    .setDescription("Request items for Chuppys to stock up on.")
+    .setDescription(
+      "Request items for Chuppys to stock up on."
+    )
     .addStringOption(option =>
       option
         .setName("category")
-        .setDescription("Choose the request category.")
+        .setDescription(
+          "Choose the request category."
+        )
         .setRequired(true)
         .addChoices(
           ...[
@@ -676,7 +652,9 @@ const REQUEST_COMMAND =
     .addStringOption(option =>
       option
         .setName("items")
-        .setDescription("What should Chuppys stock up on?")
+        .setDescription(
+          "What should Chuppys stock up on?"
+        )
         .setRequired(true)
         .setMaxLength(1000)
     );
@@ -684,7 +662,9 @@ const REQUEST_COMMAND =
 const HELP_COMMAND =
   new SlashCommandBuilder()
     .setName("help")
-    .setDescription("View all Chuppys bot commands.");
+    .setDescription(
+      "View Chuppys bot commands."
+    );
 
 // ============================================================
 // RUNTIME
@@ -705,7 +685,8 @@ const locks = {
   vouchTutorial: new Set(),
   verifyTicket: new Set(),
   verifyApprove: new Set(),
-  verifyClose: new Set()
+  verifyClose: new Set(),
+  verifyCategory: new Set()
 };
 
 const blacklistRoleJobs = new Map();
@@ -715,7 +696,6 @@ let vouchCounterUpdateRunning = false;
 let vouchCounterRecountRequested = false;
 
 let counterCache = null;
-let counterRecountAt = 0;
 
 const routedMessages = new Set();
 
@@ -802,7 +782,9 @@ function isTicketSupport(member) {
 }
 
 function isVerificationStaff(member) {
-  if (!member?.guild) return false;
+  if (!member?.guild) {
+    return false;
+  }
 
   return (
     member.id === member.guild.ownerId ||
@@ -821,20 +803,44 @@ function lock(set, key) {
   }
 
   set.add(key);
+
   return true;
 }
 
-async function interactionError(interaction, error) {
-  console.error("[INTERACTION]", error);
+async function privateNotice(user, content) {
+  try {
+    await user.send({
+      content,
+      allowedMentions: NONE
+    });
+  } catch {
+    console.warn(
+      `[DM] Unable to notify ${user.id}`
+    );
+  }
+}
 
-  if (!interaction.isRepliable()) return;
+async function interactionError(
+  interaction,
+  error
+) {
+  console.error(
+    "[INTERACTION]",
+    error
+  );
+
+  if (!interaction.isRepliable()) {
+    return;
+  }
 
   const content =
     "Something went wrong while processing that interaction.";
 
   try {
     if (interaction.deferred) {
-      return await interaction.editReply({ content });
+      return await interaction.editReply({
+        content
+      });
     }
 
     if (interaction.replied) {
@@ -861,12 +867,16 @@ async function interactionError(interaction, error) {
 async function findBlacklistRole(guild) {
   if (BLACKLIST_ROLE_ID) {
     const configured =
-      guild.roles.cache.get(BLACKLIST_ROLE_ID) ||
+      guild.roles.cache.get(
+        BLACKLIST_ROLE_ID
+      ) ||
       await guild.roles.fetch(
         BLACKLIST_ROLE_ID
       ).catch(() => null);
 
-    if (configured) return configured;
+    if (configured) {
+      return configured;
+    }
   }
 
   let role = guild.roles.cache.find(
@@ -875,7 +885,9 @@ async function findBlacklistRole(guild) {
       BLACKLIST_ROLE_NAME.toLowerCase()
   );
 
-  if (role) return role;
+  if (role) {
+    return role;
+  }
 
   await guild.roles.fetch();
 
@@ -895,7 +907,9 @@ async function ensureBlacklistRole(guild) {
     const existing =
       await findBlacklistRole(guild);
 
-    if (existing) return existing;
+    if (existing) {
+      return existing;
+    }
 
     return guild.roles.create({
       name: BLACKLIST_ROLE_NAME,
@@ -903,32 +917,45 @@ async function ensureBlacklistRole(guild) {
       hoist: false,
       mentionable: false,
       permissions: [],
-      reason: "Chuppys blacklist moderation system"
+      reason:
+        "Chuppys blacklist moderation system"
     });
   })();
 
-  blacklistRoleJobs.set(guild.id, job);
+  blacklistRoleJobs.set(
+    guild.id,
+    job
+  );
 
   try {
     return await job;
   } finally {
-    blacklistRoleJobs.delete(guild.id);
+    blacklistRoleJobs.delete(
+      guild.id
+    );
   }
 }
 
 async function isBlacklisted(member) {
-  if (!member?.guild) return false;
+  if (!member?.guild) {
+    return false;
+  }
 
   const role =
-    await findBlacklistRole(member.guild);
+    await findBlacklistRole(
+      member.guild
+    );
 
   return Boolean(
-    role && member.roles.cache.has(role.id)
+    role &&
+    member.roles.cache.has(role.id)
   );
 }
 
 function canBlacklist(member) {
-  if (!member?.guild) return false;
+  if (!member?.guild) {
+    return false;
+  }
 
   return (
     member.id === member.guild.ownerId ||
@@ -936,7 +963,9 @@ function canBlacklist(member) {
       OWNER_ROLE_ID,
       ADMIN_ROLE_ID,
       MOD_ROLE_ID
-    ].some(id => member.roles.cache.has(id))
+    ].some(
+      id => member.roles.cache.has(id)
+    )
   );
 }
 
@@ -958,61 +987,97 @@ function canModerateTarget(actor, target) {
 // BLACKLIST EMBEDS
 // ============================================================
 
-function makeBlacklistEmbed(target, moderator, reason) {
+function makeBlacklistEmbed(
+  target,
+  moderator,
+  reason
+) {
   return whiteEmbed(
     "Member Blacklisted",
+
     `**Member:** <@${target.id}>\n` +
     `**User ID:** \`${target.id}\`\n\n` +
+
     "**Reason for Blacklist**\n" +
     `${safeText(reason, 1000)}\n\n` +
+
     `**Blacklisted By:** <@${moderator.id}>\n\n` +
+
     "The member has received the Blacklisted role."
   )
-    .setThumbnail(target.user.displayAvatarURL())
+    .setThumbnail(
+      target.user.displayAvatarURL()
+    )
     .setTimestamp();
 }
 
-function makeBlacklistDMEmbed(guild, reason) {
+function makeBlacklistDMEmbed(
+  guild,
+  reason
+) {
   return whiteEmbed(
     "You Have Been Blacklisted",
+
     `You have been blacklisted from **${safeText(guild.name)}**.\n\n` +
+
     "**Reason**\n" +
     `${safeText(reason, 1000)}\n\n` +
+
     "Your normal server access has been restricted.\n\n" +
+
     "**Want to Appeal?**\n" +
+
     "Use the server's unblacklist appeal panel " +
     "to request a review.\n\n" +
-    "Please explain your situation respectfully. " +
+
     "An appeal does not guarantee removal."
   )
-    .setThumbnail(UNBLACKLIST_THUMBNAIL_URL)
+    .setThumbnail(
+      UNBLACKLIST_THUMBNAIL_URL
+    )
     .setTimestamp();
 }
 
 function makeUnblacklistPanelEmbed() {
   return whiteEmbed(
     UNBLACKLIST_PANEL_TITLE,
+
     "Have you been blacklisted from **.gg/chuppys**?\n\n" +
+
     "If you believe your blacklist should be reconsidered, " +
     "you can request an appeal.\n\n" +
+
     "**How to Appeal**\n\n" +
+
     "1. Click **Request Unblacklist Ticket**.\n\n" +
+
     "2. Explain why you were blacklisted.\n\n" +
+
     "3. Explain why the blacklist should be removed.\n\n" +
+
     "4. Provide relevant screenshots or proof.\n\n" +
+
     "5. Wait for staff to review your appeal.\n\n" +
+
     "**Important**\n" +
+
     "Submitting an appeal does not guarantee approval. " +
     "Do not spam duplicate appeals."
-  ).setThumbnail(UNBLACKLIST_THUMBNAIL_URL);
+  ).setThumbnail(
+    UNBLACKLIST_THUMBNAIL_URL
+  );
 }
 
 function makeUnblacklistPanelButtons() {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId(UNBLACKLIST_BUTTON_ID)
-        .setLabel("Request Unblacklist Ticket")
+        .setCustomId(
+          UNBLACKLIST_BUTTON_ID
+        )
+        .setLabel(
+          "Request Unblacklist Ticket"
+        )
         .setEmoji({
           id: VERIFY_BUTTON_EMOJI_ID
         })
@@ -1034,12 +1099,15 @@ async function findBotMessages(
   let before;
 
   for (let i = 0; i < pages; i++) {
-    const batch = await channel.messages.fetch({
-      limit: 100,
-      ...(before ? { before } : {})
-    });
+    const batch =
+      await channel.messages.fetch({
+        limit: 100,
+        ...(before ? { before } : {})
+      });
 
-    if (!batch.size) break;
+    if (!batch.size) {
+      break;
+    }
 
     for (const message of batch.values()) {
       if (
@@ -1050,14 +1118,17 @@ async function findBotMessages(
       }
     }
 
-    if (batch.size < 100) break;
+    if (batch.size < 100) {
+      break;
+    }
 
     before = batch.last().id;
   }
 
   results.sort(
     (a, b) =>
-      b.createdTimestamp - a.createdTimestamp
+      b.createdTimestamp -
+      a.createdTimestamp
   );
 
   return results;
@@ -1083,7 +1154,8 @@ async function upsertBotMessage(
       await matching[0].edit(payload);
 
     for (const duplicate of matching.slice(1)) {
-      await duplicate.delete().catch(console.error);
+      await duplicate.delete()
+        .catch(console.error);
     }
   } else {
     result =
@@ -1103,10 +1175,12 @@ async function upsertBotMessage(
 async function postUnblacklistPanel(channel) {
   return upsertBotMessage(
     channel,
+
     message =>
       message.embeds.some(
         embed =>
-          embed.title === UNBLACKLIST_PANEL_TITLE
+          embed.title ===
+          UNBLACKLIST_PANEL_TITLE
       ) ||
       message.components.some(
         row =>
@@ -1116,6 +1190,7 @@ async function postUnblacklistPanel(channel) {
               UNBLACKLIST_BUTTON_ID
           )
       ),
+
     {
       content: "",
       embeds: [
@@ -1125,6 +1200,7 @@ async function postUnblacklistPanel(channel) {
         makeUnblacklistPanelButtons(),
       allowedMentions: NONE
     },
+
     10
   );
 }
@@ -1136,7 +1212,10 @@ async function handleUnblacklistPanelCommand(message) {
     );
   }
 
-  if (!lock(locks.appeal, message.channel.id)) {
+  if (!lock(
+    locks.appeal,
+    message.channel.id
+  )) {
     return message.reply(
       "The appeal panel is already being updated."
     );
@@ -1156,7 +1235,9 @@ async function handleUnblacklistPanelCommand(message) {
       }
     });
   } finally {
-    locks.appeal.delete(message.channel.id);
+    locks.appeal.delete(
+      message.channel.id
+    );
   }
 }
 
@@ -1175,11 +1256,12 @@ async function handleBlacklistCommand(
     );
   }
 
-  const clean = String(reason || "").trim();
+  const clean =
+    String(reason || "").trim();
 
   if (!clean) {
     return message.reply(
-      "Usage: `,r @user b reason here`"
+      "A blacklist reason is required."
     );
   }
 
@@ -1201,15 +1283,17 @@ async function handleBlacklistCommand(
   try {
     const guild = message.guild;
 
-    const actor = await guild.members.fetch({
-      user: message.author.id,
-      force: true
-    });
+    const actor =
+      await guild.members.fetch({
+        user: message.author.id,
+        force: true
+      });
 
-    const target = await guild.members.fetch({
-      user: targetId,
-      force: true
-    }).catch(() => null);
+    const target =
+      await guild.members.fetch({
+        user: targetId,
+        force: true
+      }).catch(() => null);
 
     if (!target) {
       return message.reply(
@@ -1230,7 +1314,8 @@ async function handleBlacklistCommand(
       );
     }
 
-    const bot = await guild.members.fetchMe();
+    const bot =
+      await guild.members.fetchMe();
 
     if (!bot.permissions.has(
       PermissionFlagsBits.ManageRoles
@@ -1343,6 +1428,7 @@ async function handleBlacklistCommand(
       embeds: [
         whiteEmbed(
           "Blacklist Applied",
+
           `**Member:** <@${target.id}>\n\n` +
           `**Reason:** ${safeText(clean, 1000)}\n\n` +
           "**Roles:** Replaced with Blacklisted role.\n" +
@@ -1350,10 +1436,7 @@ async function handleBlacklistCommand(
           `**DM:** ${dmed ? "Sent" : "Failed"}`
         ).setTimestamp()
       ],
-      allowedMentions: {
-        repliedUser: false,
-        parse: []
-      }
+      allowedMentions: NONE
     });
   } finally {
     locks.blacklist.delete(key);
@@ -1370,14 +1453,18 @@ function makeRoleEmbed(type) {
 
   const embed = whiteEmbed(
     config.title,
+
     config.roles
       .map(id => `<@&${id}>`)
       .join("\n\n") +
+
     "\n\nplease choose your roles below ♡"
   );
 
   if (config.thumbnail) {
-    embed.setThumbnail(config.thumbnail);
+    embed.setThumbnail(
+      config.thumbnail
+    );
   }
 
   return embed;
@@ -1394,10 +1481,12 @@ function makeRoleDropdown(type) {
       .setMinValues(0)
       .setMaxValues(config.options.length)
       .addOptions(
-        config.options.map(([label, value]) => ({
-          label,
-          value
-        }))
+        config.options.map(
+          ([label, value]) => ({
+            label,
+            value
+          })
+        )
       )
   );
 }
@@ -1416,6 +1505,7 @@ async function postRolePanel(guild, type) {
 
   return upsertBotMessage(
     channel,
+
     message =>
       message.components.some(
         row =>
@@ -1425,6 +1515,7 @@ async function postRolePanel(guild, type) {
               ROLE_MENU_CONFIG[type].customId
           )
       ),
+
     {
       embeds: [
         makeRoleEmbed(type)
@@ -1434,6 +1525,7 @@ async function postRolePanel(guild, type) {
       ],
       allowedMentions: NONE
     },
+
     10
   );
 }
@@ -1469,13 +1561,18 @@ async function handleRolePanelCommand(message, type) {
   }
 }
 
-async function handleRoleSelection(interaction, type) {
+async function handleRoleSelection(
+  interaction,
+  type
+) {
   const config =
     ROLE_MENU_CONFIG[type];
 
   if (!config || !interaction.inGuild()) {
     return interaction.reply(
-      ephemeral("Invalid role selection.")
+      ephemeral(
+        "Invalid role selection."
+      )
     );
   }
 
@@ -1530,8 +1627,7 @@ async function handleRoleSelection(interaction, type) {
       if (
         !role ||
         role.managed ||
-        role.position >=
-          bot.roles.highest.position
+        role.position >= bot.roles.highest.position
       ) {
         throw new Error(
           `The bot cannot manage role ${id}.`
@@ -1554,8 +1650,7 @@ async function handleRoleSelection(interaction, type) {
       const unchanged =
         member.roles.cache
           .filter(
-            role =>
-              !config.roles.includes(role.id)
+            role => !config.roles.includes(role.id)
           )
           .map(role => role.id);
 
@@ -1583,7 +1678,7 @@ async function handleRoleSelection(interaction, type) {
 }
 
 // ============================================================
-// SECURE VERIFICATION PANEL — UPDATED MESSAGE
+// VERIFICATION PANEL
 // ============================================================
 
 function makeVerificationEmbed() {
@@ -1597,30 +1692,26 @@ function makeVerificationEmbed() {
 
     "**HOW TO VERIFY**\n\n" +
 
-    "**1.** Select your preferred roles in " +
-    `<#${ROLES_CHANNEL_ID}>.\n\n` +
+    `**1.** Select your preferred roles in <#${ROLES_CHANNEL_ID}>.\n\n` +
 
     "**2.** Click **Create Verification Ticket** below.\n\n" +
 
-    "**3.** Answer any questions from our verification staff.\n\n" +
+    "**3.** Answer the questions asked by our staff.\n\n" +
 
-    "**4.** Wait for a staff member to review your ticket " +
-    "and approve your verification.\n\n" +
+    "**4.** Wait for staff to review and approve your verification.\n\n" +
 
-    "**IMPORTANT**\n" +
+    "**IMPORTANT**\n\n" +
 
-    "Verification is not automatic. " +
+    "Verification is not automatic.\n\n" +
+
     "Opening a ticket does not instantly grant server access.\n\n" +
 
     "Please do not open duplicate tickets or share " +
-    "passwords, login codes, or other sensitive information."
-  )
-    .setThumbnail(VERIFY_THUMBNAIL_URL);
+    "passwords, login codes, or private account information."
+  ).setThumbnail(
+    VERIFY_THUMBNAIL_URL
+  );
 }
-
-// ============================================================
-// VERIFICATION BUTTON — TICKET ONLY
-// ============================================================
 
 function makeVerificationButton() {
   return new ActionRowBuilder().addComponents(
@@ -1634,13 +1725,11 @@ function makeVerificationButton() {
       .setEmoji({
         id: VERIFY_BUTTON_EMOJI_ID
       })
-      .setStyle(ButtonStyle.Primary)
+      .setStyle(
+        ButtonStyle.Primary
+      )
   );
 }
-
-// ============================================================
-// UPDATE EXISTING VERIFICATION MESSAGE
-// ============================================================
 
 async function sendOrUpdateVerificationMessage() {
   try {
@@ -1657,6 +1746,7 @@ async function sendOrUpdateVerificationMessage() {
 
     await upsertBotMessage(
       channel,
+
       message =>
         message.embeds.some(
           embed =>
@@ -1664,15 +1754,17 @@ async function sendOrUpdateVerificationMessage() {
             "Verify to Access .gg/chuppys"
         ) ||
         message.components.some(
-          row => row.components.some(
-            component =>
-              [
-                VERIFY_BUTTON_ID,
-                VERIFY_TICKET_BUTTON_ID,
-                VERIFY_SECURE_TICKET_BUTTON_ID
-              ].includes(component.customId)
-          )
+          row =>
+            row.components.some(
+              component =>
+                [
+                  VERIFY_BUTTON_ID,
+                  VERIFY_TICKET_BUTTON_ID,
+                  VERIFY_SECURE_TICKET_BUTTON_ID
+                ].includes(component.customId)
+            )
         ),
+
       {
         content: "",
         embeds: [
@@ -1683,11 +1775,12 @@ async function sendOrUpdateVerificationMessage() {
         ],
         allowedMentions: NONE
       },
+
       10
     );
 
     console.log(
-      "[VERIFY] Secure ticket-only panel updated."
+      "[VERIFY] Ticket-only panel updated."
     );
   } catch (error) {
     console.error(
@@ -1698,66 +1791,19 @@ async function sendOrUpdateVerificationMessage() {
 }
 
 // ============================================================
-// VERIFICATION REQUIREMENTS
+// VERIFICATION CATEGORY
 // ============================================================
 //
-// Preferences may be selected before approval.
-// They do not grant the verified role.
+// IMPORTANT:
+// This always uses a dedicated verification category.
 //
-// The actual decision is made by authorized staff.
+// It never falls back to the category containing #verify.
 //
 // ============================================================
-
-function checkVerificationRequirements(member) {
-  return (
-    AGE_ROLE_IDS.some(
-      id => member.roles.cache.has(id)
-    ) &&
-    PRONOUN_ROLE_IDS.some(
-      id => member.roles.cache.has(id)
-    ) &&
-    VERIFICATION_PING_ROLE_IDS.filter(
-      id => member.roles.cache.has(id)
-    ).length >= 2
-  );
-}
-
-// ============================================================
-// VERIFY TICKET HELPERS
-// ============================================================
-
-function verificationTicketOwnerId(channel) {
-  if (!channel || typeof channel.topic !== "string") {
-    return null;
-  }
-
-  const match = channel.topic.match(
-    /CHUPPYS_VERIFY_TICKET:(\d{17,20})/
-  );
-
-  return match?.[1] || null;
-}
-
-function isVerificationTicket(channel) {
-  return Boolean(
-    verificationTicketOwnerId(channel)
-  );
-}
-
-async function findExistingVerificationTicket(
-  guild,
-  userId
-) {
-  await guild.channels.fetch();
-
-  return guild.channels.cache.find(
-    channel =>
-      channel.type === ChannelType.GuildText &&
-      verificationTicketOwnerId(channel) === userId
-  ) || null;
-}
 
 async function getVerificationCategory(guild) {
+  await guild.channels.fetch();
+
   if (VERIFICATION_TICKET_CATEGORY_ID) {
     const configured =
       await guild.channels.fetch(
@@ -1769,63 +1815,273 @@ async function getVerificationCategory(guild) {
       configured.type !== ChannelType.GuildCategory
     ) {
       throw new Error(
-        "Configured verification ticket category is invalid."
+        "VERIFICATION_TICKET_CATEGORY_ID is invalid."
       );
     }
 
-    return configured.id;
+    if (configured.children.cache.size >= 50) {
+      throw new Error(
+        "The verification category is full."
+      );
+    }
+
+    return configured;
   }
 
-  const verifyChannel =
-    await guild.channels.fetch(
-      VERIFY_CHANNEL_ID
+  const existing =
+    guild.channels.cache.find(
+      channel =>
+        channel.type === ChannelType.GuildCategory &&
+        channel.name === VERIFICATION_CATEGORY_NAME &&
+        channel.children.cache.size < 50
     );
 
-  return verifyChannel?.parentId || null;
+  if (existing) {
+    return existing;
+  }
+
+  const key = guild.id;
+
+  if (!lock(locks.verifyCategory, key)) {
+    // Another category creation is processing.
+    // Fetch again after that operation completes.
+    for (let attempt = 0; attempt < 20; attempt++) {
+      await new Promise(resolve =>
+        setTimeout(resolve, 250)
+      );
+
+      await guild.channels.fetch();
+
+      const found =
+        guild.channels.cache.find(
+          channel =>
+            channel.type === ChannelType.GuildCategory &&
+            channel.name === VERIFICATION_CATEGORY_NAME &&
+            channel.children.cache.size < 50
+        );
+
+      if (found) {
+        return found;
+      }
+    }
+
+    throw new Error(
+      "Verification category creation is already processing."
+    );
+  }
+
+  try {
+    // Recheck after obtaining the lock.
+
+    await guild.channels.fetch();
+
+    const found =
+      guild.channels.cache.find(
+        channel =>
+          channel.type === ChannelType.GuildCategory &&
+          channel.name === VERIFICATION_CATEGORY_NAME &&
+          channel.children.cache.size < 50
+      );
+
+    if (found) {
+      return found;
+    }
+
+    const bot =
+      await guild.members.fetchMe();
+
+    if (!bot.permissions.has(
+      PermissionFlagsBits.ManageChannels
+    )) {
+      throw new Error(
+        "The bot requires Manage Channels."
+      );
+    }
+
+    const staffIds = [];
+
+    for (const roleId of VERIFICATION_STAFF_ROLE_IDS) {
+      const role =
+        guild.roles.cache.get(roleId) ||
+        await guild.roles.fetch(roleId)
+          .catch(() => null);
+
+      if (role) {
+        staffIds.push(role.id);
+      }
+    }
+
+    const overwrites = [
+      {
+        id: guild.id,
+        deny: [
+          PermissionFlagsBits.ViewChannel
+        ]
+      },
+
+      {
+        id: client.user.id,
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ReadMessageHistory,
+          PermissionFlagsBits.ManageChannels,
+          PermissionFlagsBits.ManageMessages,
+          PermissionFlagsBits.EmbedLinks
+        ]
+      },
+
+      ...[...new Set(staffIds)].map(id => ({
+        id,
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ReadMessageHistory
+        ]
+      }))
+    ];
+
+    const category =
+      await guild.channels.create({
+        name: VERIFICATION_CATEGORY_NAME,
+        type: ChannelType.GuildCategory,
+        permissionOverwrites: overwrites,
+        reason:
+          "Chuppys private verification ticket category"
+      });
+
+    console.log(
+      `[VERIFY] Category created: ${category.id}`
+    );
+
+    return category;
+  } finally {
+    locks.verifyCategory.delete(key);
+  }
 }
+
+// ============================================================
+// VERIFICATION TICKET IDENTIFICATION
+// ============================================================
+
+function verificationTicketOwnerId(channel) {
+  if (
+    !channel ||
+    typeof channel.topic !== "string"
+  ) {
+    return null;
+  }
+
+  const match =
+    channel.topic.match(
+      /CHUPPYS_VERIFY_TICKET:(\d{17,20})/
+    );
+
+  return match?.[1] || null;
+}
+
+function isVerificationTicket(channel) {
+  return Boolean(
+    verificationTicketOwnerId(channel)
+  );
+}
+
+async function isOfficialVerificationTicket(channel) {
+  if (
+    !channel?.guild ||
+    !isVerificationTicket(channel)
+  ) {
+    return false;
+  }
+
+  await channel.guild.channels.fetch();
+
+  if (VERIFICATION_TICKET_CATEGORY_ID) {
+    return (
+      channel.parentId ===
+      VERIFICATION_TICKET_CATEGORY_ID
+    );
+  }
+
+  const parent =
+    channel.parent ||
+    channel.guild.channels.cache.get(
+      channel.parentId
+    );
+
+  return Boolean(
+    parent &&
+    parent.type === ChannelType.GuildCategory &&
+    parent.name === VERIFICATION_CATEGORY_NAME
+  );
+}
+
+async function findExistingVerificationTicket(
+  guild,
+  userId
+) {
+  await guild.channels.fetch();
+
+  for (const channel of guild.channels.cache.values()) {
+    if (
+      channel.type === ChannelType.GuildText &&
+      verificationTicketOwnerId(channel) === userId &&
+      await isOfficialVerificationTicket(channel)
+    ) {
+      return channel;
+    }
+  }
+
+  return null;
+}
+
+// ============================================================
+// VERIFICATION TICKET EMBED
+// ============================================================
+//
+// NO APPROVAL COMMANDS.
+// NO CLOSING COMMANDS.
+// NO STAFF COMMAND INSTRUCTIONS.
+//
+// ============================================================
 
 function makeVerificationTicketEmbed(userId) {
   return whiteEmbed(
     "Chuppys Verification Ticket",
 
-    `**Member:** <@${userId}>\n\n` +
+    `Welcome <@${userId}>!\n\n` +
 
-    "Welcome! Your verification ticket has been created.\n\n" +
+    "Thank you for joining **.gg/chuppys**.\n\n" +
 
-    "**NEXT STEPS**\n\n" +
+    "Your private verification ticket has been created.\n\n" +
 
-    "1. Wait for a member of our verification team.\n\n" +
+    "**HOW VERIFICATION WORKS**\n\n" +
 
-    "2. Follow the server's verification instructions.\n\n" +
+    "**1.** Wait for a member of our verification team.\n\n" +
 
-    "3. Answer questions about server rules if requested.\n\n" +
+    "**2.** Answer the verification questions honestly.\n\n" +
 
-    "4. Staff will review your ticket and decide " +
-    "whether to approve verification.\n\n" +
+    "**3.** Review the rules and follow staff instructions.\n\n" +
 
-    "**FOR STAFF**\n\n" +
+    "**4.** Our team will review your information " +
+    "and approve your verification when appropriate.\n\n" +
 
-    "Once verification is approved, use:\n\n" +
+    "**IMPORTANT**\n\n" +
 
-    "```text\n" +
-    ",r @member c\n" +
-    "```\n\n" +
+    "Verification is completed manually by staff.\n\n" +
 
-    "Replace @member with the ticket opener.\n\n" +
+    "Opening a ticket does not automatically " +
+    "give you access to the server.\n\n" +
 
-    "This command only works inside the matching " +
-    "verification ticket.\n\n" +
+    "Please remain patient while our team " +
+    "reviews your ticket.\n\n" +
 
-    "**CLOSING**\n" +
+    "**SAFETY REMINDER**\n\n" +
 
-    "Staff: `,vclose`\n" +
+    "Never share passwords, account tokens, " +
+    "or two-factor authentication codes.\n\n" +
 
-    "Ticket opener: `,vcancel`\n\n" +
-
-    "**SAFETY**\n" +
-
-    "Never request passwords, 2FA codes, " +
-    "account tokens, or private login information."
+    "Thank you for choosing **.gg/chuppys**!"
   ).setTimestamp();
 }
 
@@ -1848,29 +2104,33 @@ async function createVerificationTicket(interaction) {
 
   const guild = interaction.guild;
   const userId = interaction.user.id;
+  const key = `${guild.id}:${userId}`;
 
-  const lockKey = `${guild.id}:${userId}`;
-
-  if (!lock(locks.verifyTicket, lockKey)) {
+  if (!lock(locks.verifyTicket, key)) {
     return interaction.editReply(
       "Your verification ticket is already being created."
     );
   }
 
   try {
-    const member = await guild.members.fetch({
-      user: userId,
-      force: true
-    });
+    const member =
+      await guild.members.fetch({
+        user: userId,
+        force: true
+      });
 
     if (await isBlacklisted(member)) {
       return interaction.editReply(
-        "You are blacklisted and cannot open a verification ticket. " +
-        "Please contact staff about the appeal process."
+        "You are blacklisted and cannot open " +
+        "a verification ticket."
       );
     }
 
-    if (member.roles.cache.has(CHUPPYS_ROLE_ID)) {
+    if (
+      member.roles.cache.has(
+        CHUPPYS_ROLE_ID
+      )
+    ) {
       return interaction.editReply(
         "You are already verified!"
       );
@@ -1884,36 +2144,36 @@ async function createVerificationTicket(interaction) {
 
     if (existing) {
       return interaction.editReply(
-        `You already have a verification ticket: <#${existing.id}>`
+        `You already have a private verification ticket: <#${existing.id}>`
       );
     }
 
-    const bot = await guild.members.fetchMe();
+    const bot =
+      await guild.members.fetchMe();
 
     if (!bot.permissions.has(
       PermissionFlagsBits.ManageChannels
     )) {
       return interaction.editReply(
-        "I cannot create verification tickets. " +
-        "Staff must give the bot Manage Channels permission."
+        "The bot needs Manage Channels permission."
       );
     }
 
-    const staffRoles = [];
+    const category =
+      await getVerificationCategory(guild);
+
+    const staffIds = [];
 
     for (const id of VERIFICATION_STAFF_ROLE_IDS) {
       const role =
         guild.roles.cache.get(id) ||
-        await guild.roles.fetch(id).catch(() => null);
+        await guild.roles.fetch(id)
+          .catch(() => null);
 
       if (role) {
-        staffRoles.push(role);
+        staffIds.push(role.id);
       }
     }
-
-    const staffIds = [
-      ...new Set(staffRoles.map(role => role.id))
-    ];
 
     const overwrites = [
       {
@@ -1922,6 +2182,7 @@ async function createVerificationTicket(interaction) {
           PermissionFlagsBits.ViewChannel
         ]
       },
+
       {
         id: userId,
         allow: [
@@ -1931,6 +2192,7 @@ async function createVerificationTicket(interaction) {
           PermissionFlagsBits.AttachFiles
         ]
       },
+
       {
         id: client.user.id,
         allow: [
@@ -1938,10 +2200,13 @@ async function createVerificationTicket(interaction) {
           PermissionFlagsBits.SendMessages,
           PermissionFlagsBits.ReadMessageHistory,
           PermissionFlagsBits.ManageChannels,
-          PermissionFlagsBits.EmbedLinks
+          PermissionFlagsBits.ManageMessages,
+          PermissionFlagsBits.EmbedLinks,
+          PermissionFlagsBits.AttachFiles
         ]
       },
-      ...staffIds.map(id => ({
+
+      ...[...new Set(staffIds)].map(id => ({
         id,
         allow: [
           PermissionFlagsBits.ViewChannel,
@@ -1952,48 +2217,49 @@ async function createVerificationTicket(interaction) {
       }))
     ];
 
-    // Server owner always retains owner permissions.
-    // Administrator permission also bypasses channel overwrites.
+    const safeName =
+      interaction.user.username
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, "-")
+        .replace(/-+/g, "-")
+        .slice(0, 25) || "member";
 
-    const categoryId =
-      await getVerificationCategory(guild);
+    const channel =
+      await guild.channels.create({
+        name: `verify-${safeName}`,
+        type: ChannelType.GuildText,
+        parent: category.id,
 
-    const safeName = interaction.user.username
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, "-")
-      .replace(/-+/g, "-")
-      .slice(0, 25) || "member";
+        topic:
+          `${VERIFICATION_TICKET_TOPIC_PREFIX}${userId}`,
 
-    const channel = await guild.channels.create({
-      name: `verify-${safeName}`,
-      type: ChannelType.GuildText,
-      parent: categoryId || undefined,
-      topic:
-        `${VERIFICATION_TICKET_TOPIC_PREFIX}${userId}`,
-      permissionOverwrites: overwrites,
-      reason:
-        `Private verification ticket for ${interaction.user.tag}`
-    });
+        permissionOverwrites: overwrites,
+
+        reason:
+          `Private verification ticket for ${interaction.user.tag}`
+      });
 
     console.log(
-      `[VERIFY] Ticket created for ${userId}: ${channel.id}`
+      `[VERIFY] Ticket created: ${channel.id}`
     );
 
     try {
       await channel.send({
         content: `<@${userId}>`,
+
         embeds: [
           makeVerificationTicketEmbed(userId)
         ],
+
         allowedMentions: {
           users: [userId],
           parse: []
         }
       });
-    } catch (sendError) {
+    } catch (error) {
       console.error(
-        "[VERIFY] Initial ticket message failed:",
-        sendError
+        "[VERIFY] Ticket welcome message:",
+        error
       );
     }
 
@@ -2013,7 +2279,62 @@ async function createVerificationTicket(interaction) {
       "Please contact staff."
     );
   } finally {
-    locks.verifyTicket.delete(lockKey);
+    locks.verifyTicket.delete(key);
+  }
+}
+
+// ============================================================
+// HIDE VERIFICATION COMMANDS
+// ============================================================
+//
+// The command is deleted BEFORE execution.
+//
+// IMPORTANT:
+// Deletion is not completely invisible.
+// Discord may briefly display a typed message.
+//
+// For fully private commands, use ephemeral slash commands.
+//
+// ============================================================
+
+async function hideVerificationCommand(message) {
+  const bot =
+    await message.guild.members.fetchMe();
+
+  const permissions =
+    message.channel.permissionsFor(bot);
+
+  if (
+    !permissions?.has(
+      PermissionFlagsBits.ManageMessages
+    )
+  ) {
+    await privateNotice(
+      message.author,
+      "The verification command was not executed. " +
+      "The bot requires Manage Messages permission."
+    );
+
+    return false;
+  }
+
+  try {
+    await message.delete();
+
+    return true;
+  } catch (error) {
+    console.error(
+      "[VERIFY] Command deletion failed:",
+      error
+    );
+
+    await privateNotice(
+      message.author,
+      "The verification command could not be hidden, " +
+      "so it was not executed."
+    );
+
+    return false;
   }
 }
 
@@ -2021,14 +2342,12 @@ async function createVerificationTicket(interaction) {
 // MANUAL VERIFICATION APPROVAL
 // ============================================================
 //
-// IMPORTANT SECURITY RULES:
+// Only authorized staff may approve.
 //
-// 1. Command must be used in a verification ticket.
-// 2. Staff member must have a verification staff role.
-// 3. Mentioned user must match the ticket owner.
-// 4. Blacklisted members cannot be approved.
-// 5. Bot must have permission and role hierarchy access.
-// 6. No button automatically gives the verified role.
+// The target user MUST match the ticket owner.
+//
+// Commands must be used in the official verification
+// category, not another ticket.
 //
 // ============================================================
 
@@ -2036,95 +2355,111 @@ async function approveVerification(message, targetId) {
   const guild = message.guild;
 
   if (!isVerificationStaff(message.member)) {
-    return message.reply({
-      content:
-        "Only Owner, Admin, Mod, or Ticket Support can approve verification.",
-      allowedMentions: NONE
-    });
+    return;
   }
 
   const ticketOwnerId =
-    verificationTicketOwnerId(message.channel);
+    verificationTicketOwnerId(
+      message.channel
+    );
 
-  if (!ticketOwnerId) {
-    return message.reply({
-      content:
-        "For server safety, verification is only allowed " +
-        "inside a verification ticket. " +
-        `Members can create one in <#${VERIFY_CHANNEL_ID}>.`,
-      allowedMentions: NONE
-    });
+  const official =
+    await isOfficialVerificationTicket(
+      message.channel
+    );
+
+  if (!ticketOwnerId || !official) {
+    await privateNotice(
+      message.author,
+      "Verification approval is only available " +
+      "inside an official verification ticket."
+    );
+
+    return;
   }
 
   if (ticketOwnerId !== targetId) {
-    return message.reply({
-      content:
-        "This verification ticket belongs to a different member. " +
-        "You can only verify the member who opened this ticket.",
-      allowedMentions: NONE
-    });
+    await privateNotice(
+      message.author,
+      "You can only approve the member who owns " +
+      "this verification ticket."
+    );
+
+    return;
   }
 
-  const key = `${guild.id}:${targetId}`;
+  const key =
+    `${guild.id}:${targetId}`;
 
   if (!lock(locks.verifyApprove, key)) {
-    return message.reply({
-      content:
-        "Verification for this member is already processing.",
-      allowedMentions: NONE
-    });
+    await privateNotice(
+      message.author,
+      "Verification approval is already processing."
+    );
+
+    return;
   }
 
   try {
-    const member = await guild.members.fetch({
-      user: targetId,
-      force: true
-    }).catch(() => null);
+    const member =
+      await guild.members.fetch({
+        user: targetId,
+        force: true
+      }).catch(() => null);
 
     if (!member) {
-      return message.reply({
-        content:
-          "That member is no longer in the server.",
-        allowedMentions: NONE
-      });
+      await privateNotice(
+        message.author,
+        "That member is no longer in the server."
+      );
+
+      return;
     }
 
     if (member.user.bot) {
-      return message.reply({
-        content: "Bots cannot be verified.",
-        allowedMentions: NONE
-      });
+      return;
     }
 
     if (await isBlacklisted(member)) {
-      return message.reply({
-        content:
-          "This member is blacklisted and cannot be verified.",
-        allowedMentions: NONE
-      });
+      await privateNotice(
+        message.author,
+        "This member is blacklisted and cannot be verified."
+      );
+
+      return;
     }
 
-    if (member.roles.cache.has(CHUPPYS_ROLE_ID)) {
-      return message.reply({
-        content:
-          "This member is already verified.",
-        allowedMentions: NONE
-      });
+    if (
+      member.roles.cache.has(
+        CHUPPYS_ROLE_ID
+      )
+    ) {
+      await privateNotice(
+        message.author,
+        "This member is already verified."
+      );
+
+      return;
     }
 
-    const bot = await guild.members.fetchMe();
+    const bot =
+      await guild.members.fetchMe();
 
     const verifiedRole =
-      guild.roles.cache.get(CHUPPYS_ROLE_ID) ||
-      await guild.roles.fetch(CHUPPYS_ROLE_ID)
-        .catch(() => null);
+      guild.roles.cache.get(
+        CHUPPYS_ROLE_ID
+      ) ||
+      await guild.roles.fetch(
+        CHUPPYS_ROLE_ID
+      ).catch(() => null);
 
     if (!verifiedRole) {
-      return message.reply({
-        content:
-          "The verified role cannot be found.",
-        allowedMentions: NONE
-      });
+      await privateNotice(
+        message.author,
+        "The verified role could not be found."
+      );
+
+      return;
     }
 
     if (
@@ -2134,17 +2469,19 @@ async function approveVerification(message, targetId) {
       verifiedRole.position >=
         bot.roles.highest.position
     ) {
-      return message.reply({
-        content:
-          "The bot needs Manage Roles permission " +
-          "and must be above the verified role.",
-        allowedMentions: NONE
-      });
+      await privateNotice(
+        message.author,
+        "The bot needs Manage Roles permission " +
+        "and must be above the verified role."
+      );
+
+      return;
     }
 
     await member.roles.add(
       CHUPPYS_ROLE_ID,
-      `Manually verified by ${message.author.tag} in verification ticket ${message.channel.id}`
+
+      `Manually verified by ${message.author.tag} in ticket ${message.channel.id}`
     );
 
     const embed = whiteEmbed(
@@ -2152,11 +2489,11 @@ async function approveVerification(message, targetId) {
 
       `**Member:** <@${member.id}>\n\n` +
 
-      `**Verified by:** <@${message.author.id}>\n\n` +
+      `**Approved by:** <@${message.author.id}>\n\n` +
 
-      "Your verification has been approved by staff.\n\n" +
+      "Your verification has been approved!\n\n" +
 
-      "You now have access to **.gg/chuppys**!\n\n" +
+      "You now have access to **.gg/chuppys**.\n\n" +
 
       `Please review <#${RULES_CHANNEL_ID}> ` +
       `and select your roles in <#${ROLES_CHANNEL_ID}>.`
@@ -2165,59 +2502,77 @@ async function approveVerification(message, targetId) {
     await message.channel.send({
       content: `<@${member.id}>`,
       embeds: [embed],
+
       allowedMentions: {
         users: [member.id]
       }
     });
 
     console.log(
-      `[VERIFY] ${member.id} manually approved by ${message.author.id}`
+      `[VERIFY] ${member.id} approved by ${message.author.id}`
+    );
+  } catch (error) {
+    console.error(
+      "[VERIFY] Approval failed:",
+      error
     );
 
+    await privateNotice(
+      message.author,
+      "Verification approval failed. Check bot permissions."
+    );
   } finally {
     locks.verifyApprove.delete(key);
   }
 }
 
 // ============================================================
-// CLOSE / CANCEL VERIFICATION TICKET
+// VERIFICATION TICKET CLOSE / CANCEL
+// ============================================================
+//
+// These commands are not displayed in ticket embeds.
+//
 // ============================================================
 
-async function closeVerificationTicket(message, cancel = false) {
+async function closeVerificationTicket(
+  message,
+  cancel = false
+) {
   const ownerId =
-    verificationTicketOwnerId(message.channel);
+    verificationTicketOwnerId(
+      message.channel
+    );
 
-  if (!ownerId) {
-    return message.reply({
-      content:
-        "This command only works in a verification ticket.",
-      allowedMentions: NONE
-    });
+  const official =
+    await isOfficialVerificationTicket(
+      message.channel
+    );
+
+  if (!ownerId || !official) {
+    return;
   }
 
-  if (cancel) {
-    if (
-      message.author.id !== ownerId &&
-      !isVerificationStaff(message.member)
-    ) {
-      return message.reply({
-        content:
-          "Only the ticket opener or verification staff " +
-          "can cancel this ticket.",
-        allowedMentions: NONE
-      });
-    }
-  } else if (
-    !isVerificationStaff(message.member)
-  ) {
-    return message.reply({
-      content:
-        "Only verification staff can close this ticket.",
-      allowedMentions: NONE
-    });
+  const staff =
+    isVerificationStaff(
+      message.member
+    );
+
+  const allowed =
+    cancel
+      ? (
+          message.author.id === ownerId ||
+          staff
+        )
+      : staff;
+
+  if (!allowed) {
+    return;
   }
 
-  if (!lock(locks.verifyClose, message.channel.id)) {
+  if (!lock(
+    locks.verifyClose,
+    message.channel.id
+  )) {
     return;
   }
 
@@ -2228,11 +2583,12 @@ async function closeVerificationTicket(message, cancel = false) {
     if (!bot.permissions.has(
       PermissionFlagsBits.ManageChannels
     )) {
-      return message.reply({
-        content:
-          "The bot needs Manage Channels permission.",
-        allowedMentions: NONE
-      });
+      await privateNotice(
+        message.author,
+        "The bot needs Manage Channels permission."
+      );
+
+      return;
     }
 
     await message.channel.send({
@@ -2241,12 +2597,12 @@ async function closeVerificationTicket(message, cancel = false) {
           cancel
             ? "Verification Ticket Cancelled"
             : "Verification Ticket Closed",
-          `**Action by:** <@${message.author.id}>\n\n` +
+
           "This verification ticket is being closed."
         )
       ],
       allowedMentions: NONE
-    });
+    }).catch(console.error);
 
     await message.channel.delete(
       `Verification ticket ${cancel ? "cancelled" : "closed"} by ${message.author.tag}`
@@ -2256,8 +2612,15 @@ async function closeVerificationTicket(message, cancel = false) {
       "[VERIFY] Close failed:",
       error
     );
+
+    await privateNotice(
+      message.author,
+      "The verification ticket could not be closed."
+    );
   } finally {
-    locks.verifyClose.delete(message.channel.id);
+    locks.verifyClose.delete(
+      message.channel.id
+    );
   }
 }
 
@@ -2266,11 +2629,14 @@ async function closeVerificationTicket(message, cancel = false) {
 // ============================================================
 
 async function registerQuestionCommand() {
-  if (!TOKEN || !GUILD_ID || !client.user) return;
+  if (!TOKEN || !GUILD_ID || !client.user) {
+    return;
+  }
 
-  const rest = new REST({
-    version: "10"
-  }).setToken(TOKEN);
+  const rest =
+    new REST({
+      version: "10"
+    }).setToken(TOKEN);
 
   const route =
     Routes.applicationGuildCommands(
@@ -2290,11 +2656,13 @@ async function registerQuestionCommand() {
     ];
 
     for (const definition of commands) {
-      const body = definition.toJSON();
+      const body =
+        definition.toJSON();
 
       const found =
         existing.find(
-          command => command.name === body.name
+          command =>
+            command.name === body.name
         );
 
       if (found) {
@@ -2307,7 +2675,10 @@ async function registerQuestionCommand() {
           { body }
         );
       } else {
-        await rest.post(route, { body });
+        await rest.post(
+          route,
+          { body }
+        );
       }
 
       console.log(
@@ -2327,7 +2698,9 @@ async function registerQuestionCommand() {
 // ============================================================
 
 function canReplyToQuestion(interaction) {
-  if (!interaction.inGuild()) return false;
+  if (!interaction.inGuild()) {
+    return false;
+  }
 
   const permissions =
     interaction.memberPermissions;
@@ -2355,7 +2728,9 @@ function canReplyToQuestion(interaction) {
     ) ||
     (
       Array.isArray(roles) &&
-      roles.includes(TICKET_SUPPORT_ROLE_ID)
+      roles.includes(
+        TICKET_SUPPORT_ROLE_ID
+      )
     )
   );
 }
@@ -2389,16 +2764,14 @@ function makeClientButton() {
       .setEmoji({
         id: CLIENT_EMOJI_ID
       })
-      .setStyle(ButtonStyle.Secondary)
+      .setStyle(
+        ButtonStyle.Secondary
+      )
   );
 }
 
 // ============================================================
 // VOUCH ENGINE
-// ============================================================
-
-// ============================================================
-// FORWARD DETECTION
 // ============================================================
 
 function isForward(message) {
@@ -2427,29 +2800,31 @@ function getVouchData(message) {
 }
 
 function getEmbeds(message) {
-  const data = getVouchData(message);
+  const data =
+    getVouchData(message);
 
-  return [...(data.embeds || [])];
+  return [
+    ...(data.embeds || [])
+  ];
 }
 
 function getAttachments(message) {
-  const data = getVouchData(message);
+  const data =
+    getVouchData(message);
 
   return [
     ...(data.attachments?.values?.() || [])
   ];
 }
 
-// ============================================================
-// ORIGINAL FORWARD REFERENCE
-// ============================================================
-
 function getOriginalReference(message) {
   const reference =
     message.reference ||
     message.messageReference;
 
-  if (!isForward(message)) return null;
+  if (!isForward(message)) {
+    return null;
+  }
 
   const messageId =
     reference?.messageId ||
@@ -2466,18 +2841,15 @@ function getOriginalReference(message) {
   return null;
 }
 
-// ============================================================
-// MOVED MESSAGE ORIGIN MARKER
-// ============================================================
-
 function getMoveOrigin(message) {
   for (const embed of getEmbeds(message)) {
     const footer =
       embed.footer?.text || "";
 
-    const match = footer.match(
-      /CHUPPYS_VOUCH_ORIGIN:(\d{17,20}):(\d{17,20})/
-    );
+    const match =
+      footer.match(
+        /CHUPPYS_VOUCH_ORIGIN:(\d{17,20}):(\d{17,20})/
+      );
 
     if (match) {
       return `${match[1]}:${match[2]}`;
@@ -2486,10 +2858,6 @@ function getMoveOrigin(message) {
 
   return null;
 }
-
-// ============================================================
-// CONTENT FINGERPRINT
-// ============================================================
 
 function normalizedVouchText(value) {
   return String(value || "")
@@ -2518,6 +2886,7 @@ function vouchFingerprint(message) {
         (embed.fields || []).map(field => ({
           name:
             normalizedVouchText(field.name),
+
           value:
             normalizedVouchText(field.value)
         })),
@@ -2536,7 +2905,9 @@ function vouchFingerprint(message) {
       .sort();
 
   const content =
-    normalizedVouchText(data.content);
+    normalizedVouchText(
+      data.content
+    );
 
   if (
     !content &&
@@ -2555,15 +2926,13 @@ function vouchFingerprint(message) {
     .digest("hex");
 }
 
-// ============================================================
-// UNIQUE VOUCH IDENTIFIER
-// ============================================================
-
 function originalVouchKey(message) {
   const movedOrigin =
     getMoveOrigin(message);
 
-  if (movedOrigin) return movedOrigin;
+  if (movedOrigin) {
+    return movedOrigin;
+  }
 
   const originalReference =
     getOriginalReference(message);
@@ -2584,10 +2953,6 @@ function originalVouchKey(message) {
   return `${message.channel.id}:${message.id}`;
 }
 
-// ============================================================
-// RECOGNIZE VOUCH TYPE
-// ============================================================
-
 function detectVouchType(message) {
   const embeds =
     getEmbeds(message);
@@ -2596,15 +2961,17 @@ function detectVouchType(message) {
     const description =
       embed.description || "";
 
-    const typeMatch = description.match(
-      /\*\*vouch type:\*\*\s*([^\n]+)/i
-    );
+    const typeMatch =
+      description.match(
+        /\*\*vouch type:\*\*\s*([^\n]+)/i
+      );
 
     if (typeMatch) {
-      const type = typeMatch[1]
-        .replace(/<a?:\w+:\d+>/g, "")
-        .trim()
-        .toLowerCase();
+      const type =
+        typeMatch[1]
+          .replace(/<a?:\w+:\d+>/g, "")
+          .trim()
+          .toLowerCase();
 
       if (/converter/.test(type)) {
         return "converter";
@@ -2618,41 +2985,56 @@ function detectVouchType(message) {
         return "giveaway";
       }
 
-      if (/market|purchase|cash out/.test(type)) {
+      if (
+        /market|purchase|cash out/.test(type)
+      ) {
         return "market";
       }
     }
   }
 
-  const data = getVouchData(message);
+  const data =
+    getVouchData(message);
 
   const text = [
     data.content || "",
-    ...embeds.map(embed =>
-      `${embed.title || ""}\n` +
-      `${embed.description || ""}`
+
+    ...embeds.map(
+      embed =>
+        `${embed.title || ""}\n` +
+        `${embed.description || ""}`
     )
   ].join("\n").toLowerCase();
 
-  if (!/\bvouch(?:es|ed|ing)?\b/.test(text)) {
+  if (
+    !/\bvouch(?:es|ed|ing)?\b/.test(text)
+  ) {
     return null;
   }
 
   const types = [];
 
-  if (/converter|conversion fee/.test(text)) {
+  if (
+    /converter|conversion fee/.test(text)
+  ) {
     types.push("converter");
   }
 
-  if (/invite challenge|invite vouch/.test(text)) {
+  if (
+    /invite challenge|invite vouch/.test(text)
+  ) {
     types.push("invite");
   }
 
-  if (/giveaway vouch|giveaway reward/.test(text)) {
+  if (
+    /giveaway vouch|giveaway reward/.test(text)
+  ) {
     types.push("giveaway");
   }
 
-  if (/market vouch|market purchase|market cash out/.test(text)) {
+  if (
+    /market vouch|market purchase|market cash out/.test(text)
+  ) {
     types.push("market");
   }
 
@@ -2661,14 +3043,14 @@ function detectVouchType(message) {
     : null;
 }
 
-// ============================================================
-// RECOGNIZE VOUCH MESSAGES
-// ============================================================
-
 function looksLikeVouch(message) {
-  if (message.system) return false;
+  if (message.system) {
+    return false;
+  }
 
-  if (getMoveOrigin(message)) return true;
+  if (getMoveOrigin(message)) {
+    return true;
+  }
 
   const embeds =
     getEmbeds(message);
@@ -2683,25 +3065,25 @@ function looksLikeVouch(message) {
     return true;
   }
 
-  if (detectVouchType(message)) return true;
+  if (detectVouchType(message)) {
+    return true;
+  }
 
   const data =
     getVouchData(message);
 
   const text = [
     data.content || "",
-    ...embeds.map(embed =>
-      `${embed.title || ""}\n` +
-      `${embed.description || ""}`
+
+    ...embeds.map(
+      embed =>
+        `${embed.title || ""}\n` +
+        `${embed.description || ""}`
     )
   ].join("\n");
 
   return /\bvouch\b/i.test(text);
 }
-
-// ============================================================
-// CATEGORY ROUTING
-// ============================================================
 
 function vouchDestination(type, message) {
   if (type === "converter") {
@@ -2724,15 +3106,13 @@ function vouchDestination(type, message) {
         )
         .join("\n");
 
-    const sellerId = description.match(
-      /\*\*seller:\*\*\s*<@!?(\d{17,20})>/i
-    )?.[1];
+    const sellerId =
+      description.match(
+        /\*\*seller:\*\*\s*<@!?(\d{17,20})>/i
+      )?.[1];
 
     if (
-      [
-        "1530733554869473320",
-        "1490962480963260466"
-      ].includes(sellerId)
+      PERSONAL_SELLER_IDS.includes(sellerId)
     ) {
       return PERSONAL_VOUCH_CHANNEL_ID;
     }
@@ -2744,10 +3124,6 @@ function vouchDestination(type, message) {
 
   return null;
 }
-
-// ============================================================
-// BUILD MOVED VOUCH
-// ============================================================
 
 function buildMovedVouch(message) {
   const data =
@@ -2785,7 +3161,10 @@ function buildMovedVouch(message) {
         .setColor(WHITE)
         .setTitle("NEW VOUCH")
         .setDescription(
-          safeText(data.content || "Vouch", 3500)
+          safeText(
+            data.content || "Vouch",
+            3500
+          )
         )
         .setFooter({
           text:
@@ -2808,15 +3187,15 @@ function buildMovedVouch(message) {
   };
 }
 
-// ============================================================
-// AUTOMATIC VOUCH REACTION
-// ============================================================
-
 async function reactToVouch(message) {
-  if (!looksLikeVouch(message)) return;
+  if (!looksLikeVouch(message)) {
+    return;
+  }
 
   try {
-    await message.react(CHUPPY_TY_EMOJI);
+    await message.react(
+      CHUPPY_TY_EMOJI
+    );
   } catch (error) {
     console.error(
       `[VOUCH REACTION] ${message.id}:`,
@@ -2825,13 +3204,14 @@ async function reactToVouch(message) {
   }
 }
 
-// ============================================================
-// ROUTE MISPLACED VOUCH
-// ============================================================
-
 async function routeVouch(message) {
-  if (!AUTO_ROUTE_VOUCHES) return false;
-  if (!message.guild) return false;
+  if (!AUTO_ROUTE_VOUCHES) {
+    return false;
+  }
+
+  if (!message.guild) {
+    return false;
+  }
 
   if (
     !VOUCH_SOURCE_CHANNEL_IDS.includes(
@@ -2841,13 +3221,20 @@ async function routeVouch(message) {
     return false;
   }
 
-  if (!looksLikeVouch(message)) return false;
-  if (getMoveOrigin(message)) return false;
+  if (!looksLikeVouch(message)) {
+    return false;
+  }
+
+  if (getMoveOrigin(message)) {
+    return false;
+  }
 
   const type =
     detectVouchType(message);
 
-  if (!type) return false;
+  if (!type) {
+    return false;
+  }
 
   const destinationId =
     vouchDestination(type, message);
@@ -2863,7 +3250,10 @@ async function routeVouch(message) {
     return false;
   }
 
-  if (!lock(locks.vouchRoute, message.id)) {
+  if (!lock(
+    locks.vouchRoute,
+    message.id
+  )) {
     return false;
   }
 
@@ -2896,8 +3286,9 @@ async function routeVouch(message) {
 
     if (!canDelete) {
       console.warn(
-        `[VOUCH ROUTER] Missing Manage Messages in ${message.channel.id}.`
+        "[VOUCH ROUTER] Missing Manage Messages."
       );
+
       return false;
     }
 
@@ -2908,9 +3299,6 @@ async function routeVouch(message) {
         PermissionFlagsBits.EmbedLinks
       ])
     ) {
-      console.warn(
-        `[VOUCH ROUTER] Missing destination permissions in ${destinationId}.`
-      );
       return false;
     }
 
@@ -2921,9 +3309,6 @@ async function routeVouch(message) {
       getAttachments(message).length !==
       payload.attachmentUrls.length
     ) {
-      console.warn(
-        "[VOUCH ROUTER] Attachment URLs unavailable; leaving original."
-      );
       return false;
     }
 
@@ -2951,7 +3336,8 @@ async function routeVouch(message) {
 
     const existingCopy =
       recent.find(candidate =>
-        getMoveOrigin(candidate) === payload.origin
+        getMoveOrigin(candidate) ===
+        payload.origin
       );
 
     if (existingCopy) {
@@ -2973,10 +3359,10 @@ async function routeVouch(message) {
 
     try {
       await message.delete();
-    } catch (deleteError) {
+    } catch (error) {
       console.error(
-        "[VOUCH ROUTER] Copy posted but source deletion failed:",
-        deleteError
+        "[VOUCH ROUTER] Source deletion failed:",
+        error
       );
 
       routedMessages.add(message.id);
@@ -3003,23 +3389,30 @@ async function routeVouch(message) {
       "[VOUCH ROUTER] Failed:",
       error
     );
+
     return false;
   } finally {
-    locks.vouchRoute.delete(message.id);
+    locks.vouchRoute.delete(
+      message.id
+    );
   }
 }
 
 // ============================================================
-// UNIQUE VOUCH RECORD
+// VOUCH RECORDS
 // ============================================================
 
 function makeVouchRecord(message) {
-  if (!looksLikeVouch(message)) return null;
+  if (!looksLikeVouch(message)) {
+    return null;
+  }
 
   const key =
     originalVouchKey(message);
 
-  if (!key) return null;
+  if (!key) {
+    return null;
+  }
 
   return {
     key,
@@ -3030,13 +3423,11 @@ function makeVouchRecord(message) {
   };
 }
 
-// ============================================================
-// FETCH VOUCH HISTORY
-// ============================================================
-
 async function fetchChannelVouches(channelId) {
   const channel =
-    await client.channels.fetch(channelId);
+    await client.channels.fetch(
+      channelId
+    );
 
   if (
     !channel?.messages ||
@@ -3057,10 +3448,14 @@ async function fetchChannelVouches(channelId) {
         ...(before ? { before } : {})
       });
 
-    if (!messages.size) break;
+    if (!messages.size) {
+      break;
+    }
 
     for (const message of messages.values()) {
-      if (message.system) continue;
+      if (message.system) {
+        continue;
+      }
 
       const marketChannel = [
         PERSONAL_VOUCH_CHANNEL_ID,
@@ -3085,35 +3480,39 @@ async function fetchChannelVouches(channelId) {
         record = {
           key:
             `${channelId}:${message.id}`,
+
           fingerprint:
             vouchFingerprint(message),
+
           channelId,
+
           forwarded:
             isForward(message),
+
           created:
             message.createdTimestamp
         };
       }
 
-      if (record) results.push(record);
+      if (record) {
+        results.push(record);
+      }
     }
 
-    if (messages.size < 100) break;
+    if (messages.size < 100) {
+      break;
+    }
 
     before =
       messages.last().id;
   }
 
   console.log(
-    `[VOUCH SCAN] ${channelId}: ${results.length} candidate messages`
+    `[VOUCH SCAN] ${channelId}: ${results.length} candidates`
   );
 
   return results;
 }
-
-// ============================================================
-// DEDUPLICATE VOUCH RECORDS
-// ============================================================
 
 function uniqueVouchRecords(records) {
   const byKey = new Map();
@@ -3125,7 +3524,10 @@ function uniqueVouchRecords(records) {
 
   for (const record of sorted) {
     if (!byKey.has(record.key)) {
-      byKey.set(record.key, record);
+      byKey.set(
+        record.key,
+        record
+      );
     }
   }
 
@@ -3162,7 +3564,7 @@ function uniqueVouches(records) {
 }
 
 // ============================================================
-// FIND OR CREATE COUNTER CHANNEL
+// COUNTER CHANNELS
 // ============================================================
 
 async function findOrCreateCountChannel(
@@ -3176,11 +3578,9 @@ async function findOrCreateCountChannel(
         configuredId
       ).catch(() => null);
 
-    if (existing) return existing;
-
-    console.warn(
-      `[VOUCH COUNTER] Configured counter ${configuredId} not found.`
-    );
+    if (existing) {
+      return existing;
+    }
   }
 
   await guild.channels.fetch();
@@ -3192,7 +3592,9 @@ async function findOrCreateCountChannel(
         channel.name?.startsWith(prefix)
     );
 
-  if (found) return found;
+  if (found) {
+    return found;
+  }
 
   const original =
     await guild.channels.fetch(
@@ -3234,28 +3636,29 @@ async function findOrCreateCountChannel(
       name: `${prefix}0`,
       type,
       parent: COUNT_CATEGORY_ID,
+
       permissionOverwrites: [
         {
           id: guild.id,
           deny: [permission]
         }
       ],
+
       reason:
         "Chuppys automatic vouch counter"
     });
 
   console.log(
-    `[VOUCH COUNTER] Created: ${created.name} (${created.id})`
+    `[VOUCH COUNTER] Created ${created.id}`
   );
 
   return created;
 }
 
-// ============================================================
-// RENAME COUNTER
-// ============================================================
-
-async function renameCounterChannel(channel, name) {
+async function renameCounterChannel(
+  channel,
+  name
+) {
   if (
     !channel ||
     typeof channel.setName !== "function"
@@ -3273,10 +3676,6 @@ async function renameCounterChannel(channel, name) {
   }
 }
 
-// ============================================================
-// COUNTER ORDER
-// ============================================================
-
 async function orderVouchCounters(
   guild,
   personal,
@@ -3293,14 +3692,14 @@ async function orderVouchCounters(
     server
   ];
 
-  const managed = [
+  for (const channel of [
     invite,
     giveaway,
     converter
-  ];
-
-  for (const channel of managed) {
-    if (channel.parentId !== COUNT_CATEGORY_ID) {
+  ]) {
+    if (
+      channel.parentId !== COUNT_CATEGORY_ID
+    ) {
       await channel.setParent(
         COUNT_CATEGORY_ID,
         {
@@ -3310,26 +3709,25 @@ async function orderVouchCounters(
     }
   }
 
-  const allSameCategory =
-    counters.every(
-      channel =>
-        channel.parentId === COUNT_CATEGORY_ID
+  const refreshed =
+    await Promise.all(
+      counters.map(channel =>
+        guild.channels.fetch(channel.id)
+      )
     );
 
-  if (!allSameCategory) {
+  if (
+    !refreshed.every(
+      channel =>
+        channel.parentId === COUNT_CATEGORY_ID
+    )
+  ) {
     console.warn(
       "[VOUCH COUNTER] Original counter locations preserved."
     );
+
     return;
   }
-
-  const refreshed =
-    await Promise.all(
-      counters.map(
-        channel =>
-          guild.channels.fetch(channel.id)
-      )
-    );
 
   const alreadyOrdered =
     refreshed.every(
@@ -3339,7 +3737,9 @@ async function orderVouchCounters(
           channel.position
     );
 
-  if (alreadyOrdered) return;
+  if (alreadyOrdered) {
+    return;
+  }
 
   const base =
     refreshed[0].position;
@@ -3351,10 +3751,6 @@ async function orderVouchCounters(
         position: base + index
       })
     )
-  );
-
-  console.log(
-    "[VOUCH COUNTER] Counter order updated."
   );
 }
 
@@ -3372,7 +3768,9 @@ async function recountAllVouches() {
 
   try {
     const guild =
-      await client.guilds.fetch(GUILD_ID);
+      await client.guilds.fetch(
+        GUILD_ID
+      );
 
     const [
       personalMessages,
@@ -3384,36 +3782,48 @@ async function recountAllVouches() {
       fetchChannelVouches(
         PERSONAL_VOUCH_CHANNEL_ID
       ),
+
       fetchChannelVouches(
         VOUCH_CHANNEL_ID
       ),
+
       fetchChannelVouches(
         INVITE_VOUCH_CHANNEL_ID
       ),
+
       fetchChannelVouches(
         GIVEAWAY_VOUCH_CHANNEL_ID
       ),
+
       fetchChannelVouches(
         CONVERTER_VOUCH_CHANNEL_ID
       )
     ]);
 
     const personalCount =
-      uniqueVouches(personalMessages);
+      uniqueVouches(
+        personalMessages
+      );
 
     const marketCount =
-      uniqueVouches(marketMessages);
+      uniqueVouches(
+        marketMessages
+      );
 
     const inviteCount =
-      uniqueVouches(inviteMessages);
+      uniqueVouches(
+        inviteMessages
+      );
 
     const giveawayCount =
-      uniqueVouches(giveawayMessages);
+      uniqueVouches(
+        giveawayMessages
+      );
 
     const converterCount =
-      uniqueVouches(converterMessages);
-
-    // Chuppy total includes personal + special types.
+      uniqueVouches(
+        converterMessages
+      );
 
     const chuppyTotal =
       uniqueVouches([
@@ -3422,8 +3832,6 @@ async function recountAllVouches() {
         ...giveawayMessages,
         ...converterMessages
       ]);
-
-    // Server total includes all five channels.
 
     const serverTotal =
       uniqueVouches([
@@ -3444,9 +3852,12 @@ async function recountAllVouches() {
         SERVER_COUNT_CHANNEL_ID
       );
 
-    if (!personalCounter || !serverCounter) {
+    if (
+      !personalCounter ||
+      !serverCounter
+    ) {
       throw new Error(
-        "Personal or server counter channel missing."
+        "Original counter channels missing."
       );
     }
 
@@ -3477,48 +3888,45 @@ async function recountAllVouches() {
           personalCounter,
           `${COUNT_NAMES.personal}${chuppyTotal}`
         ),
+
         renameCounterChannel(
           inviteCounter,
           `${COUNT_NAMES.invite}${inviteCount}`
         ),
+
         renameCounterChannel(
           giveawayCounter,
           `${COUNT_NAMES.giveaway}${giveawayCount}`
         ),
+
         renameCounterChannel(
           converterCounter,
           `${COUNT_NAMES.converter}${converterCount}`
         ),
+
         renameCounterChannel(
           serverCounter,
           `${COUNT_NAMES.server}${serverTotal}`
         )
       ]);
 
-    updates.forEach((result, index) => {
+    for (const result of updates) {
       if (result.status === "rejected") {
         console.error(
-          `[VOUCH COUNTER] Rename ${index + 1}:`,
+          "[VOUCH COUNTER] Rename failed:",
           result.reason
         );
       }
-    });
-
-    try {
-      await orderVouchCounters(
-        guild,
-        personalCounter,
-        inviteCounter,
-        giveawayCounter,
-        converterCounter,
-        serverCounter
-      );
-    } catch (error) {
-      console.error(
-        "[VOUCH COUNTER] Ordering failed:",
-        error
-      );
     }
+
+    await orderVouchCounters(
+      guild,
+      personalCounter,
+      inviteCounter,
+      giveawayCounter,
+      converterCounter,
+      serverCounter
+    ).catch(console.error);
 
     counterCache = {
       personal: personalCount,
@@ -3531,10 +3939,8 @@ async function recountAllVouches() {
       checkedAt: new Date().toISOString()
     };
 
-    counterRecountAt = Date.now();
-
     console.log(
-      "[VOUCH COUNTER] Recount complete:",
+      "[VOUCH COUNTER] Recount:",
       counterCache
     );
   } catch (error) {
@@ -3561,23 +3967,21 @@ function scheduleVouchCounterUpdate() {
 }
 
 // ============================================================
-// VOUCH TUTORIAL SYSTEM
+// VOUCH TUTORIAL SETTINGS
+// ============================================================
+//
+// Small inline /vouch display, not a large code block.
+//
 // ============================================================
 
-const VOUCH_COMMAND_BOX =
-  "```\n/vouch\n```";
+const VOUCH_COMMAND_BOX = "`/vouch`";
 
 const VOUCH_TUTORIAL_CHANNELS = Object.freeze({
-  personal:
-    VOUCH_TUTORIAL_CHANNEL_ID,
-  market:
-    VOUCH_TUTORIAL_CHANNEL_ID,
-  invite:
-    INVITE_VOUCH_TUTORIAL_CHANNEL_ID,
-  giveaway:
-    GIVEAWAY_VOUCH_TUTORIAL_CHANNEL_ID,
-  converter:
-    CONVERTER_VOUCH_TUTORIAL_CHANNEL_ID
+  personal: VOUCH_TUTORIAL_CHANNEL_ID,
+  market: VOUCH_TUTORIAL_CHANNEL_ID,
+  invite: INVITE_VOUCH_TUTORIAL_CHANNEL_ID,
+  giveaway: GIVEAWAY_VOUCH_TUTORIAL_CHANNEL_ID,
+  converter: CONVERTER_VOUCH_TUTORIAL_CHANNEL_ID
 });
 
 // ============================================================
@@ -3586,17 +3990,17 @@ const VOUCH_TUTORIAL_CHANNELS = Object.freeze({
 
 const VOUCH_TUTORIALS = {
   personal: {
-    title:
-      "HOW TO VOUCH — CHUPPYS MARKET",
+    title: "HOW TO VOUCH — CHUPPYS MARKET",
 
     description:
       "Thank you for shopping at **.gg/chuppys**!\n\n" +
+
       "Please follow this tutorial to leave a " +
       "market vouch for **bunnii or twxn**.\n\n" +
 
       "**STEP 1 — USE /VOUCH**\n" +
       "Stay inside your purchase or cash out ticket " +
-      "and copy the command below:\n\n" +
+      "and enter:\n\n" +
 
       VOUCH_COMMAND_BOX + "\n\n" +
 
@@ -3604,20 +4008,20 @@ const VOUCH_TUTORIALS = {
       "Choose **Market** from the vouch categories.\n\n" +
 
       "**STEP 3 — COMPLETE YOUR VOUCH**\n" +
-      "• Choose **Purchase** or **Cash Out**.\n" +
-      "• Select **bunnii** or **twxn** as your seller.\n" +
+      "• Choose Purchase or Cash Out.\n" +
+      "• Select bunnii or twxn as your seller.\n" +
       "• Enter the items purchased or cashed out.\n" +
-      "• Rate your experience from **1–5**.\n" +
-      "• Attach screenshot proof of the completed transaction.\n\n" +
+      "• Rate your experience from 1–5.\n" +
+      "• Attach proof of the completed transaction.\n\n" +
 
       "**STEP 4 — SUBMIT**\n" +
-      "Double-check all information and submit your vouch.\n\n" +
+      "Double-check your information and submit.\n\n" +
 
       "**WHERE DOES IT GO?**\n" +
-      `Your vouch will appear in <#${PERSONAL_VOUCH_CHANNEL_ID}>.\n\n` +
+      `Your vouch appears in <#${PERSONAL_VOUCH_CHANNEL_ID}>.\n\n` +
 
       "**IMPORTANT**\n" +
-      "Only submit a vouch for a real, completed transaction. " +
+      "Only submit genuine, completed transactions. " +
       "Duplicate or fake vouches are not allowed.",
 
     images: [
@@ -3628,39 +4032,35 @@ const VOUCH_TUTORIALS = {
   },
 
   market: {
-    title:
-      "HOW TO VOUCH — MARKET SELLERS",
+    title: "HOW TO VOUCH — MARKET SELLERS",
 
     description:
-      "Thank you for shopping with a seller at " +
-      "**.gg/chuppys**!\n\n" +
+      "Thank you for shopping with a seller at **.gg/chuppys**!\n\n" +
 
       "**STEP 1 — USE /VOUCH**\n" +
-      "Go to your purchase or cash out ticket. " +
-      "Copy and enter the following command:\n\n" +
+      "Go to your purchase or cash out ticket and enter:\n\n" +
 
       VOUCH_COMMAND_BOX + "\n\n" +
 
       "**STEP 2 — SELECT MARKET**\n" +
       "Choose the **Market** category.\n\n" +
 
-      "**STEP 3 — FILL OUT YOUR VOUCH**\n" +
-      "• Choose **Purchase** or **Cash Out**.\n" +
+      "**STEP 3 — COMPLETE YOUR VOUCH**\n" +
+      "• Choose Purchase or Cash Out.\n" +
       "• Select the seller who completed your transaction.\n" +
       "• Enter the items purchased or cashed out.\n" +
-      "• Rate your seller from **1–5**.\n" +
-      "• Attach screenshot proof of your completed transaction.\n\n" +
+      "• Rate your seller from 1–5.\n" +
+      "• Attach screenshot proof.\n\n" +
 
-      "**STEP 4 — SUBMIT YOUR VOUCH**\n" +
-      "Make sure you selected the correct seller " +
-      "before submitting.\n\n" +
+      "**STEP 4 — SUBMIT**\n" +
+      "Make sure you selected the correct seller.\n\n" +
 
       "**WHERE DOES IT GO?**\n" +
       `Regular seller vouches go to <#${VOUCH_CHANNEL_ID}>.\n\n` +
 
       "**IMPORTANT**\n" +
-      "Market vouches must be genuine and submitted " +
-      "only after the transaction is complete.",
+      "Vouches must be genuine and submitted " +
+      "after the transaction is complete.",
 
     images: [
       VOUCH_TUTORIAL_IMAGES.command,
@@ -3670,90 +4070,80 @@ const VOUCH_TUTORIALS = {
   },
 
   invite: {
-    title:
-      "HOW TO VOUCH — INVITE CHALLENGE",
+    title: "HOW TO VOUCH — INVITE CHALLENGE",
 
     description:
-      "Congratulations on completing an " +
-      "**Invite Challenge** at .gg/chuppys!\n\n" +
-
-      "Please follow these instructions to submit " +
-      "your Invite Challenge vouch.\n\n" +
+      "Congratulations on completing an **Invite Challenge** " +
+      "at **.gg/chuppys**!\n\n" +
 
       "**STEP 1 — OPEN /VOUCH**\n" +
-      "Go to your ticket. Copy the command below:\n\n" +
+      "Go to your ticket and enter:\n\n" +
 
       VOUCH_COMMAND_BOX + "\n\n" +
 
       "**STEP 2 — SELECT INVITE CHALLENGE**\n" +
-      "Choose **Invite Challenge** from the available categories.\n\n" +
+      "Choose **Invite Challenge**.\n\n" +
 
       "**STEP 3 — COMPLETE YOUR VOUCH**\n" +
-      "• Select **bunnii** or **twxn**.\n" +
-      "• Rate your experience from **1–5**.\n" +
-      "• Attach proof showing your completed invite challenge " +
+      "• Select bunnii or twxn.\n" +
+      "• Rate your experience from 1–5.\n" +
+      "• Attach proof of your completed challenge " +
       "and received reward.\n\n" +
 
       "**STEP 4 — SUBMIT**\n" +
-      "Review your answers and submit your vouch.\n\n" +
+      "Review your answers and submit.\n\n" +
 
       "**WHERE DOES IT GO?**\n" +
       `Your vouch belongs in <#${INVITE_VOUCH_CHANNEL_ID}>.\n\n` +
 
       "**IMPORTANT**\n" +
-      "Invite Challenge vouches are counted separately " +
-      "from regular market vouches.\n\n" +
-      "Only submit after your challenge and reward are complete.",
+      "Invite vouches are counted separately. " +
+      "Only submit after receiving your reward.",
 
     images: []
   },
 
   giveaway: {
-    title:
-      "HOW TO VOUCH — GIVEAWAY",
+    title: "HOW TO VOUCH — GIVEAWAY",
 
     description:
       "Congratulations on winning a giveaway " +
       "at **.gg/chuppys**!\n\n" +
 
-      "Please leave a vouch after receiving your giveaway prize.\n\n" +
+      "Please leave a vouch after receiving your prize.\n\n" +
 
       "**STEP 1 — OPEN /VOUCH**\n" +
-      "Go to your ticket. Copy the command below:\n\n" +
+      "Go to your ticket and enter:\n\n" +
 
       VOUCH_COMMAND_BOX + "\n\n" +
 
       "**STEP 2 — SELECT GIVEAWAY**\n" +
-      "Choose the **Giveaway** category.\n\n" +
+      "Choose **Giveaway**.\n\n" +
 
       "**STEP 3 — COMPLETE YOUR VOUCH**\n" +
-      "• Select **bunnii** or **twxn**.\n" +
-      "• Rate your experience from **1–5**.\n" +
-      "• Attach a screenshot showing proof " +
-      "of your received giveaway reward.\n\n" +
+      "• Select bunnii or twxn.\n" +
+      "• Rate your experience from 1–5.\n" +
+      "• Attach proof that you received your reward.\n\n" +
 
       "**STEP 4 — SUBMIT**\n" +
-      "Review your information and submit your vouch.\n\n" +
+      "Review and submit your vouch.\n\n" +
 
       "**WHERE DOES IT GO?**\n" +
-      `Your giveaway vouch belongs in <#${GIVEAWAY_VOUCH_CHANNEL_ID}>.\n\n` +
+      `Your vouch belongs in <#${GIVEAWAY_VOUCH_CHANNEL_ID}>.\n\n` +
 
       "**IMPORTANT**\n" +
-      "Giveaway vouches are counted separately " +
-      "from regular market and invite vouches.\n\n" +
-      "Only submit a giveaway vouch after receiving " +
-      "your prize. Do not submit duplicates.",
+      "Only submit after receiving your giveaway prize. " +
+      "Do not submit duplicates.",
 
     images: []
   },
 
   converter: {
-    title:
-      "HOW TO VOUCH — CONVERTER FEES",
+    title: "HOW TO VOUCH — CONVERTER FEES",
 
     description:
-      "Thank you for using the payment conversion " +
-      "services at **.gg/chuppys**!\n\n" +
+      "Thank you for using payment conversion services " +
+      "at **.gg/chuppys**!\n\n" +
 
       "**WHAT IS A CONVERTER VOUCH?**\n" +
       "A converter vouch is for a completed service " +
@@ -3761,40 +4151,32 @@ const VOUCH_TUTORIALS = {
       "method to another.\n\n" +
 
       "**STEP 1 — USE /VOUCH**\n" +
-      "Stay inside your converter ticket. " +
-      "Copy and enter the command below:\n\n" +
+      "Stay inside your converter ticket and enter:\n\n" +
 
       VOUCH_COMMAND_BOX + "\n\n" +
 
       "**STEP 2 — SELECT CONVERTER FEES**\n" +
-      "Choose **Converter Fees** from the vouch categories.\n\n" +
+      "Choose **Converter Fees**.\n\n" +
 
       "**STEP 3 — COMPLETE YOUR VOUCH**\n" +
-      "• Select **bunnii** or **twxn**.\n" +
-      "• Enter your payment conversion details.\n" +
-      "• Enter the fee paid for the conversion.\n" +
-      "• Rate your experience from **1–5**.\n" +
-      "• Attach proof showing the completed conversion.\n\n" +
+      "• Select bunnii or twxn.\n" +
+      "• Enter payment conversion details.\n" +
+      "• Enter the conversion fee.\n" +
+      "• Rate your experience from 1–5.\n" +
+      "• Attach proof of the completed conversion.\n\n" +
 
       "**EXAMPLE**\n" +
       "**Conversion:** Cash App to PayPal\n" +
       "**Amount:** $50\n" +
       "**Fee:** $3\n\n" +
 
-      "Use your actual transaction information " +
-      "when submitting your vouch.\n\n" +
-
       "**STEP 4 — SUBMIT**\n" +
-      "Double-check everything and submit your vouch.\n\n" +
+      "Double-check and submit your vouch.\n\n" +
 
       "**WHERE DOES IT GO?**\n" +
-      `Your converter vouch belongs in <#${CONVERTER_VOUCH_CHANNEL_ID}>.\n\n` +
+      `Your vouch belongs in <#${CONVERTER_VOUCH_CHANNEL_ID}>.\n\n` +
 
       "**IMPORTANT**\n" +
-      "Converter vouches are counted separately from " +
-      "regular purchases, cash outs, giveaways and " +
-      "invite challenges.\n\n" +
-
       "Only completed conversion services qualify.",
 
     images: []
@@ -3802,7 +4184,7 @@ const VOUCH_TUTORIALS = {
 };
 
 // ============================================================
-// TUTORIAL COMMAND NAMES
+// VOUCH TUTORIAL COMMANDS
 // ============================================================
 
 const VOUCH_TUTORIAL_COMMANDS = Object.freeze({
@@ -3813,10 +4195,6 @@ const VOUCH_TUTORIAL_COMMANDS = Object.freeze({
   "!giveawayvouchtut": "giveaway",
   "!convertervouchtut": "converter"
 });
-
-// ============================================================
-// BUILD TUTORIAL EMBED
-// ============================================================
 
 function makeVouchTutorialEmbed(type) {
   const tutorial =
@@ -3832,18 +4210,18 @@ function makeVouchTutorialEmbed(type) {
     .setColor(WHITE)
     .setTitle(tutorial.title)
     .setDescription(tutorial.description)
-    .setFooter({ text: BRAND });
+    .setFooter({
+      text: BRAND
+    });
 }
-
-// ============================================================
-// TUTORIAL IMAGES
-// ============================================================
 
 function makeVouchTutorialImageEmbeds(type) {
   const tutorial =
     VOUCH_TUTORIALS[type];
 
-  if (!tutorial) return [];
+  if (!tutorial) {
+    return [];
+  }
 
   const labels = [
     "STEP 1 — USE /VOUCH",
@@ -3864,10 +4242,6 @@ function makeVouchTutorialImageEmbeds(type) {
     );
 }
 
-// ============================================================
-// TUTORIAL CHANNEL LOOKUP
-// ============================================================
-
 function getVouchTutorialChannelId(type) {
   const channelId =
     VOUCH_TUTORIAL_CHANNELS[type];
@@ -3881,11 +4255,10 @@ function getVouchTutorialChannelId(type) {
   return channelId;
 }
 
-// ============================================================
-// SEND SINGLE TUTORIAL
-// ============================================================
-
-async function sendSingleVouchTutorial(guild, type) {
+async function sendSingleVouchTutorial(
+  guild,
+  type
+) {
   const tutorial =
     VOUCH_TUTORIALS[type];
 
@@ -3899,11 +4272,13 @@ async function sendSingleVouchTutorial(guild, type) {
     getVouchTutorialChannelId(type);
 
   const channel =
-    await guild.channels.fetch(channelId);
+    await guild.channels.fetch(
+      channelId
+    );
 
   if (!channel?.send || !channel?.messages) {
     throw new Error(
-      `Vouch tutorial channel ${channelId} unavailable.`
+      `Tutorial channel ${channelId} unavailable.`
     );
   }
 
@@ -3912,21 +4287,25 @@ async function sendSingleVouchTutorial(guild, type) {
     ...makeVouchTutorialImageEmbeds(type)
   ];
 
-  const result = await upsertBotMessage(
-    channel,
-    message =>
-      message.embeds.some(
-        existing =>
-          existing.title === tutorial.title
-      ),
-    {
-      content: "",
-      embeds,
-      components: [],
-      allowedMentions: NONE
-    },
-    10
-  );
+  const result =
+    await upsertBotMessage(
+      channel,
+
+      message =>
+        message.embeds.some(
+          existing =>
+            existing.title === tutorial.title
+        ),
+
+      {
+        content: "",
+        embeds,
+        components: [],
+        allowedMentions: NONE
+      },
+
+      10
+    );
 
   return {
     ...result,
@@ -3934,10 +4313,6 @@ async function sendSingleVouchTutorial(guild, type) {
     type
   };
 }
-
-// ============================================================
-// SEND ALL TUTORIALS
-// ============================================================
 
 async function sendVouchTutorial(guild) {
   const types = [
@@ -3961,8 +4336,8 @@ async function sendVouchTutorial(guild) {
       results.push({
         type,
         channelId: result.channelId,
-        updated: result.updated,
-        success: true
+        success: true,
+        updated: result.updated
       });
     } catch (error) {
       console.error(
@@ -3972,8 +4347,6 @@ async function sendVouchTutorial(guild) {
 
       results.push({
         type,
-        channelId:
-          getVouchTutorialChannelId(type),
         success: false,
         error: error.message
       });
@@ -3983,31 +4356,23 @@ async function sendVouchTutorial(guild) {
   return results;
 }
 
-// ============================================================
-// HANDLE TUTORIAL COMMANDS
-// ============================================================
-
-async function handleVouchTutorialCommand(message, type) {
+async function handleVouchTutorialCommand(
+  message,
+  type
+) {
   if (!canManageServer(message.member)) {
-    return message.reply({
-      content:
-        "You need Manage Server permission to post vouch tutorials.",
-      allowedMentions: {
-        repliedUser: false,
-        parse: []
-      }
-    });
+    return message.reply(
+      "You need Manage Server permission."
+    );
   }
 
   const key =
     `${message.guild.id}:vouch-tutorials`;
 
   if (!lock(locks.vouchTutorial, key)) {
-    return message.reply({
-      content:
-        "A vouch tutorial is already being updated.",
-      allowedMentions: NONE
-    });
+    return message.reply(
+      "A vouch tutorial is already updating."
+    );
   }
 
   try {
@@ -4018,30 +4383,18 @@ async function handleVouchTutorialCommand(message, type) {
         );
 
       const successful =
-        results.filter(result => result.success);
-
-      const failed =
-        results.filter(result => !result.success);
+        results.filter(r => r.success);
 
       const details =
-        successful.map(result =>
-          `**${result.type}:** <#${result.channelId}>`
+        successful.map(r =>
+          `**${r.type}:** <#${r.channelId}>`
         );
-
-      if (failed.length) {
-        details.push(
-          "",
-          "**Failed tutorials:**",
-          ...failed.map(result =>
-            `${result.type}: ${safeText(result.error, 150)}`
-          )
-        );
-      }
 
       return message.reply({
         content:
-          `**${successful.length}/5 vouch tutorials posted or updated.**\n\n` +
+          `**${successful.length}/5 tutorials updated.**\n\n` +
           details.join("\n"),
+
         allowedMentions: NONE
       });
     }
@@ -4057,6 +4410,7 @@ async function handleVouchTutorialCommand(message, type) {
         `The **${type}** tutorial was ` +
         `${result.updated ? "updated" : "posted"} ` +
         `in <#${result.channelId}>!`,
+
       allowedMentions: NONE
     });
   } finally {
@@ -4065,7 +4419,7 @@ async function handleVouchTutorialCommand(message, type) {
 }
 
 // ============================================================
-// NEW CATEGORY-SPECIFIC VOUCH REMINDERS
+// VOUCH REMINDERS
 // ============================================================
 
 const VOUCH_REMINDER_TYPES = Object.freeze({
@@ -4077,18 +4431,11 @@ const VOUCH_REMINDER_TYPES = Object.freeze({
   rall: "all"
 });
 
-// ============================================================
-// MARKET REMINDER
-// ============================================================
-
 function makeMarketVouchReminder() {
   return whiteEmbed(
     "Reminder to Vouch — Market",
 
-    "Thank you for shopping at **.gg/chuppys**! " +
-    `${CHUPPYS_WELCOME_EMOJI}\n\n` +
-
-    "**Your Market Vouch**\n\n" +
+    "Thank you for shopping at **.gg/chuppys**!\n\n" +
 
     "If you completed a purchase or cash out, " +
     "please submit your market vouch.\n\n" +
@@ -4101,16 +4448,12 @@ function makeMarketVouchReminder() {
     VOUCH_COMMAND_BOX + "\n\n" +
 
     "Select **Market**, choose your seller, " +
-    "complete the form and attach your proof.\n\n" +
+    "complete the form and attach proof.\n\n" +
 
-    "Please submit genuine vouches within the " +
-    "server's 2-day grace period."
+    "Please submit genuine vouches within " +
+    "the server's 2-day grace period."
   );
 }
-
-// ============================================================
-// INVITE REMINDER
-// ============================================================
 
 function makeInviteVouchReminder() {
   return whiteEmbed(
@@ -4119,8 +4462,7 @@ function makeInviteVouchReminder() {
     "Thank you for completing an **Invite Challenge** " +
     "at **.gg/chuppys**!\n\n" +
 
-    "If you've received your Invite Challenge reward, " +
-    "please submit your vouch.\n\n" +
+    "After receiving your reward, submit your vouch.\n\n" +
 
     `**Tutorial:** <#${INVITE_VOUCH_TUTORIAL_CHANNEL_ID}>\n\n` +
 
@@ -4130,16 +4472,11 @@ function makeInviteVouchReminder() {
     VOUCH_COMMAND_BOX + "\n\n" +
 
     "Select **Invite Challenge**, complete the form, " +
-    "and include proof of your received reward.\n\n" +
+    "and include proof of your reward.\n\n" +
 
-    "Please submit your vouch only once " +
-    "your challenge is completed."
+    "Only submit after the challenge is complete."
   );
 }
-
-// ============================================================
-// GIVEAWAY REMINDER
-// ============================================================
 
 function makeGiveawayVouchReminder() {
   return whiteEmbed(
@@ -4148,8 +4485,7 @@ function makeGiveawayVouchReminder() {
     "Congratulations on your giveaway win " +
     "at **.gg/chuppys**!\n\n" +
 
-    "If you've received your giveaway prize, " +
-    "please submit a Giveaway vouch.\n\n" +
+    "After receiving your prize, please submit a vouch.\n\n" +
 
     `**Tutorial:** <#${GIVEAWAY_VOUCH_TUTORIAL_CHANNEL_ID}>\n\n` +
 
@@ -4158,27 +4494,21 @@ function makeGiveawayVouchReminder() {
     "**HOW TO VOUCH**\n\n" +
     VOUCH_COMMAND_BOX + "\n\n" +
 
-    "Select **Giveaway**, complete your vouch " +
-    "and attach proof of your reward.\n\n" +
+    "Select **Giveaway**, complete the form, " +
+    "and attach proof of your received reward.\n\n" +
 
-    "Only one genuine vouch is allowed " +
-    "for each completed giveaway reward."
+    "Only one genuine vouch per completed reward."
   );
 }
-
-// ============================================================
-// CONVERTER REMINDER
-// ============================================================
 
 function makeConverterVouchReminder() {
   return whiteEmbed(
     "Reminder to Vouch — Converter Fees",
 
-    "Thank you for using the payment conversion " +
-    "services at **.gg/chuppys**!\n\n" +
+    "Thank you for using the payment conversion services " +
+    "at **.gg/chuppys**!\n\n" +
 
-    "If your conversion has been completed, " +
-    "please submit your Converter vouch.\n\n" +
+    "If your conversion is complete, submit your vouch.\n\n" +
 
     `**Tutorial:** <#${CONVERTER_VOUCH_TUTORIAL_CHANNEL_ID}>\n\n` +
 
@@ -4187,38 +4517,33 @@ function makeConverterVouchReminder() {
     "**HOW TO VOUCH**\n\n" +
     VOUCH_COMMAND_BOX + "\n\n" +
 
-    "Select **Converter Fees**, enter the conversion " +
-    "details and fee, and attach proof.\n\n" +
+    "Select **Converter Fees**, enter the details " +
+    "and fee, and attach proof.\n\n" +
 
-    "Only submit after the conversion has been completed."
+    "Only completed conversions qualify."
   );
 }
-
-// ============================================================
-// ALL VOUCH TYPES REMINDER
-// ============================================================
 
 function makeAllVouchReminder() {
   return whiteEmbed(
     "Reminder to Vouch — .gg/chuppys",
 
-    "Thank you for supporting **.gg/chuppys**! " +
-    `${CHUPPYS_WELCOME_EMOJI}\n\n` +
+    "Thank you for supporting **.gg/chuppys**!\n\n" +
 
-    "Please select the correct vouch type " +
+    "Please use the correct category " +
     "for your completed transaction or reward.\n\n" +
 
-    "**MARKET VOUCHES**\n" +
-    `Tutorial: <#${VOUCH_TUTORIAL_CHANNEL_ID}>\n\n` +
+    "**MARKET**\n" +
+    `<#${VOUCH_TUTORIAL_CHANNEL_ID}>\n\n` +
 
-    "**INVITE CHALLENGE VOUCHES**\n" +
-    `Tutorial: <#${INVITE_VOUCH_TUTORIAL_CHANNEL_ID}>\n\n` +
+    "**INVITE CHALLENGE**\n" +
+    `<#${INVITE_VOUCH_TUTORIAL_CHANNEL_ID}>\n\n` +
 
-    "**GIVEAWAY VOUCHES**\n" +
-    `Tutorial: <#${GIVEAWAY_VOUCH_TUTORIAL_CHANNEL_ID}>\n\n` +
+    "**GIVEAWAY**\n" +
+    `<#${GIVEAWAY_VOUCH_TUTORIAL_CHANNEL_ID}>\n\n` +
 
-    "**CONVERTER FEES VOUCHES**\n" +
-    `Tutorial: <#${CONVERTER_VOUCH_TUTORIAL_CHANNEL_ID}>\n\n` +
+    "**CONVERTER FEES**\n" +
+    `<#${CONVERTER_VOUCH_TUTORIAL_CHANNEL_ID}>\n\n` +
 
     "**QUICK VOUCH**\n" +
     `<#${QUICK_VOUCH_CHANNEL_ID}>\n\n` +
@@ -4226,16 +4551,12 @@ function makeAllVouchReminder() {
     "**HOW TO VOUCH**\n\n" +
     VOUCH_COMMAND_BOX + "\n\n" +
 
-    "Choose the matching category, " +
-    "fill in the form and attach your proof.\n\n" +
+    "Choose the matching category, complete the form, " +
+    "and attach proof.\n\n" +
 
     "Please do not submit duplicate or fake vouches."
   );
 }
-
-// ============================================================
-// REMINDER FACTORY
-// ============================================================
 
 function makeVouchReminder(type) {
   switch (type) {
@@ -4261,21 +4582,18 @@ function makeVouchReminder(type) {
   }
 }
 
-// ============================================================
-// SEND A CATEGORY-SPECIFIC REMINDER
-// ============================================================
-
 async function sendVouchReminder(
   message,
   target,
   type
 ) {
-  const embed =
-    makeVouchReminder(type);
-
   await message.channel.send({
     content: `<@${target.id}>`,
-    embeds: [embed],
+
+    embeds: [
+      makeVouchReminder(type)
+    ],
+
     allowedMentions: {
       users: [target.id]
     }
@@ -4283,14 +4601,16 @@ async function sendVouchReminder(
 }
 
 // ============================================================
-// HELP EMBED — UPDATED
+// HELP EMBED — NO VERIFICATION/CLOSING COMMANDS
 // ============================================================
 
 function makeHelpEmbed() {
   return new EmbedBuilder()
-    .setTitle(".gg/chuppys Bot Commands")
+    .setTitle(
+      ".gg/chuppys Bot Commands"
+    )
     .setDescription(
-      "Here is a list of available commands and what they do."
+      "Here is a list of available commands."
     )
     .addFields(
       {
@@ -4304,6 +4624,7 @@ function makeHelpEmbed() {
           "`,pay` — Payment methods\n" +
           "`,client` — Client role panel"
       },
+
       {
         name: "Vouch Tutorial Commands",
         value:
@@ -4314,41 +4635,44 @@ function makeHelpEmbed() {
           "`!giveawayvouchtut` — Giveaway\n" +
           "`!convertervouchtut` — Converter Fees"
       },
+
       {
         name: "Vouch Reminder Commands",
         value:
-          "`,r @user r` — Market reminder\n" +
-          "`,r @user rmarket` — Market reminder\n" +
-          "`,r @user rinv` — Invite reminder\n" +
-          "`,r @user rgive` — Giveaway reminder\n" +
-          "`,r @user rconv` — Converter reminder\n" +
-          "`,r @user rall` — All tutorials"
+          "`,r @user r` — Market\n" +
+          "`,r @user rmarket` — Market\n" +
+          "`,r @user rinv` — Invite\n" +
+          "`,r @user rgive` — Giveaway\n" +
+          "`,r @user rconv` — Converter\n" +
+          "`,r @user rall` — All categories"
       },
+
       {
-        name: "Verification Commands",
+        name: "Verification",
         value:
-          "`,r @user c` — Approve inside verification ticket only\n" +
-          "`,vclose` — Staff closes verification ticket\n" +
-          "`,vcancel` — Cancel own verification ticket"
+          `Create a private verification ticket in <#${VERIFY_CHANNEL_ID}>. ` +
+          "Staff reviews and approves verification manually."
       },
+
       {
         name: "Self Role Commands",
         value:
           "`,roles`, `,pings`, `,age`, `,pronouns`"
       },
+
       {
-        name: "Ticket Commands",
+        name: "Tickets",
         value:
-          "`/ticketpanel`, `,claim`, `,forceclaim`, " +
-          "`,close [reason]`, `,reopen`, `,delete`"
+          "`/ticketpanel` — Open the ticket panel\n" +
+          "Use the ticket controls provided by staff."
       },
+
       {
-        name: "Moderation / Support",
+        name: "Support Commands",
         value:
-          "`,r @user b reason` — Blacklist\n" +
-          "`,appealpanel`, `,unblacklistpanel`\n" +
           "`,partner`, `,mod`, `,seller`, `,promoter`"
       },
+
       {
         name: "Service Commands",
         value:
@@ -4358,6 +4682,7 @@ function makeHelpEmbed() {
           "`,sellers` / `!sellers`\n" +
           "`,staff` / `!staff`"
       },
+
       {
         name: "Additional Commands",
         value:
@@ -4381,6 +4706,7 @@ function makeHelpEmbed() {
 function makePromoterEmbed() {
   return whiteEmbed(
     ".gg/chuppys promoter information",
+
     "**Interested in becoming a .gg/chuppys promoter?**\n\n" +
 
     "**Promoter Responsibilities**\n" +
@@ -4389,18 +4715,19 @@ function makePromoterEmbed() {
     "• Share the server with your audience.\n" +
     "• Help the community grow and attract customers.\n" +
     "• Represent Chuppys positively.\n" +
-    "• Keep promotions appropriate and follow platform rules.\n" +
-    "• Do not use fake invites, spam or misleading ads.\n\n" +
+    "• Follow platform rules and avoid spam.\n\n" +
 
     "**Promoter Application Questions**\n" +
+
     "1. Do you have a following base? " +
     "How many followers and on which platform?\n\n" +
+
     "2. How many invites do you think you will gain monthly?\n\n" +
 
     "**Payment Information**\n" +
+
     "Promoters are paid **monthly**. " +
-    "Details will be discussed with management.\n\n" +
-    "Please send your answers to the Chuppys team."
+    "Details will be discussed with management."
   );
 }
 
@@ -4415,32 +4742,38 @@ function paymentMethods() {
       details: "$yysluvv",
       url: "https://cash.app/$yysluvv"
     },
+
     {
       name: "PayPal",
       details: "PayPal.me/twxnsrevenge",
       url: "https://paypal.me/twxnsrevenge"
     },
+
     {
       name: "Venmo",
       details: "@chuppys",
       url: "https://venmo.com/u/chuppys"
     },
+
     {
       name: "Chime",
       details: "chuppysss",
       url:
         "https://app.chime.com/link/qr?u=chuppysss"
     },
+
     {
       name: "Apple Pay",
       details: "929-554-5969",
       url: ""
     },
+
     {
       name: "Zelle",
       details: "631-401-8951",
       url: ""
     },
+
     ...EXTRA_PAYMENT_METHODS.filter(
       method => method.name.trim()
     )
@@ -4458,9 +4791,12 @@ function validPaymentUrl(value) {
 function makePaymentEmbed() {
   const embed = whiteEmbed(
     "Payment Methods",
+
     "Choose a payment method below.\n\n" +
     "Please confirm payment details before sending."
-  ).setThumbnail(PAYMENT_EMOJI_URL);
+  ).setThumbnail(
+    PAYMENT_EMOJI_URL
+  );
 
   for (const method of paymentMethods()) {
     embed.addFields({
@@ -4480,17 +4816,16 @@ function makePaymentEmbed() {
 function makePaymentButtons() {
   const buttons =
     paymentMethods()
-      .filter(method =>
-        validPaymentUrl(method.url)
+      .filter(
+        method => validPaymentUrl(method.url)
       )
       .slice(0, 5)
-      .map(method =>
-        new ButtonBuilder()
-          .setLabel(
-            method.name.slice(0, 80)
-          )
-          .setStyle(ButtonStyle.Link)
-          .setURL(method.url)
+      .map(
+        method =>
+          new ButtonBuilder()
+            .setLabel(method.name.slice(0, 80))
+            .setStyle(ButtonStyle.Link)
+            .setURL(method.url)
       );
 
   return buttons.length
@@ -4499,10 +4834,6 @@ function makePaymentButtons() {
       ]
     : [];
 }
-
-// ============================================================
-// ,PAY
-// ============================================================
 
 async function sendPaymentEmbed(channel) {
   if (!channel?.send) {
@@ -4523,7 +4854,7 @@ async function sendPaymentEmbed(channel) {
     });
 
   console.log(
-    `[PAY] New payment embed ${sent.id} in ${channel.id}`
+    `[PAY] New payment embed ${sent.id}`
   );
 
   return sent;
@@ -4546,6 +4877,7 @@ async function updateServiceMessage(
 
   return upsertBotMessage(
     channel,
+
     message =>
       message.embeds.some(existing => {
         const description =
@@ -4564,6 +4896,7 @@ async function updateServiceMessage(
           description.includes("# 3 MONTHS")
         );
       }),
+
     {
       content: "",
       embeds: [embed],
@@ -4680,11 +5013,12 @@ async function sendBoostiesServices(channel) {
     [30, "$27.00"]
   ];
 
-  const lines = list =>
-    list.map(
-      ([count, price]) =>
-        `${BOOST_EMOJI} **${count} • ${price}**`
-    ).join("\n");
+  const lines =
+    list =>
+      list.map(
+        ([count, price]) =>
+          `${BOOST_EMOJI} **${count} • ${price}**`
+      ).join("\n");
 
   const embed =
     new EmbedBuilder()
@@ -4751,7 +5085,9 @@ function makeSellersEmbed() {
 
   return new EmbedBuilder()
     .setColor(WHITE)
-    .setDescription(lines.join("\n"));
+    .setDescription(
+      lines.join("\n")
+    );
 }
 
 // ============================================================
@@ -4793,7 +5129,9 @@ function makeStaffEmbed() {
 
   return new EmbedBuilder()
     .setColor(WHITE)
-    .setDescription(lines.join("\n"));
+    .setDescription(
+      lines.join("\n")
+    );
 }
 
 // ============================================================
@@ -4803,27 +5141,34 @@ function makeStaffEmbed() {
 function makeModEmbed() {
   return whiteEmbed(
     ".gg/chuppys moderator responsibilities",
+
     "**Server Moderation**\n" +
     "• Keep the server organized, safe and welcoming.\n" +
     "• Monitor chats and apply rules fairly.\n" +
     "• Prevent spam, harassment, scams and inappropriate behavior.\n\n" +
+
     "**Ticket Assistance**\n" +
     "• Respond promptly to member tickets.\n" +
     "• Escalate difficult situations to an owner.\n\n" +
+
     "**Member Assistance**\n" +
     "• Explain server systems and assist with verification.\n" +
     "• Treat members with respect.\n\n" +
+
     "**Seller & Transaction Safety**\n" +
     "• Help explain the vouch process.\n" +
     "• Take scam reports seriously.\n\n" +
+
     "**Staff Expectations**\n" +
     "• Remain active and professional.\n" +
     "• Do not abuse permissions or share private staff discussions.\n" +
     "• Avoid arguments and be fair.\n\n" +
+
     "**Important Rules**\n" +
     "• Never use staff status for personal benefit.\n" +
     "• Do not threaten members with permissions.\n" +
     "• Contact an owner when unsure.\n\n" +
+
     "-# Thank you for keeping .gg/chuppys safe."
   );
 }
@@ -4864,22 +5209,33 @@ async function sendRobuxCashoutEmbed(channel) {
     );
   }
 
-  const embed = new EmbedBuilder()
-    .setColor(WHITE)
-    .setTitle("Cashing Out Robux\n\n")
-    .setThumbnail(ROBUX_CASHOUT_THUMBNAIL_URL)
-    .setDescription(
-      "RATES\n\n" +
-      "**Below 10k**\n3/k\n\n" +
-      "**Above 10k**\n3.5/k\n\n" +
-      "-# make a cash out ticket now !! " +
-      "make sure u ping me in tickets " +
-      "<:uppyty:1561094713153429746>"
-    )
-    .setFooter({ text: BRAND });
+  const embed =
+    new EmbedBuilder()
+      .setColor(WHITE)
+      .setTitle(
+        "Cashing Out Robux\n\n"
+      )
+      .setThumbnail(
+        ROBUX_CASHOUT_THUMBNAIL_URL
+      )
+      .setDescription(
+        "RATES\n\n" +
+
+        "**Below 10k**\n3/k\n\n" +
+
+        "**Above 10k**\n3.5/k\n\n" +
+
+        "-# make a cash out ticket now !! " +
+        "make sure u ping me in tickets " +
+        "<:uppyty:1561094713153429746>"
+      )
+      .setFooter({
+        text: BRAND
+      });
 
   return upsertBotMessage(
     channel,
+
     message =>
       message.embeds.some(existing =>
         (existing.title || "").startsWith(
@@ -4889,6 +5245,7 @@ async function sendRobuxCashoutEmbed(channel) {
           "Robux Cash out"
         )
       ),
+
     {
       embeds: [embed],
       allowedMentions: NONE
@@ -4903,11 +5260,14 @@ async function sendRobuxCashoutEmbed(channel) {
 async function sendRankedRoles(guild) {
   const embed = whiteEmbed(
     ".gg/chuppys ranked roles",
+
     RANKED_ROLE_IDS.map(
       (id, index) =>
         `**${index + 1}.** <@&${id}>`
     ).join("\n\n")
-  ).setThumbnail(RANKED_ROLES_THUMBNAIL_URL);
+  ).setThumbnail(
+    RANKED_ROLES_THUMBNAIL_URL
+  );
 
   return sendEmbedToChannel(
     guild,
@@ -4937,15 +5297,19 @@ async function handleAFK(message) {
         .slice(0, 500) ||
       "No reason provided.";
 
-    afkUsers.set(key, {
-      reason,
-      since: Date.now()
-    });
+    afkUsers.set(
+      key,
+      {
+        reason,
+        since: Date.now()
+      }
+    );
 
     await message.reply({
       content:
         `${AFK_GOING_EMOJI} ${message.author}, you're now AFK!\n` +
         `**Reason:** ${reason}`,
+
       allowedMentions: {
         repliedUser: false
       }
@@ -4961,6 +5325,7 @@ async function handleAFK(message) {
       content:
         `${AFK_RETURN_EMOJI} Welcome back, ${message.author}! ` +
         "Your AFK status has been removed.",
+
       allowedMentions: NONE
     });
   }
@@ -4983,6 +5348,7 @@ async function handleAFK(message) {
         content:
           `${AFK_GOING_EMOJI} **${user.username} is currently AFK.**\n` +
           `**Reason:** ${info.reason}`,
+
         allowedMentions: NONE
       });
     }
@@ -4997,6 +5363,7 @@ async function handleAFK(message) {
 
 client.once(
   Events.ClientReady,
+
   async readyClient => {
     console.log(
       `[READY] Logged in as ${readyClient.user.tag}`
@@ -5034,43 +5401,39 @@ client.once(
     }, 5 * 60 * 1000);
 
     console.log(
-      "[READY] Ticket system handled by tickets.js."
+      "[READY] Ticket module loaded."
     );
 
     console.log(
-      "[READY] Vouch system handled by vouch.js."
+      "[READY] Vouch module loaded."
     );
 
     console.log(
-      "[READY] Secure ticket-only verification enabled."
+      "[READY] Manual verification enabled."
     );
 
     console.log(
-      "[READY] Self-verification no longer grants roles."
+      "[READY] Dedicated private verification category enabled."
     );
 
     console.log(
-      "[READY] Manual approval only inside matching verification tickets."
+      "[READY] Verification commands hidden from ticket embeds and /help."
     );
 
     console.log(
-      "[READY] Separate Market, Invite, Giveaway, Converter and All reminders enabled."
+      "[READY] Verification commands deleted before execution when permitted."
+    );
+
+    console.log(
+      "[READY] Automatic verification disabled in index.js."
+    );
+
+    console.log(
+      "[READY] Category-specific vouch reminders enabled."
     );
 
     console.log(
       "[READY] Vouch counter names preserved."
-    );
-
-    console.log(
-      "[READY] Chuppy total includes personal, invite, giveaway and converter."
-    );
-
-    console.log(
-      "[READY] Server total includes all five source channels."
-    );
-
-    console.log(
-      "[READY] Forward and duplicate detection enabled."
     );
 
     console.log(
@@ -5093,15 +5456,12 @@ client.once(
 
 client.on(
   Events.InteractionCreate,
+
   async interaction => {
 
     // ========================================================
     // MODULE INTERACTIONS
     // ========================================================
-
-    // Existing tickets.js continues handling its own
-    // ticket controls. The new secure verification
-    // button uses a separate ID and is handled below.
 
     if (
       interaction.isButton() &&
@@ -5112,8 +5472,6 @@ client.on(
         interaction.customId.startsWith(
           "chuppys_ticket:"
         ) ||
-        interaction.customId ===
-          VERIFY_TICKET_BUTTON_ID ||
         interaction.customId ===
           UNBLACKLIST_BUTTON_ID
       )
@@ -5126,7 +5484,9 @@ client.on(
       [
         "ticketpanel",
         "vouch"
-      ].includes(interaction.commandName)
+      ].includes(
+        interaction.commandName
+      )
     ) {
       return;
     }
@@ -5141,7 +5501,9 @@ client.on(
         "ticket_category",
         "ticket_open",
         "ticket_create"
-      ].includes(interaction.customId)
+      ].includes(
+        interaction.customId
+      )
     ) {
       return;
     }
@@ -5163,7 +5525,7 @@ client.on(
     try {
 
       // ======================================================
-      // OLD AUTO VERIFY BUTTON — DISABLED
+      // OLD AUTOMATIC VERIFY BUTTON — DISABLED
       // ======================================================
 
       if (
@@ -5172,16 +5534,29 @@ client.on(
       ) {
         return interaction.reply(
           ephemeral(
-            "Automatic verification is disabled for server safety.\n\n" +
-            `Please go to <#${VERIFY_CHANNEL_ID}> ` +
-            "and click **Create Verification Ticket**. " +
-            "Staff must approve your verification."
+            "Automatic verification is disabled.\n\n" +
+            `Please visit <#${VERIFY_CHANNEL_ID}> ` +
+            "and create a verification ticket."
           )
         );
       }
 
       // ======================================================
-      // NEW SECURE VERIFICATION TICKET BUTTON
+      // LEGACY VERIFICATION TICKET BUTTON
+      // ======================================================
+
+      if (
+        interaction.isButton() &&
+        interaction.customId ===
+          VERIFY_TICKET_BUTTON_ID
+      ) {
+        return createVerificationTicket(
+          interaction
+        );
+      }
+
+      // ======================================================
+      // NEW SECURE VERIFICATION BUTTON
       // ======================================================
 
       if (
@@ -5189,7 +5564,7 @@ client.on(
         interaction.customId ===
           VERIFY_SECURE_TICKET_BUTTON_ID
       ) {
-        return await createVerificationTicket(
+        return createVerificationTicket(
           interaction
         );
       }
@@ -5198,9 +5573,13 @@ client.on(
       // SELF ROLE SELECTION
       // ======================================================
 
-      if (interaction.isStringSelectMenu()) {
+      if (
+        interaction.isStringSelectMenu()
+      ) {
         const type =
-          Object.keys(ROLE_MENU_CONFIG).find(
+          Object.keys(
+            ROLE_MENU_CONFIG
+          ).find(
             key =>
               ROLE_MENU_CONFIG[key].customId ===
               interaction.customId
@@ -5275,8 +5654,10 @@ client.on(
 
         const embed = whiteEmbed(
           `${category} Request`,
+
           `**Requested by:** <@${interaction.user.id}>\n\n` +
           `**Category:** ${category}\n\n` +
+
           "**What they'd like Chuppys to stock up on:**\n" +
           safeText(items)
         )
@@ -5332,9 +5713,6 @@ client.on(
           );
         }
 
-        // Require verification before the client role.
-        // This prevents bypassing the ticket-only system.
-
         if (
           !member.roles.cache.has(
             CHUPPYS_ROLE_ID
@@ -5347,7 +5725,9 @@ client.on(
         }
 
         if (
-          member.roles.cache.has(CLIENT_ROLE_ID)
+          member.roles.cache.has(
+            CLIENT_ROLE_ID
+          )
         ) {
           return interaction.editReply(
             "You already have the client role!"
@@ -5356,6 +5736,7 @@ client.on(
 
         await member.roles.add(
           CLIENT_ROLE_ID,
+
           "Verified member claimed the Chuppys client role."
         );
 
@@ -5397,7 +5778,9 @@ client.on(
 
         if (
           picture &&
-          !picture.contentType?.startsWith("image/")
+          !picture.contentType?.startsWith(
+            "image/"
+          )
         ) {
           return interaction.reply(
             ephemeral(
@@ -5412,6 +5795,7 @@ client.on(
 
         const embed = whiteEmbed(
           `Question from ${interaction.user.username}`,
+
           `**Question**\n${safeText(questionText)}`
         )
           .setThumbnail(
@@ -5430,7 +5814,9 @@ client.on(
         const buttons =
           new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-              .setCustomId("question_ticket")
+              .setCustomId(
+                "question_ticket"
+              )
               .setLabel(
                 "Make a Support Ticket"
               )
@@ -5442,7 +5828,9 @@ client.on(
               ),
 
             new ButtonBuilder()
-              .setCustomId("question_reply")
+              .setCustomId(
+                "question_reply"
+              )
               .setLabel(
                 "Reply to Question"
               )
@@ -5485,7 +5873,6 @@ client.on(
               "This question requires a support ticket.\n\n" +
 
               `Please make one in <#${QUESTION_TICKET_CHANNEL_ID}> ` +
-
               "using the ticket dropdown menu.\n\n" +
 
               `Our <@&${TICKET_SUPPORT_ROLE_ID}> team ` +
@@ -5535,9 +5922,10 @@ client.on(
           )?.[1] ||
           null;
 
-        const suffix = userId
-          ? `${userId}:${interaction.message.id}`
-          : interaction.message.id;
+        const suffix =
+          userId
+            ? `${userId}:${interaction.message.id}`
+            : interaction.message.id;
 
         const modal =
           new ModalBuilder()
@@ -5627,7 +6015,8 @@ client.on(
         }
 
         const footer =
-          questionMessage.embeds[0]?.footer?.text || "";
+          questionMessage.embeds[0]?.footer?.text ||
+          "";
 
         const userId =
           footer.match(
@@ -5659,6 +6048,7 @@ client.on(
 
         const embed = whiteEmbed(
           "Response to Your Question",
+
           `${QUESTION_EMOJI} **Replied by:** ` +
           `${interaction.user.username}\n\n` +
           `**Response:**\n${safeText(answer)}`
@@ -5699,6 +6089,7 @@ client.on(
 
 client.on(
   Events.MessageCreate,
+
   async message => {
     if (
       !message.guild ||
@@ -5713,7 +6104,7 @@ client.on(
     const cmd =
       raw.toLowerCase();
 
-    // Existing ticket commands remain in tickets.js.
+    // Normal ticket commands remain in tickets.js.
 
     if (
       /^,(?:claim|forceclaim|close|reopen|delete)(?:\s|$)/i
@@ -5722,32 +6113,103 @@ client.on(
       return;
     }
 
-    const reply = content =>
-      message.reply({
-        content,
-        allowedMentions: {
-          parse: [],
-          repliedUser: false
-        }
-      });
+    const reply =
+      content =>
+        message.reply({
+          content,
+
+          allowedMentions: {
+            parse: [],
+            repliedUser: false
+          }
+        });
 
     try {
 
       // ======================================================
-      // VERIFICATION TICKET CLOSE COMMANDS
+      // HIDDEN VERIFICATION CLOSE / CANCEL
       // ======================================================
 
-      if (cmd === ",vclose") {
+      if (
+        cmd === ",vclose" ||
+        cmd === ",vcancel"
+      ) {
+        const ownerId =
+          verificationTicketOwnerId(
+            message.channel
+          );
+
+        const official =
+          await isOfficialVerificationTicket(
+            message.channel
+          );
+
+        const allowed =
+          official &&
+          (
+            isVerificationStaff(message.member) ||
+            (
+              cmd === ",vcancel" &&
+              message.author.id === ownerId
+            )
+          );
+
+        // Hide the typed command even when it is invalid.
+
+        const hidden =
+          await hideVerificationCommand(message);
+
+        if (!hidden || !allowed) {
+          return;
+        }
+
         return closeVerificationTicket(
           message,
-          false
+          cmd === ",vcancel"
         );
       }
 
-      if (cmd === ",vcancel") {
-        return closeVerificationTicket(
+      // ======================================================
+      // HIDDEN MANUAL VERIFICATION APPROVAL
+      // ======================================================
+
+      const verifyCommand =
+        raw.match(
+          /^,r\s+<@!?(\d{17,20})>\s+c\s*$/i
+        );
+
+      if (verifyCommand) {
+        const hidden =
+          await hideVerificationCommand(message);
+
+        if (!hidden) {
+          return;
+        }
+
+        if (
+          !isVerificationStaff(message.member)
+        ) {
+          return;
+        }
+
+        const official =
+          await isOfficialVerificationTicket(
+            message.channel
+          );
+
+        if (!official) {
+          await privateNotice(
+            message.author,
+            "Verification approval is only available " +
+            "inside an official verification ticket."
+          );
+
+          return;
+        }
+
+        return approveVerification(
           message,
-          true
+          verifyCommand[1]
         );
       }
 
@@ -5808,7 +6270,7 @@ client.on(
       }
 
       // ======================================================
-      // ,CLIENT
+      // CLIENT PANEL
       // ======================================================
 
       if (cmd === ",client") {
@@ -5822,6 +6284,7 @@ client.on(
         try {
           await upsertBotMessage(
             message.channel,
+
             msg =>
               msg.embeds.some(
                 embed =>
@@ -5829,6 +6292,7 @@ client.on(
                     "Please click the button below for the client role"
                   )
               ),
+
             {
               embeds: [
                 makeClientEmbed()
@@ -5849,7 +6313,7 @@ client.on(
       }
 
       // ======================================================
-      // ,PROMOTER
+      // PROMOTER
       // ======================================================
 
       if (cmd === ",promoter") {
@@ -5863,12 +6327,14 @@ client.on(
         try {
           await upsertBotMessage(
             message.channel,
+
             msg =>
               msg.embeds.some(
                 embed =>
                   embed.title ===
                   ".gg/chuppys promoter information"
               ),
+
             {
               content: "",
               embeds: [
@@ -5906,7 +6372,7 @@ client.on(
       }
 
       // ======================================================
-      // !RANKED
+      // RANKED ROLES
       // ======================================================
 
       if (cmd === "!ranked") {
@@ -5928,36 +6394,22 @@ client.on(
       // ======================================================
       // ,R @USER COMMANDS
       // ======================================================
-      //
-      // c        Manual verification approval
-      // b        Blacklist
-      // r        Market reminder
-      // rmarket  Market reminder
-      // rinv     Invite reminder
-      // rgive    Giveaway reminder
-      // rconv    Converter reminder
-      // rall     All vouch reminders
-      //
-      // ======================================================
 
       if (/^,r(?:\s|$)/i.test(raw)) {
-        const match = raw.match(
-          /^,r\s+<@!?(\d{17,20})>\s+(c|b|r|rmarket|rinv|rgive|rconv|rall)(?:\s+([\s\S]*))?$/i
-        );
+        const match =
+          raw.match(
+            /^,r\s+<@!?(\d{17,20})>\s+(b|r|rmarket|rinv|rgive|rconv|rall)(?:\s+([\s\S]*))?$/i
+          );
 
         if (!match) {
           return reply(
-            "**Chuppys Commands**\n\n" +
+            "**Chuppys Vouch Reminders**\n\n" +
 
-            "`,r @user c` — Staff verification approval\n" +
-            "`,r @user b reason` — Blacklist\n" +
-
-            "`,r @user r` — Market reminder\n" +
-            "`,r @user rmarket` — Market reminder\n" +
-            "`,r @user rinv` — Invite reminder\n" +
-            "`,r @user rgive` — Giveaway reminder\n" +
-            "`,r @user rconv` — Converter reminder\n" +
-            "`,r @user rall` — All vouch types"
+            "`,r @user r` — Market\n" +
+            "`,r @user rinv` — Invite Challenge\n" +
+            "`,r @user rgive` — Giveaway\n" +
+            "`,r @user rconv` — Converter\n" +
+            "`,r @user rall` — All categories"
           );
         }
 
@@ -5984,23 +6436,16 @@ client.on(
         }
 
         // ====================================================
-        // VERIFY — TICKET ONLY
-        // ====================================================
-
-        if (action === "c") {
-          return approveVerification(
-            message,
-            targetId
-          );
-        }
-
-        // ====================================================
         // VOUCH REMINDERS
         // ====================================================
 
-        if (!isVerificationStaff(message.member)) {
+        if (
+          !isVerificationStaff(
+            message.member
+          )
+        ) {
           return reply(
-            "Only authorized Chuppys staff can send vouch reminders."
+            "Only authorized staff can send vouch reminders."
           );
         }
 
@@ -6030,7 +6475,7 @@ client.on(
       }
 
       // ======================================================
-      // ,PARTNER
+      // PARTNER
       // ======================================================
 
       if (cmd === ",partner") {
@@ -6042,19 +6487,25 @@ client.on(
 
         const embed = whiteEmbed(
           ".gg/chuppys partnership",
+
           "Please make sure all questions from the " +
           ".gg/chuppys ticket bot are answered!\n\n" +
+
           "1. **How many vouches? Please show proof!**\n\n" +
+
           "2. **How many server members?**\n\n" +
+
           "After answering, copy and paste your server ad " +
           "in the ticket. Staff will post it in " +
           "<#1552387314049618041>.\n\n" +
+
           "Go to <#1552387259276329110> to copy " +
           "Chuppys' ad and send screenshot proof."
         );
 
         await upsertBotMessage(
           message.channel,
+
           msg =>
             msg.embeds.some(
               existing =>
@@ -6062,6 +6513,7 @@ client.on(
                   ".gg/chuppys partnership"
                 )
             ),
+
           {
             content: "",
             embeds: [embed],
@@ -6074,7 +6526,7 @@ client.on(
       }
 
       // ======================================================
-      // ,MOD
+      // MOD
       // ======================================================
 
       if (cmd === ",mod") {
@@ -6086,12 +6538,14 @@ client.on(
 
         await upsertBotMessage(
           message.channel,
+
           msg =>
             msg.embeds.some(
               embed =>
                 embed.title ===
                 ".gg/chuppys moderator responsibilities"
             ),
+
           {
             content: "",
             embeds: [
@@ -6106,7 +6560,7 @@ client.on(
       }
 
       // ======================================================
-      // ,SELLER
+      // SELLER
       // ======================================================
 
       if (cmd === ",seller") {
@@ -6123,17 +6577,24 @@ client.on(
               .setColor(WHITE)
               .setDescription(
                 "**Interested in selling at .gg/chuppys**\n\n" +
+
                 "**Permanent fees**\n\n" +
+
                 "$10 - permanent fee with no personal commands\n\n" +
+
                 "$15 - permanent fee with personal commands\n\n" +
+
                 "Personal commands are commands we can create " +
                 "for you or insert your code for.\n\n" +
+
                 "Your limit is based primarily on your " +
                 "personal vouches. Server vouches from " +
                 "other sellers do not increase your limit.\n\n" +
+
                 "After your limit is determined, every " +
                 "2 vouches gained in .gg/chuppys increases " +
                 "your limit by $5.\n\n" +
+
                 `If you agree, please ping <@&${TICKET_SUPPORT_ROLE_ID}> ` +
                 "to assist you further. Thank you!"
               )
@@ -6143,6 +6604,7 @@ client.on(
 
           await upsertBotMessage(
             message.channel,
+
             msg =>
               msg.embeds.some(
                 existing =>
@@ -6150,6 +6612,7 @@ client.on(
                     "Interested in selling at .gg/chuppys"
                   )
               ),
+
             {
               content: "",
               embeds: [embed],
@@ -6167,7 +6630,7 @@ client.on(
       }
 
       // ======================================================
-      // !ROBUXCASHOUT
+      // ROBUX CASHOUT
       // ======================================================
 
       if (cmd === "!robuxcashout") {
@@ -6189,7 +6652,7 @@ client.on(
       }
 
       // ======================================================
-      // ,PAY
+      // PAY
       // ======================================================
 
       if (cmd === ",pay") {
@@ -6211,8 +6674,7 @@ client.on(
           );
 
           await reply(
-            "I couldn't send the payment methods. " +
-            "Check Send Messages and Embed Links permissions."
+            "I couldn't send the payment methods."
           );
         } finally {
           locks.payment.delete(
@@ -6247,7 +6709,9 @@ client.on(
           );
         }
 
-        if (["!nitro", ",nitro"].includes(cmd)) {
+        if (
+          ["!nitro", ",nitro"].includes(cmd)
+        ) {
           await sendNitroServices(
             await client.channels.fetch(
               NITRO_CHANNEL_ID
@@ -6259,7 +6723,9 @@ client.on(
           );
         }
 
-        if (["!decor", ",decor"].includes(cmd)) {
+        if (
+          ["!decor", ",decor"].includes(cmd)
+        ) {
           await sendDecorServices(
             await client.channels.fetch(
               DECOR_CHANNEL_ID
@@ -6285,7 +6751,9 @@ client.on(
           );
         }
 
-        if (["!sellers", ",sellers"].includes(cmd)) {
+        if (
+          ["!sellers", ",sellers"].includes(cmd)
+        ) {
           await sendEmbedToChannel(
             message.guild,
             SELLERS_CHANNEL_ID,
@@ -6298,7 +6766,9 @@ client.on(
           );
         }
 
-        if (["!staff", ",staff"].includes(cmd)) {
+        if (
+          ["!staff", ",staff"].includes(cmd)
+        ) {
           await sendEmbedToChannel(
             message.guild,
             STAFF_CHANNEL_ID,
@@ -6324,6 +6794,7 @@ client.on(
 
         const embed = whiteEmbed(
           `Welcome to .gg/chuppys ${AFK_RETURN_EMOJI}`,
+
           `Welcome <@${message.author.id}>!\n\n` +
           "We're happy to have you here. " +
           "Read the rules and enjoy your time!"
@@ -6331,14 +6802,19 @@ client.on(
           .setThumbnail(
             message.author.displayAvatarURL()
           )
-          .setImage(WELCOME_IMAGE)
+          .setImage(
+            WELCOME_IMAGE
+          )
           .setFooter({
             text: message.guild.name
           });
 
         await channel.send({
-          content: `<@${message.author.id}>`,
+          content:
+            `<@${message.author.id}>`,
+
           embeds: [embed],
+
           allowedMentions: {
             users: [
               message.author.id
@@ -6361,8 +6837,10 @@ client.on(
 
         const embed = whiteEmbed(
           `Goodbye ${AFK_GOING_EMOJI}`,
+
           `**${message.author.username}** has left ` +
           `**${message.guild.name}**.\n\n` +
+
           "We hope to see you again!"
         )
           .setThumbnail(
@@ -6398,8 +6876,11 @@ client.on(
 
 client.on(
   Events.MessageCreate,
+
   async message => {
-    if (!message.guild) return;
+    if (!message.guild) {
+      return;
+    }
 
     if (
       message.channel.id !== INVITE_CHANNEL_ID ||
@@ -6427,6 +6908,7 @@ client.on(
 
 client.on(
   Events.MessageCreate,
+
   async message => {
     if (
       !message.guild ||
@@ -6450,11 +6932,12 @@ client.on(
 );
 
 // ============================================================
-// VOUCH MESSAGE DELETE
+// VOUCH DELETE
 // ============================================================
 
 client.on(
   Events.MessageDelete,
+
   message => {
     if (
       message.channel &&
@@ -6468,18 +6951,20 @@ client.on(
 );
 
 // ============================================================
-// BULK DELETE
+// VOUCH BULK DELETE
 // ============================================================
 
 client.on(
   Events.MessageBulkDelete,
+
   messages => {
     if (
-      messages.some(message =>
-        message.channel &&
-        VOUCH_SOURCE_CHANNEL_IDS.includes(
-          message.channel.id
-        )
+      messages.some(
+        message =>
+          message.channel &&
+          VOUCH_SOURCE_CHANNEL_IDS.includes(
+            message.channel.id
+          )
       )
     ) {
       scheduleVouchCounterUpdate();
@@ -6488,11 +6973,12 @@ client.on(
 );
 
 // ============================================================
-// MESSAGE UPDATE
+// VOUCH UPDATE
 // ============================================================
 
 client.on(
   Events.MessageUpdate,
+
   (oldMessage, newMessage) => {
     const channelId =
       newMessage.channelId ||
@@ -6514,6 +7000,7 @@ client.on(
 
 client.on(
   Events.GuildMemberAdd,
+
   async member => {
     try {
       await member.roles.add(
@@ -6530,25 +7017,34 @@ client.on(
           WELCOME_CHANNEL_ID
         );
 
-      if (!channel?.send) return;
+      if (!channel?.send) {
+        return;
+      }
 
       const embed = whiteEmbed(
         `Welcome to .gg/chuppys ${AFK_RETURN_EMOJI}`,
+
         `Welcome ${member}!\n\n` +
+
         "We're happy to have you here. " +
         "Make sure to read the rules and enjoy your time!"
       )
         .setThumbnail(
           member.user.displayAvatarURL()
         )
-        .setImage(WELCOME_IMAGE)
+        .setImage(
+          WELCOME_IMAGE
+        )
         .setFooter({
           text: member.guild.name
         });
 
       await channel.send({
-        content: `${member}`,
+        content:
+          `${member}`,
+
         embeds: [embed],
+
         allowedMentions: {
           users: [member.id]
         }
@@ -6568,6 +7064,7 @@ client.on(
 
 client.on(
   Events.GuildMemberRemove,
+
   async member => {
     try {
       const channel =
@@ -6575,12 +7072,16 @@ client.on(
           GOODBYE_CHANNEL_ID
         );
 
-      if (!channel?.send) return;
+      if (!channel?.send) {
+        return;
+      }
 
       const embed = whiteEmbed(
         `Goodbye ${AFK_GOING_EMOJI}`,
+
         `**${member.user.username}** has left ` +
         `**${member.guild.name}**.\n\n` +
+
         "We hope to see you again!"
       )
         .setThumbnail(
