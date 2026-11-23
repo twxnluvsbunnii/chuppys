@@ -475,6 +475,7 @@ const ROLE_MENU_CONFIG = {
       ["Adopt Me Ping", PING_ROLES.adoptme],
       ["Robux Ping", PING_ROLES.robux],
       ["MM2 Ping", PING_ROLES.mm2]
+      
     ],
 
     thumbnail:
@@ -4789,8 +4790,8 @@ function makeSellersEmbed() {
   const sellers = [
     ["1192248188409749684", "services seller", "no limit"],
     ["1079241163455873074", "seller", "no limit"],
-    ["1032693136163622993", "seller", "$45"],
-    ["1320199904219496530", "seller", "$35"],
+    ["1032693136163622993", "seller", "$75"],
+    ["1320199904219496530", "seller", "$65"],
     ["952566845939023892", "seller", "no limit"],
     ["1473335012769267807", "seller", "$100"],
     ["1472856287527309313", "seller", "$100"],
@@ -4837,6 +4838,7 @@ function makeStaffEmbed() {
     ["1490962480963260466", "owner | seller", "no limit"],
     ["1381473377696350238", "Admin | staff", ""],
     ["727673410737668107", "Admin | staff", ""],
+    ["1079241163455873074", "Admin | staff", ""],
     ["1398772218359451668", "Mod | staff", ""],
     ["941559349808091167", "Mod | staff", ""],
     ["1494112860341670020", "Mod | staff", ""],
