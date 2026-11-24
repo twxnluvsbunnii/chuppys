@@ -1,8 +1,9 @@
+
 "use strict";
 
 // ============================================================
 // CHUPPYS MAIN BOT — DISCORD.JS V14 / RENDER
-// COMPLETE UPDATED INDEX.JS
+// COMPLETE INDEX.JS
 // ============================================================
 //
 // MODULES:
@@ -10,62 +11,27 @@
 // - transactions.js
 // - tickets.js
 //
-// VERIFICATION:
-// - No automatic verification
-// - Verification tickets are created by tickets.js ONLY
-// - No duplicate verification ticket system in index.js
-// - Uses the verification category managed by tickets.js
-// - Manual staff approval only
-// - Approval only inside the correct verification ticket
-// - Verification commands hidden from public help
-// - Verification approval command deleted before execution
-// - No verification or closing commands in ticket embeds
-// - Normal ticket closing is handled by tickets.js
-//
-// VOUCH REMINDERS:
-// ,r @user r
-// ,r @user rmarket
-// ,r @user rinv
-// ,r @user rgive
-// ,r @user rconv
-// ,r @user rall
-//
-// VOUCH TUTORIAL COMMANDS:
-// !vouchtut
-// !personalvouchtut
-// !marketvouchtut
-// !invitevouchtut
-// !giveawayvouchtut
-// !convertervouchtut
-//
-// COUNTER DISPLAY:
-// ╭・chuppy total vouches : ##
-// ┃・invite・vouches : ##
-// ┃・giveaway・vouches : ##
-// ┃・converter・vouches : ##
-// ╰・server total vouches : ##
-//
-// CHUPPY TOTAL:
-// Personal Market + Invite + Giveaway + Converter
-//
-// SERVER TOTAL:
-// Personal Market + Regular Market + Invite
-// + Giveaway + Converter
+// FIXES:
+// - ,welcome works like ,client
+// - No staff restriction on ,welcome
+// - No verification-ticket restriction on ,welcome
+// - White verification welcome embed
+// - Updates existing welcome embed
+// - Correct rules channel in ,r @user c
+// - Fixed giveaway tutorial syntax
+// - Existing commands and systems preserved
 //
 // IMPORTANT:
-// Run only ONE instance of this bot on Render.
-// Keep vouch.js, transactions.js and tickets.js
-// in the same project.
+// Keep all three modules in the same project.
+// Enable Message Content and Server Members intents.
+// Run only one bot instance on Render.
 //
 // ============================================================
 // IMPORTS
 // ============================================================
 
 const http = require("http");
-
-const {
-  createHash
-} = require("node:crypto");
+const { createHash } = require("node:crypto");
 
 const {
   Client,
@@ -90,11 +56,10 @@ const {
 } = require("discord.js");
 
 // ============================================================
-// RENDER WEB SERVER
+// RENDER SERVER
 // ============================================================
 
-const PORT =
-  Number(process.env.PORT) || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 http.createServer((req, res) => {
   res.writeHead(200, {
@@ -103,26 +68,19 @@ http.createServer((req, res) => {
 
   res.end("Chuppys bot is running!");
 }).listen(PORT, "0.0.0.0", () => {
-  console.log(
-    `[WEB] Server running on ${PORT}`
-  );
+  console.log(`[WEB] Listening on port ${PORT}`);
 });
 
 // ============================================================
 // ENVIRONMENT
 // ============================================================
 
-const TOKEN =
-  process.env.DISCORD_BOT_TOKEN;
-
-const GUILD_ID =
-  process.env.DISCORD_GUILD_ID;
+const TOKEN = process.env.DISCORD_BOT_TOKEN;
+const GUILD_ID = process.env.DISCORD_GUILD_ID;
 
 const BRAND = ".gg/chuppys";
 const WHITE = 0xffffff;
-
-const EPHEMERAL =
-  MessageFlags.Ephemeral;
+const EPHEMERAL = MessageFlags.Ephemeral;
 
 const NONE = {
   parse: []
@@ -132,26 +90,13 @@ const NONE = {
 // GENERAL CHANNELS
 // ============================================================
 
-const WELCOME_CHANNEL_ID =
-  "1530755165412524042";
-
-const GOODBYE_CHANNEL_ID =
-  "1530761366489530480";
-
-const NITRO_CHANNEL_ID =
-  "1555760937557041273";
-
-const DECOR_CHANNEL_ID =
-  "1555769588229345280";
-
-const BOOSTIES_CHANNEL_ID =
-  "1555769708928831489";
-
-const SELLERS_CHANNEL_ID =
-  "1551713598181605496";
-
-const STAFF_CHANNEL_ID =
-  "1561013244905132122";
+const WELCOME_CHANNEL_ID = "1530755165412524042";
+const GOODBYE_CHANNEL_ID = "1530761366489530480";
+const NITRO_CHANNEL_ID = "1555760937557041273";
+const DECOR_CHANNEL_ID = "1555769588229345280";
+const BOOSTIES_CHANNEL_ID = "1555769708928831489";
+const SELLERS_CHANNEL_ID = "1551713598181605496";
+const STAFF_CHANNEL_ID = "1561013244905132122";
 
 const ROBUX_CASHOUT_CHANNEL_ID =
   "1552385740405473513";
@@ -159,17 +104,13 @@ const ROBUX_CASHOUT_CHANNEL_ID =
 const ROBUX_CASHOUT_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1561094713153429746.png";
 
-const REQUEST_CHANNEL_ID =
-  "1569732416388726834";
+const REQUEST_CHANNEL_ID = "1569732416388726834";
 
 const REQUEST_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1561388594625511514.png?size=128&quality=lossless";
 
-const VERIFY_CHANNEL_ID =
-  "1528716328985301052";
-
-const ROLES_CHANNEL_ID =
-  "1530808091380285592";
+const VERIFY_CHANNEL_ID = "1528716328985301052";
+const ROLES_CHANNEL_ID = "1530808091380285592";
 
 const RANKED_ROLES_CHANNEL_ID =
   "1567178497917718568";
@@ -177,8 +118,7 @@ const RANKED_ROLES_CHANNEL_ID =
 const RANKED_ROLES_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1568404337154068618.png?size=128&quality=lossless";
 
-const QUESTION_CHANNEL_ID =
-  "1566490648549527602";
+const QUESTION_CHANNEL_ID = "1566490648549527602";
 
 const QUESTION_TICKET_CHANNEL_ID =
   "1530811385678790716";
@@ -186,8 +126,8 @@ const QUESTION_TICKET_CHANNEL_ID =
 const TICKET_SUPPORT_ROLE_ID =
   "1563003884656398406";
 
-const RULES_CHANNEL_ID =
-  "1551275482857865333";
+// CORRECTED RULES CHANNEL
+const RULES_CHANNEL_ID = "1551275482857865336";
 
 const QUICK_VOUCH_CHANNEL_ID =
   "1552903786077360269";
@@ -195,11 +135,8 @@ const QUICK_VOUCH_CHANNEL_ID =
 const PARTNER_AD_CHANNEL_ID =
   "1552387259276329110";
 
-const INVITE_CHANNEL_ID =
-  "1560249120667734016";
-
-const INVITE_BOT_ID =
-  "499595256270946326";
+const INVITE_CHANNEL_ID = "1560249120667734016";
+const INVITE_BOT_ID = "499595256270946326";
 
 // ============================================================
 // VOUCH TUTORIAL CHANNELS
@@ -245,17 +182,12 @@ const VOUCH_SOURCE_CHANNEL_IDS = [
 ];
 
 // ============================================================
-// COUNTER CHANNELS
+// VOUCH COUNTER CHANNELS
 // ============================================================
 
-const COUNT_CATEGORY_ID =
-  "1566512371521036329";
-
-const CHUPPY_COUNT_CHANNEL_ID =
-  "1553242286412922960";
-
-const SERVER_COUNT_CHANNEL_ID =
-  "1562266346891247688";
+const COUNT_CATEGORY_ID = "1566512371521036329";
+const CHUPPY_COUNT_CHANNEL_ID = "1553242286412922960";
+const SERVER_COUNT_CHANNEL_ID = "1562266346891247688";
 
 const INVITE_COUNT_CHANNEL_ID =
   process.env.INVITE_COUNT_CHANNEL_ID || "";
@@ -265,10 +197,6 @@ const GIVEAWAY_COUNT_CHANNEL_ID =
 
 const CONVERTER_COUNT_CHANNEL_ID =
   process.env.CONVERTER_COUNT_CHANNEL_ID || "";
-
-// ============================================================
-// COUNTER NAMES — PRESERVED
-// ============================================================
 
 const COUNT_NAMES = Object.freeze({
   personal: "╭・chuppy total vouches : ",
@@ -300,14 +228,9 @@ const PERSONAL_SELLER_IDS = [
 // STAFF ROLES
 // ============================================================
 
-const OWNER_ROLE_ID =
-  "1530988662970650865";
-
-const ADMIN_ROLE_ID =
-  "1531800870444994641";
-
-const MOD_ROLE_ID =
-  "1531800784700706887";
+const OWNER_ROLE_ID = "1530988662970650865";
+const ADMIN_ROLE_ID = "1531800870444994641";
+const MOD_ROLE_ID = "1531800784700706887";
 
 const VERIFICATION_STAFF_ROLE_IDS = [
   OWNER_ROLE_ID,
@@ -320,8 +243,7 @@ const VERIFICATION_STAFF_ROLE_IDS = [
 // BLACKLIST
 // ============================================================
 
-const BLACKLIST_ROLE_NAME =
-  "Blacklisted";
+const BLACKLIST_ROLE_NAME = "Blacklisted";
 
 const BLACKLIST_ROLE_ID =
   process.env.BLACKLIST_ROLE_ID || "";
@@ -339,38 +261,13 @@ const UNBLACKLIST_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1561103471325745242.png";
 
 // ============================================================
-// VERIFICATION — TICKETS.JS OWNS CREATION
-// ============================================================
-//
-// IMPORTANT:
-//
-// index.js DOES NOT create verification tickets.
-//
-// tickets.js handles:
-// - Creation
-// - Category selection
-// - Duplicate tickets
-// - Ticket buttons
-// - Claiming
-// - Closing
-// - Reopening
-// - Deleting
-// - Transcripts
-//
-// index.js handles:
-// - Verification panel
-// - Manual staff approval
-//
+// VERIFICATION
 // ============================================================
 
-const VERIFY_BUTTON_ID =
-  "chuppys_verify";
+const VERIFY_BUTTON_ID = "chuppys_verify";
 
 const VERIFY_TICKET_BUTTON_ID =
   "chuppys_create_verification_ticket";
-
-// Old custom ID retained only to recognize old panels.
-// It is NOT used by the new verification message.
 
 const VERIFY_SECURE_TICKET_BUTTON_ID =
   "chuppys_secure_verification_ticket_v2";
@@ -399,13 +296,11 @@ const CLIENT_EMOJI =
 const WELCOME_ROLE_ID =
   "1531039846871728248";
 
-// This must match the category used by tickets.js.
-
-const VERIFICATION_CATEGORY_NAME =
-  "chuppys-verification";
-
 const VERIFICATION_TICKET_CATEGORY_ID =
   process.env.VERIFICATION_TICKET_CATEGORY_ID || "";
+
+const VERIFICATION_WELCOME_TITLE =
+  "Welcome to Chuppy's! ♡";
 
 // ============================================================
 // PING ROLES
@@ -425,8 +320,7 @@ const PING_ROLES = Object.freeze({
   mm2: "1568240484206514248"
 });
 
-const PING_ROLE_IDS =
-  Object.values(PING_ROLES);
+const PING_ROLE_IDS = Object.values(PING_ROLES);
 
 const AGE_ROLES = Object.freeze({
   under18: "1531084465126772877",
@@ -434,8 +328,7 @@ const AGE_ROLES = Object.freeze({
   age21plus: "1531084611399188640"
 });
 
-const AGE_ROLE_IDS =
-  Object.values(AGE_ROLES);
+const AGE_ROLE_IDS = Object.values(AGE_ROLES);
 
 const PRONOUN_ROLES = Object.freeze({
   sheher: "1531084942241697854",
@@ -443,8 +336,7 @@ const PRONOUN_ROLES = Object.freeze({
   theythem: "1531101006451048448"
 });
 
-const PRONOUN_ROLE_IDS =
-  Object.values(PRONOUN_ROLES);
+const PRONOUN_ROLE_IDS = Object.values(PRONOUN_ROLES);
 
 // ============================================================
 // SELF ROLE MENUS
@@ -475,7 +367,6 @@ const ROLE_MENU_CONFIG = {
       ["Adopt Me Ping", PING_ROLES.adoptme],
       ["Robux Ping", PING_ROLES.robux],
       ["MM2 Ping", PING_ROLES.mm2]
-      
     ],
 
     thumbnail:
@@ -548,9 +439,6 @@ const RANKED_ROLE_IDS = [
 // EMOJIS AND IMAGES
 // ============================================================
 
-const CHUPPYS_WELCOME_EMOJI =
-  "<:chuppys:1560284517955141653>";
-
 const INVITE_REACTION_EMOJI =
   "<:chuppynewinv:1561398288593330326>";
 
@@ -581,10 +469,6 @@ const SELLER_EMOJI =
 const WELCOME_IMAGE =
   "https://cdn.discordapp.com/attachments/1531043582348230767/1551448584656916530/BCA71D48-B1AD-46BA-BAAA-CC87D8C81E62.png";
 
-// ============================================================
-// VOUCH TUTORIAL IMAGES
-// ============================================================
-
 const VOUCH_TUTORIAL_IMAGES = {
   command:
     "https://raw.githubusercontent.com/twxnluvsbunnii/chuppys/main/IMG_5265.jpeg",
@@ -607,88 +491,65 @@ const PAYMENT_METHODS_TEXT =
   "> Cash App\n" +
   "> Chime";
 
-const EXTRA_PAYMENT_METHODS =
-  [5, 6].map(n => ({
-    name:
-      process.env[`PAYMENT_METHOD_${n}_NAME`] || "",
-
-    details:
-      process.env[`PAYMENT_METHOD_${n}_DETAILS`] || "",
-
-    url:
-      process.env[`PAYMENT_METHOD_${n}_URL`] || ""
-  }));
+const EXTRA_PAYMENT_METHODS = [5, 6].map(n => ({
+  name: process.env[`PAYMENT_METHOD_${n}_NAME`] || "",
+  details: process.env[`PAYMENT_METHOD_${n}_DETAILS`] || "",
+  url: process.env[`PAYMENT_METHOD_${n}_URL`] || ""
+}));
 
 // ============================================================
 // SLASH COMMANDS
 // ============================================================
 
-const QUESTION_COMMAND =
-  new SlashCommandBuilder()
-    .setName("question")
-    .setDescription(
-      "Submit a question to the Chuppys team."
-    )
-    .addStringOption(option =>
-      option
-        .setName("question")
-        .setDescription(
-          "Type the question you want to ask."
-        )
-        .setRequired(true)
-        .setMaxLength(2000)
-    )
-    .addAttachmentOption(option =>
-      option
-        .setName("picture")
-        .setDescription(
-          "Optionally attach a picture."
-        )
-        .setRequired(false)
-    );
+const QUESTION_COMMAND = new SlashCommandBuilder()
+  .setName("question")
+  .setDescription("Submit a question to the Chuppys team.")
+  .addStringOption(option =>
+    option
+      .setName("question")
+      .setDescription("Type the question you want to ask.")
+      .setRequired(true)
+      .setMaxLength(2000)
+  )
+  .addAttachmentOption(option =>
+    option
+      .setName("picture")
+      .setDescription("Optionally attach a picture.")
+      .setRequired(false)
+  );
 
-const REQUEST_COMMAND =
-  new SlashCommandBuilder()
-    .setName("request")
-    .setDescription(
-      "Request items for Chuppys to stock up on."
-    )
-    .addStringOption(option =>
-      option
-        .setName("category")
-        .setDescription(
-          "Choose the request category."
-        )
-        .setRequired(true)
-        .addChoices(
-          ...[
-            "Baddies",
-            "MM2",
-            "Adopt Me",
-            "Blade Ball",
-            "Robux"
-          ].map(name => ({
-            name,
-            value: name
-          }))
-        )
-    )
-    .addStringOption(option =>
-      option
-        .setName("items")
-        .setDescription(
-          "What should Chuppys stock up on?"
-        )
-        .setRequired(true)
-        .setMaxLength(1000)
-    );
+const REQUEST_COMMAND = new SlashCommandBuilder()
+  .setName("request")
+  .setDescription("Request items for Chuppys to stock up on.")
+  .addStringOption(option =>
+    option
+      .setName("category")
+      .setDescription("Choose the request category.")
+      .setRequired(true)
+      .addChoices(
+        ...[
+          "Baddies",
+          "MM2",
+          "Adopt Me",
+          "Blade Ball",
+          "Robux"
+        ].map(name => ({
+          name,
+          value: name
+        }))
+      )
+  )
+  .addStringOption(option =>
+    option
+      .setName("items")
+      .setDescription("What should Chuppys stock up on?")
+      .setRequired(true)
+      .setMaxLength(1000)
+  );
 
-const HELP_COMMAND =
-  new SlashCommandBuilder()
-    .setName("help")
-    .setDescription(
-      "View Chuppys bot commands."
-    );
+const HELP_COMMAND = new SlashCommandBuilder()
+  .setName("help")
+  .setDescription("View Chuppys bot commands.");
 
 // ============================================================
 // RUNTIME
@@ -699,6 +560,7 @@ const afkUsers = new Map();
 const locks = {
   seller: new Set(),
   client: new Set(),
+  welcome: new Set(),
   promoter: new Set(),
   role: new Set(),
   roleSelect: new Set(),
@@ -715,13 +577,12 @@ const blacklistRoleJobs = new Map();
 let vouchCounterTimer = null;
 let vouchCounterUpdateRunning = false;
 let vouchCounterRecountRequested = false;
-
 let counterCache = null;
 
 const routedMessages = new Set();
 
 // ============================================================
-// CLIENT
+// DISCORD CLIENT
 // ============================================================
 
 const client = new Client({
@@ -734,11 +595,10 @@ const client = new Client({
 });
 
 // ============================================================
-// CONNECT MODULES
+// LOAD MODULES
 // ============================================================
 
 require("./vouch")(client);
-
 require("./transactions")(client);
 
 const ticketModule = require("./tickets");
@@ -869,11 +729,244 @@ async function interactionError(interaction, error) {
     return await interaction.reply(
       ephemeral(content)
     );
+
   } catch (replyError) {
     console.error(
       "[INTERACTION] Reply failed:",
       replyError
     );
+  }
+}
+
+// ============================================================
+// BOT MESSAGE HELPERS
+// ============================================================
+
+async function findBotMessages(
+  channel,
+  predicate,
+  pages = 10
+) {
+  const results = [];
+  let before;
+
+  for (let i = 0; i < pages; i++) {
+    const batch = await channel.messages.fetch({
+      limit: 100,
+      ...(before ? { before } : {})
+    });
+
+    if (!batch.size) {
+      break;
+    }
+
+    for (const message of batch.values()) {
+      if (
+        message.author?.id === client.user.id &&
+        predicate(message)
+      ) {
+        results.push(message);
+      }
+    }
+
+    if (batch.size < 100) {
+      break;
+    }
+
+    before = batch.last().id;
+  }
+
+  results.sort(
+    (a, b) =>
+      b.createdTimestamp - a.createdTimestamp
+  );
+
+  return results;
+}
+
+async function upsertBotMessage(
+  channel,
+  predicate,
+  payload,
+  pages = 1
+) {
+  const matching = await findBotMessages(
+    channel,
+    predicate,
+    pages
+  );
+
+  let result;
+
+  if (matching.length) {
+    result = await matching[0].edit(payload);
+
+    for (const duplicate of matching.slice(1)) {
+      await duplicate.delete().catch(console.error);
+    }
+  } else {
+    result = await channel.send(payload);
+  }
+
+  return {
+    message: result,
+    updated: matching.length > 0
+  };
+}
+
+// ============================================================
+// ,WELCOME EMBED — FIXED
+// ============================================================
+//
+// This is a REGULAR prefix command.
+//
+// Type:
+// ,welcome
+//
+// It works in any channel where the bot can post.
+//
+// It does NOT require:
+// - Staff roles
+// - Ticket category
+// - Ticket ownership
+// - Verification permissions
+//
+// ============================================================
+
+function makeVerificationWelcomeEmbed() {
+  return new EmbedBuilder()
+    .setColor(WHITE)
+    .setTitle(
+      VERIFICATION_WELCOME_TITLE
+    )
+    .setThumbnail(
+      VERIFY_THUMBNAIL_URL
+    )
+    .setDescription(
+      "Hi! Welcome to **Chuppy's**! ♡\n\n" +
+
+      "Before proceeding with verification, " +
+      "please complete the following steps.\n\n" +
+
+      "**♡ STEP 1 — WHO INVITED YOU?**\n" +
+      "Please state **who invited you** to our server. " +
+      "You may mention their Discord account or " +
+      "provide their username.\n\n" +
+
+      "**♡ STEP 2 — PICTURE PROOF**\n" +
+      "After stating who invited you, please provide " +
+      "**clear screenshot proof** showing who invited you. " +
+      "Make sure the screenshot is readable.\n\n" +
+
+      "**♡ STEP 3 — COMPLETE YOUR ROLES**\n" +
+      "Please ensure **all your applicable roles are completed** " +
+      "before requesting verification assistance.\n\n" +
+
+      `Select your roles in <#${ROLES_CHANNEL_ID}>.\n\n` +
+
+      "**♡ STEP 4 — PING STAFF**\n" +
+      "Once you have completed **all three steps above**, " +
+      `you may ping <@&${TICKET_SUPPORT_ROLE_ID}> ` +
+      "inside your ticket for assistance.\n\n" +
+
+      "**♡ IMPORTANT REMINDERS**\n" +
+      "• Complete all steps before pinging staff.\n" +
+      "• Do not spam staff mentions.\n" +
+      "• Remain patient and respectful.\n" +
+      "• Verification requires manual staff approval.\n" +
+      "• Never share passwords or login codes.\n\n" +
+
+      "Thank you for joining **.gg/chuppys**! ♡"
+    )
+    .setFooter({
+      text: `${BRAND} • Verification`
+    });
+}
+
+async function handleWelcomeCommand(message) {
+  const key = message.channel.id;
+
+  if (!lock(locks.welcome, key)) {
+    return;
+  }
+
+  try {
+    console.log(
+      `[WELCOME COMMAND] Received from ${message.author.tag}`
+    );
+
+    const embed = makeVerificationWelcomeEmbed();
+
+    let result;
+
+    try {
+      result = await upsertBotMessage(
+        message.channel,
+
+        msg =>
+          msg.embeds.some(
+            existing =>
+              existing.title ===
+              VERIFICATION_WELCOME_TITLE
+          ),
+
+        {
+          content: "",
+          embeds: [embed],
+          components: [],
+          allowedMentions: NONE
+        },
+
+        10
+      );
+
+    } catch (error) {
+      // If reading message history is unavailable,
+      // try sending a new embed instead.
+
+      if (
+        error.code === 50013 ||
+        error.code === 50001
+      ) {
+        const sent = await message.channel.send({
+          content: "",
+          embeds: [embed],
+          allowedMentions: NONE
+        });
+
+        result = {
+          message: sent,
+          updated: false
+        };
+      } else {
+        throw error;
+      }
+    }
+
+    console.log(
+      `[WELCOME COMMAND] ${result.updated ? "Updated" : "Sent"} ` +
+      `embed in ${key}`
+    );
+
+  } catch (error) {
+    console.error(
+      "[WELCOME COMMAND ERROR]",
+      error
+    );
+
+    await message.reply({
+      content:
+        "I couldn't send the welcome embed. " +
+        "Please check my Send Messages and Embed Links permissions.",
+
+      allowedMentions: {
+        parse: [],
+        repliedUser: false
+      }
+    }).catch(console.error);
+
+  } finally {
+    locks.welcome.delete(key);
   }
 }
 
@@ -919,8 +1012,7 @@ async function ensureBlacklistRole(guild) {
   }
 
   const job = (async () => {
-    const existing =
-      await findBlacklistRole(guild);
+    const existing = await findBlacklistRole(guild);
 
     if (existing) {
       return existing;
@@ -932,15 +1024,11 @@ async function ensureBlacklistRole(guild) {
       hoist: false,
       mentionable: false,
       permissions: [],
-      reason:
-        "Chuppys blacklist moderation system"
+      reason: "Chuppys blacklist moderation system"
     });
   })();
 
-  blacklistRoleJobs.set(
-    guild.id,
-    job
-  );
+  blacklistRoleJobs.set(guild.id, job);
 
   try {
     return await job;
@@ -954,8 +1042,7 @@ async function isBlacklisted(member) {
     return false;
   }
 
-  const role =
-    await findBlacklistRole(member.guild);
+  const role = await findBlacklistRole(member.guild);
 
   return Boolean(
     role &&
@@ -1034,7 +1121,6 @@ function makeBlacklistDMEmbed(guild, reason) {
     "Your normal server access has been restricted.\n\n" +
 
     "**Want to Appeal?**\n" +
-
     "Use the server's unblacklist appeal panel " +
     "to request a review.\n\n" +
 
@@ -1058,17 +1144,12 @@ function makeUnblacklistPanelEmbed() {
     "**How to Appeal**\n\n" +
 
     "1. Click **Request Unblacklist Ticket**.\n\n" +
-
     "2. Explain why you were blacklisted.\n\n" +
-
     "3. Explain why the blacklist should be removed.\n\n" +
-
     "4. Provide relevant screenshots or proof.\n\n" +
-
     "5. Wait for staff to review your appeal.\n\n" +
 
     "**Important**\n" +
-
     "Submitting an appeal does not guarantee approval. " +
     "Do not spam duplicate appeals."
   ).setThumbnail(
@@ -1095,88 +1176,6 @@ function makeUnblacklistPanelButtons() {
 }
 
 // ============================================================
-// BOT MESSAGE HELPERS
-// ============================================================
-
-async function findBotMessages(
-  channel,
-  predicate,
-  pages = 10
-) {
-  const results = [];
-  let before;
-
-  for (let i = 0; i < pages; i++) {
-    const batch =
-      await channel.messages.fetch({
-        limit: 100,
-        ...(before ? { before } : {})
-      });
-
-    if (!batch.size) {
-      break;
-    }
-
-    for (const message of batch.values()) {
-      if (
-        message.author?.id === client.user.id &&
-        predicate(message)
-      ) {
-        results.push(message);
-      }
-    }
-
-    if (batch.size < 100) {
-      break;
-    }
-
-    before = batch.last().id;
-  }
-
-  results.sort(
-    (a, b) =>
-      b.createdTimestamp -
-      a.createdTimestamp
-  );
-
-  return results;
-}
-
-async function upsertBotMessage(
-  channel,
-  predicate,
-  payload,
-  pages = 1
-) {
-  const matching =
-    await findBotMessages(
-      channel,
-      predicate,
-      pages
-    );
-
-  let result;
-
-  if (matching.length) {
-    result =
-      await matching[0].edit(payload);
-
-    for (const duplicate of matching.slice(1)) {
-      await duplicate.delete()
-        .catch(console.error);
-    }
-  } else {
-    result =
-      await channel.send(payload);
-  }
-
-  return {
-    message: result,
-    updated: matching.length > 0
-  };
-}
-
-// ============================================================
 // UNBLACKLIST PANEL
 // ============================================================
 
@@ -1187,8 +1186,7 @@ async function postUnblacklistPanel(channel) {
     message =>
       message.embeds.some(
         embed =>
-          embed.title ===
-          UNBLACKLIST_PANEL_TITLE
+          embed.title === UNBLACKLIST_PANEL_TITLE
       ) ||
       message.components.some(
         row =>
@@ -1204,8 +1202,7 @@ async function postUnblacklistPanel(channel) {
       embeds: [
         makeUnblacklistPanelEmbed()
       ],
-      components:
-        makeUnblacklistPanelButtons(),
+      components: makeUnblacklistPanelButtons(),
       allowedMentions: NONE
     },
 
@@ -1220,32 +1217,29 @@ async function handleUnblacklistPanelCommand(message) {
     );
   }
 
-  if (!lock(
-    locks.appeal,
-    message.channel.id
-  )) {
+  if (!lock(locks.appeal, message.channel.id)) {
     return message.reply(
       "The appeal panel is already being updated."
     );
   }
 
   try {
-    const result =
-      await postUnblacklistPanel(
-        message.channel
-      );
+    const result = await postUnblacklistPanel(
+      message.channel
+    );
 
     await message.reply({
       content:
-        `Unblacklist appeal panel ${result.updated ? "updated" : "posted"} successfully!`,
+        `Unblacklist appeal panel ` +
+        `${result.updated ? "updated" : "posted"} successfully!`,
+
       allowedMentions: {
         repliedUser: false
       }
     });
+
   } finally {
-    locks.appeal.delete(
-      message.channel.id
-    );
+    locks.appeal.delete(message.channel.id);
   }
 }
 
@@ -1264,8 +1258,7 @@ async function handleBlacklistCommand(
     );
   }
 
-  const clean =
-    String(reason || "").trim();
+  const clean = String(reason || "").trim();
 
   if (!clean) {
     return message.reply(
@@ -1279,8 +1272,7 @@ async function handleBlacklistCommand(
     );
   }
 
-  const key =
-    `${message.guild.id}:${targetId}`;
+  const key = `${message.guild.id}:${targetId}`;
 
   if (!lock(locks.blacklist, key)) {
     return message.reply(
@@ -1291,17 +1283,15 @@ async function handleBlacklistCommand(
   try {
     const guild = message.guild;
 
-    const actor =
-      await guild.members.fetch({
-        user: message.author.id,
-        force: true
-      });
+    const actor = await guild.members.fetch({
+      user: message.author.id,
+      force: true
+    });
 
-    const target =
-      await guild.members.fetch({
-        user: targetId,
-        force: true
-      }).catch(() => null);
+    const target = await guild.members.fetch({
+      user: targetId,
+      force: true
+    }).catch(() => null);
 
     if (!target) {
       return message.reply(
@@ -1322,8 +1312,7 @@ async function handleBlacklistCommand(
       );
     }
 
-    const bot =
-      await guild.members.fetchMe();
+    const bot = await guild.members.fetchMe();
 
     if (!bot.permissions.has(
       PermissionFlagsBits.ManageRoles
@@ -1342,13 +1331,11 @@ async function handleBlacklistCommand(
       );
     }
 
-    const blacklisted =
-      await ensureBlacklistRole(guild);
+    const blacklisted = await ensureBlacklistRole(guild);
 
     if (
       blacklisted.managed ||
-      blacklisted.position >=
-        bot.roles.highest.position
+      blacklisted.position >= bot.roles.highest.position
     ) {
       return message.reply(
         "Move the Blacklisted role below the bot role."
@@ -1361,17 +1348,15 @@ async function handleBlacklistCommand(
       );
     }
 
-    const unremovable =
-      target.roles.cache.filter(
-        role =>
-          role.id !== guild.id &&
-          role.id !== blacklisted.id &&
-          (
-            role.managed ||
-            role.position >=
-              bot.roles.highest.position
-          )
-      );
+    const unremovable = target.roles.cache.filter(
+      role =>
+        role.id !== guild.id &&
+        role.id !== blacklisted.id &&
+        (
+          role.managed ||
+          role.position >= bot.roles.highest.position
+        )
+    );
 
     if (unremovable.size) {
       return message.reply(
@@ -1389,47 +1374,35 @@ async function handleBlacklistCommand(
     let dmed = false;
 
     try {
-      const channel =
-        await guild.channels.fetch(
-          BLACKLIST_LOG_CHANNEL_ID
-        );
+      const channel = await guild.channels.fetch(
+        BLACKLIST_LOG_CHANNEL_ID
+      );
 
       await channel.send({
         embeds: [
-          makeBlacklistEmbed(
-            target,
-            actor,
-            clean
-          )
+          makeBlacklistEmbed(target, actor, clean)
         ],
         allowedMentions: NONE
       });
 
       logged = true;
+
     } catch (error) {
-      console.error(
-        "[BLACKLIST] Log:",
-        error
-      );
+      console.error("[BLACKLIST] Log:", error);
     }
 
     try {
       await target.user.send({
         embeds: [
-          makeBlacklistDMEmbed(
-            guild,
-            clean
-          )
+          makeBlacklistDMEmbed(guild, clean)
         ],
         allowedMentions: NONE
       });
 
       dmed = true;
+
     } catch (error) {
-      console.error(
-        "[BLACKLIST] DM:",
-        error.message
-      );
+      console.error("[BLACKLIST] DM:", error.message);
     }
 
     await message.reply({
@@ -1444,20 +1417,21 @@ async function handleBlacklistCommand(
           `**DM:** ${dmed ? "Sent" : "Failed"}`
         ).setTimestamp()
       ],
+
       allowedMentions: NONE
     });
+
   } finally {
     locks.blacklist.delete(key);
   }
 }
 
 // ============================================================
-// ROLE PANELS
+// ROLE PANEL HELPERS
 // ============================================================
 
 function makeRoleEmbed(type) {
-  const config =
-    ROLE_MENU_CONFIG[type];
+  const config = ROLE_MENU_CONFIG[type];
 
   const embed = whiteEmbed(
     config.title,
@@ -1470,17 +1444,14 @@ function makeRoleEmbed(type) {
   );
 
   if (config.thumbnail) {
-    embed.setThumbnail(
-      config.thumbnail
-    );
+    embed.setThumbnail(config.thumbnail);
   }
 
   return embed;
 }
 
 function makeRoleDropdown(type) {
-  const config =
-    ROLE_MENU_CONFIG[type];
+  const config = ROLE_MENU_CONFIG[type];
 
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
@@ -1500,10 +1471,9 @@ function makeRoleDropdown(type) {
 }
 
 async function postRolePanel(guild, type) {
-  const channel =
-    await guild.channels.fetch(
-      ROLES_CHANNEL_ID
-    );
+  const channel = await guild.channels.fetch(
+    ROLES_CHANNEL_ID
+  );
 
   if (!channel?.messages || !channel.send) {
     throw new Error(
@@ -1525,12 +1495,8 @@ async function postRolePanel(guild, type) {
       ),
 
     {
-      embeds: [
-        makeRoleEmbed(type)
-      ],
-      components: [
-        makeRoleDropdown(type)
-      ],
+      embeds: [makeRoleEmbed(type)],
+      components: [makeRoleDropdown(type)],
       allowedMentions: NONE
     },
 
@@ -1545,8 +1511,7 @@ async function handleRolePanelCommand(message, type) {
     );
   }
 
-  const key =
-    `${message.guild.id}:${type}`;
+  const key = `${message.guild.id}:${type}`;
 
   if (!lock(locks.role, key)) {
     return message.reply(
@@ -1555,32 +1520,27 @@ async function handleRolePanelCommand(message, type) {
   }
 
   try {
-    const result =
-      await postRolePanel(
-        message.guild,
-        type
-      );
+    const result = await postRolePanel(
+      message.guild,
+      type
+    );
 
     await message.reply(
-      `${type} panel ${result.updated ? "updated" : "posted"} in <#${ROLES_CHANNEL_ID}>!`
+      `${type} panel ${result.updated ? "updated" : "posted"} ` +
+      `in <#${ROLES_CHANNEL_ID}>!`
     );
+
   } finally {
     locks.role.delete(key);
   }
 }
 
-async function handleRoleSelection(
-  interaction,
-  type
-) {
-  const config =
-    ROLE_MENU_CONFIG[type];
+async function handleRoleSelection(interaction, type) {
+  const config = ROLE_MENU_CONFIG[type];
 
   if (!config || !interaction.inGuild()) {
     return interaction.reply(
-      ephemeral(
-        "Invalid role selection."
-      )
+      ephemeral("Invalid role selection.")
     );
   }
 
@@ -1598,8 +1558,7 @@ async function handleRoleSelection(
   }
 
   try {
-    const selected =
-      new Set(interaction.values);
+    const selected = new Set(interaction.values);
 
     if (
       [...selected].some(
@@ -1611,11 +1570,10 @@ async function handleRoleSelection(
       );
     }
 
-    const member =
-      await interaction.guild.members.fetch({
-        user: interaction.user.id,
-        force: true
-      });
+    const member = await interaction.guild.members.fetch({
+      user: interaction.user.id,
+      force: true
+    });
 
     if (await isBlacklisted(member)) {
       return interaction.editReply(
@@ -1623,8 +1581,7 @@ async function handleRoleSelection(
       );
     }
 
-    const bot =
-      await interaction.guild.members.fetchMe();
+    const bot = await interaction.guild.members.fetchMe();
 
     for (const id of config.roles) {
       const role =
@@ -1643,24 +1600,20 @@ async function handleRoleSelection(
       }
     }
 
-    const current =
-      config.roles.filter(
-        id => member.roles.cache.has(id)
-      );
+    const current = config.roles.filter(
+      id => member.roles.cache.has(id)
+    );
 
     const changed =
       current.length !== selected.size ||
-      current.some(
-        id => !selected.has(id)
-      );
+      current.some(id => !selected.has(id));
 
     if (changed) {
-      const unchanged =
-        member.roles.cache
-          .filter(
-            role => !config.roles.includes(role.id)
-          )
-          .map(role => role.id);
+      const unchanged = member.roles.cache
+        .filter(
+          role => !config.roles.includes(role.id)
+        )
+        .map(role => role.id);
 
       await member.roles.set(
         [...unchanged, ...selected],
@@ -1668,9 +1621,8 @@ async function handleRoleSelection(
       );
     }
 
-    await interaction.editReply(
-      config.success
-    );
+    await interaction.editReply(config.success);
+
   } catch (error) {
     console.error(
       `[SELF ROLES] ${type}:`,
@@ -1680,6 +1632,7 @@ async function handleRoleSelection(
     await interaction.editReply(
       "Your roles could not be updated. Please contact staff."
     ).catch(console.error);
+
   } finally {
     locks.roleSelect.delete(key);
   }
@@ -1687,13 +1640,6 @@ async function handleRoleSelection(
 
 // ============================================================
 // VERIFICATION PANEL
-// ============================================================
-//
-// ONLY ONE BUTTON:
-// Create Verification Ticket
-//
-// This button is handled by tickets.js.
-//
 // ============================================================
 
 function makeVerificationEmbed() {
@@ -1748,10 +1694,9 @@ function makeVerificationButton() {
 
 async function sendOrUpdateVerificationMessage() {
   try {
-    const channel =
-      await client.channels.fetch(
-        VERIFY_CHANNEL_ID
-      );
+    const channel = await client.channels.fetch(
+      VERIFY_CHANNEL_ID
+    );
 
     if (!channel?.messages) {
       throw new Error(
@@ -1782,12 +1727,8 @@ async function sendOrUpdateVerificationMessage() {
 
       {
         content: "",
-        embeds: [
-          makeVerificationEmbed()
-        ],
-        components: [
-          makeVerificationButton()
-        ],
+        embeds: [makeVerificationEmbed()],
+        components: [makeVerificationButton()],
         allowedMentions: NONE
       },
 
@@ -1798,9 +1739,6 @@ async function sendOrUpdateVerificationMessage() {
       "[VERIFY] Verification panel updated."
     );
 
-    console.log(
-      "[VERIFY] Ticket creation delegated to tickets.js."
-    );
   } catch (error) {
     console.error(
       "[VERIFY] Panel:",
@@ -1810,19 +1748,7 @@ async function sendOrUpdateVerificationMessage() {
 }
 
 // ============================================================
-// IDENTIFY OFFICIAL VERIFICATION TICKET
-// ============================================================
-//
-// tickets.js creates channels named:
-//
-// verification-0001
-// verification-0002
-// closed-verification-0001
-//
-// The verification category is managed by tickets.js.
-//
-// This check DOES NOT create a category.
-//
+// OFFICIAL VERIFICATION TICKET CHECK
 // ============================================================
 
 async function isOfficialVerificationTicket(channel) {
@@ -1845,10 +1771,9 @@ async function isOfficialVerificationTicket(channel) {
     return false;
   }
 
-  const parent =
-    await channel.guild.channels.fetch(
-      channel.parentId
-    ).catch(() => null);
+  const parent = await channel.guild.channels.fetch(
+    channel.parentId
+  ).catch(() => null);
 
   if (
     !parent ||
@@ -1859,14 +1784,13 @@ async function isOfficialVerificationTicket(channel) {
 
   if (VERIFICATION_TICKET_CATEGORY_ID) {
     return (
-      parent.id ===
-      VERIFICATION_TICKET_CATEGORY_ID
+      parent.id === VERIFICATION_TICKET_CATEGORY_ID
     );
   }
 
-  const normalized =
-    parent.name.toLowerCase()
-      .replace(/[^a-z0-9]/g, "");
+  const normalized = parent.name
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
 
   const approvedNames = new Set([
     "chuppysverification",
@@ -1881,109 +1805,83 @@ async function isOfficialVerificationTicket(channel) {
 }
 
 // ============================================================
-// IDENTIFY VERIFICATION TICKET OWNER
-// ============================================================
-//
-// IMPORTANT:
-//
-// The ticket opener is identified from the
-// original tickets.js welcome message.
-//
-// The welcome message must:
-// - Be authored by this bot
-// - Match the verification ticket number
-// - Include the opener's user mention
-// - Contain original ticket controls
-//
-// This prevents verifying someone just because
-// they were mentioned in an unrelated message.
-//
+// IDENTIFY VERIFICATION TICKET OPENER
 // ============================================================
 
 async function verificationTicketOwnerId(channel) {
-  if (
-    !(await isOfficialVerificationTicket(channel))
-  ) {
+  if (!(await isOfficialVerificationTicket(channel))) {
     return null;
   }
 
-  const numberMatch =
-    channel.name.match(
-      /verification-(\d+)$/i
-    );
+  const numberMatch = channel.name.match(
+    /verification-(\d+)$/i
+  );
 
   if (!numberMatch) {
     return null;
   }
 
-  const expectedNumber =
-    Number(numberMatch[1]);
+  const expectedNumber = Number(numberMatch[1]);
 
   let before;
 
   for (let page = 0; page < 10; page++) {
-    const messages =
-      await channel.messages.fetch({
-        limit: 100,
-        ...(before ? { before } : {})
-      });
+    const messages = await channel.messages.fetch({
+      limit: 100,
+      ...(before ? { before } : {})
+    });
 
     if (!messages.size) {
       break;
     }
 
     for (const message of messages.values()) {
-      if (
-        message.author.id !== client.user.id
-      ) {
+      if (message.author.id !== client.user.id) {
         continue;
       }
 
-      const hasControls =
-        message.components.some(row =>
-          row.components.some(component =>
-            [
-              "chuppys_ticket_claim",
-              "chuppys_ticket_close"
-            ].includes(component.customId) ||
-            String(
-              component.customId || ""
-            ).startsWith("chuppys_ticket:")
+      const hasControls = message.components.some(
+        row =>
+          row.components.some(
+            component =>
+              [
+                "chuppys_ticket_claim",
+                "chuppys_ticket_close"
+              ].includes(component.customId) ||
+              String(component.customId || "")
+                .startsWith("chuppys_ticket:")
           )
-        );
+      );
 
       if (!hasControls) {
         continue;
       }
 
       for (const embed of message.embeds) {
-        const title =
-          String(embed.title || "");
+        const title = String(embed.title || "");
 
-        if (
-          !/verification\s+ticket/i.test(title)
-        ) {
+        if (!/verification\s+ticket/i.test(title)) {
           continue;
         }
 
-        const titleNumber =
-          title.match(/#\s*0*(\d+)/);
+        const titleNumber = title.match(
+          /#\s*0*(\d+)/
+        );
 
         if (
           !titleNumber ||
-          Number(titleNumber[1]) !==
-            expectedNumber
+          Number(titleNumber[1]) !== expectedNumber
         ) {
           continue;
         }
 
-        const description =
-          String(embed.description || "");
+        const description = String(
+          embed.description || ""
+        );
 
-        const ownerMatch =
-          description.match(
-            /welcome\s*<@!?(\d{17,20})>/i
-          );
+        const ownerMatch = description.match(
+          /welcome\s*<@!?(\d{17,20})>/i
+        );
 
         if (ownerMatch) {
           return ownerMatch[1];
@@ -1995,30 +1893,18 @@ async function verificationTicketOwnerId(channel) {
       break;
     }
 
-    before =
-      messages.last().id;
+    before = messages.last().id;
   }
 
   return null;
 }
 
 // ============================================================
-// HIDE MANUAL VERIFICATION COMMAND
-// ============================================================
-//
-// The command is deleted before approval.
-//
-// Discord may still briefly display a prefix
-// command before it is deleted.
-//
-// For truly invisible commands, an ephemeral
-// slash command would be required.
-//
+// HIDE VERIFICATION APPROVAL COMMAND
 // ============================================================
 
 async function hideVerificationCommand(message) {
-  const bot =
-    await message.guild.members.fetchMe();
+  const bot = await message.guild.members.fetchMe();
 
   const permissions =
     message.channel.permissionsFor(bot);
@@ -2040,6 +1926,7 @@ async function hideVerificationCommand(message) {
   try {
     await message.delete();
     return true;
+
   } catch (error) {
     console.error(
       "[VERIFY] Could not delete command:",
@@ -2060,34 +1947,23 @@ async function hideVerificationCommand(message) {
 // MANUAL VERIFICATION APPROVAL
 // ============================================================
 //
-// Staff command:
-//
 // ,r @user c
 //
-// REQUIREMENTS:
-// - Owner/Admin/Mod/Ticket Support
-// - Official verification ticket
-// - Mentioned user matches ticket opener
-// - Target is not blacklisted
-// - Target is not already verified
-// - Bot can manage verified role
+// Owner/Admin/Mod/Ticket Support only.
+// Must be inside official verification ticket.
+// Target must match ticket opener.
+// No automatic verification.
 //
 // ============================================================
 
-async function approveVerification(
-  message,
-  targetId
-) {
-  if (
-    !isVerificationStaff(message.member)
-  ) {
+async function approveVerification(message, targetId) {
+  if (!isVerificationStaff(message.member)) {
     return;
   }
 
-  const official =
-    await isOfficialVerificationTicket(
-      message.channel
-    );
+  const official = await isOfficialVerificationTicket(
+    message.channel
+  );
 
   if (!official) {
     await privateNotice(
@@ -2100,9 +1976,7 @@ async function approveVerification(
   }
 
   const ticketOwnerId =
-    await verificationTicketOwnerId(
-      message.channel
-    );
+    await verificationTicketOwnerId(message.channel);
 
   if (!ticketOwnerId) {
     await privateNotice(
@@ -2124,8 +1998,7 @@ async function approveVerification(
     return;
   }
 
-  const key =
-    `${message.guild.id}:${targetId}`;
+  const key = `${message.guild.id}:${targetId}`;
 
   if (!lock(locks.verifyApprove, key)) {
     await privateNotice(
@@ -2137,14 +2010,12 @@ async function approveVerification(
   }
 
   try {
-    const guild =
-      message.guild;
+    const guild = message.guild;
 
-    const member =
-      await guild.members.fetch({
-        user: targetId,
-        force: true
-      }).catch(() => null);
+    const member = await guild.members.fetch({
+      user: targetId,
+      force: true
+    }).catch(() => null);
 
     if (!member) {
       await privateNotice(
@@ -2162,18 +2033,13 @@ async function approveVerification(
     if (await isBlacklisted(member)) {
       await privateNotice(
         message.author,
-        "This member is blacklisted " +
-        "and cannot be verified."
+        "This member is blacklisted and cannot be verified."
       );
 
       return;
     }
 
-    if (
-      member.roles.cache.has(
-        CHUPPYS_ROLE_ID
-      )
-    ) {
+    if (member.roles.cache.has(CHUPPYS_ROLE_ID)) {
       await privateNotice(
         message.author,
         "This member is already verified."
@@ -2182,13 +2048,10 @@ async function approveVerification(
       return;
     }
 
-    const bot =
-      await guild.members.fetchMe();
+    const bot = await guild.members.fetchMe();
 
     const verifiedRole =
-      guild.roles.cache.get(
-        CHUPPYS_ROLE_ID
-      ) ||
+      guild.roles.cache.get(CHUPPYS_ROLE_ID) ||
       await guild.roles.fetch(
         CHUPPYS_ROLE_ID
       ).catch(() => null);
@@ -2206,6 +2069,7 @@ async function approveVerification(
       !bot.permissions.has(
         PermissionFlagsBits.ManageRoles
       ) ||
+      verifiedRole.managed ||
       verifiedRole.position >=
         bot.roles.highest.position
     ) {
@@ -2220,11 +2084,18 @@ async function approveVerification(
 
     await member.roles.add(
       CHUPPYS_ROLE_ID,
-      `Manually verified by ${message.author.tag} in ticket ${message.channel.id}`
+      `Manually verified by ${message.author.tag} ` +
+      `in ticket ${message.channel.id}`
     );
 
+    // CORRECT RULES CHANNEL
+
+    const rulesUrl =
+      `https://discord.com/channels/` +
+      `${guild.id}/${RULES_CHANNEL_ID}`;
+
     const embed = whiteEmbed(
-      "Verification Approved",
+      "Verification Approved ♡",
 
       `**Member:** <@${member.id}>\n\n` +
 
@@ -2234,8 +2105,15 @@ async function approveVerification(
 
       "You now have access to **.gg/chuppys**.\n\n" +
 
-      `Please review <#${RULES_CHANNEL_ID}> ` +
-      `and select your roles in <#${ROLES_CHANNEL_ID}>.`
+      "**♡ SERVER RULES**\n" +
+      `Please review <#${RULES_CHANNEL_ID}>.\n\n` +
+
+      `[Click Here to Read the Rules](${rulesUrl})\n\n` +
+
+      "**♡ SERVER ROLES**\n" +
+      `Please select your roles in <#${ROLES_CHANNEL_ID}>.\n\n` +
+
+      "Thank you for verifying! Welcome to Chuppy's! ♡"
     ).setTimestamp();
 
     await message.channel.send({
@@ -2249,6 +2127,7 @@ async function approveVerification(
     console.log(
       `[VERIFY] ${member.id} approved by ${message.author.id}`
     );
+
   } catch (error) {
     console.error(
       "[VERIFY] Approval failed:",
@@ -2259,13 +2138,14 @@ async function approveVerification(
       message.author,
       "Verification failed. Check the bot's permissions."
     );
+
   } finally {
     locks.verifyApprove.delete(key);
   }
 }
 
 // ============================================================
-// REGISTER SLASH COMMANDS
+// SLASH COMMAND REGISTRATION
 // ============================================================
 
 async function registerQuestionCommand() {
@@ -2273,20 +2153,17 @@ async function registerQuestionCommand() {
     return;
   }
 
-  const rest =
-    new REST({
-      version: "10"
-    }).setToken(TOKEN);
+  const rest = new REST({
+    version: "10"
+  }).setToken(TOKEN);
 
-  const route =
-    Routes.applicationGuildCommands(
-      client.user.id,
-      GUILD_ID
-    );
+  const route = Routes.applicationGuildCommands(
+    client.user.id,
+    GUILD_ID
+  );
 
   try {
-    const existing =
-      await rest.get(route);
+    const existing = await rest.get(route);
 
     const commands = [
       QUESTION_COMMAND,
@@ -2296,14 +2173,11 @@ async function registerQuestionCommand() {
     ];
 
     for (const definition of commands) {
-      const body =
-        definition.toJSON();
+      const body = definition.toJSON();
 
-      const found =
-        existing.find(
-          command =>
-            command.name === body.name
-        );
+      const found = existing.find(
+        command => command.name === body.name
+      );
 
       if (found) {
         await rest.patch(
@@ -2312,19 +2186,21 @@ async function registerQuestionCommand() {
             GUILD_ID,
             found.id
           ),
-          { body }
+          {
+            body
+          }
         );
       } else {
-        await rest.post(
-          route,
-          { body }
-        );
+        await rest.post(route, {
+          body
+        });
       }
 
       console.log(
-        `[COMMANDS] Registered/updated /${body.name}`
+        `[COMMANDS] Registered /${body.name}`
       );
     }
+
   } catch (error) {
     console.error(
       "[COMMANDS] Registration failed:",
@@ -2334,7 +2210,7 @@ async function registerQuestionCommand() {
 }
 
 // ============================================================
-// QUESTION PERMISSIONS
+// QUESTION STAFF PERMISSIONS
 // ============================================================
 
 function canReplyToQuestion(interaction) {
@@ -2342,8 +2218,7 @@ function canReplyToQuestion(interaction) {
     return false;
   }
 
-  const permissions =
-    interaction.memberPermissions;
+  const permissions = interaction.memberPermissions;
 
   if (
     permissions?.has(
@@ -2359,18 +2234,13 @@ function canReplyToQuestion(interaction) {
     return true;
   }
 
-  const roles =
-    interaction.member?.roles;
+  const roles = interaction.member?.roles;
 
   return Boolean(
-    roles?.cache?.has?.(
-      TICKET_SUPPORT_ROLE_ID
-    ) ||
+    roles?.cache?.has?.(TICKET_SUPPORT_ROLE_ID) ||
     (
       Array.isArray(roles) &&
-      roles.includes(
-        TICKET_SUPPORT_ROLE_ID
-      )
+      roles.includes(TICKET_SUPPORT_ROLE_ID)
     )
   );
 }
@@ -2404,18 +2274,12 @@ function makeClientButton() {
       .setEmoji({
         id: CLIENT_EMOJI_ID
       })
-      .setStyle(
-        ButtonStyle.Secondary
-      )
+      .setStyle(ButtonStyle.Secondary)
   );
 }
 
 // ============================================================
-// VOUCH ENGINE
-// ============================================================
-
-// ============================================================
-// FORWARD DETECTION
+// VOUCH FORWARD HELPERS
 // ============================================================
 
 function isForward(message) {
@@ -2431,9 +2295,7 @@ function getSnapshot(message) {
   return (
     message.messageSnapshots?.first?.() ||
     [
-      ...(
-        message.messageSnapshots?.values?.() || []
-      )
+      ...(message.messageSnapshots?.values?.() || [])
     ][0] ||
     null
   );
@@ -2444,8 +2306,7 @@ function getVouchData(message) {
 }
 
 function getEmbeds(message) {
-  const data =
-    getVouchData(message);
+  const data = getVouchData(message);
 
   return [
     ...(data.embeds || [])
@@ -2453,17 +2314,12 @@ function getEmbeds(message) {
 }
 
 function getAttachments(message) {
-  const data =
-    getVouchData(message);
+  const data = getVouchData(message);
 
   return [
     ...(data.attachments?.values?.() || [])
   ];
 }
-
-// ============================================================
-// ORIGINAL FORWARD REFERENCE
-// ============================================================
 
 function getOriginalReference(message) {
   const reference =
@@ -2489,19 +2345,13 @@ function getOriginalReference(message) {
   return null;
 }
 
-// ============================================================
-// MOVED VOUCH ORIGIN
-// ============================================================
-
 function getMoveOrigin(message) {
   for (const embed of getEmbeds(message)) {
-    const footer =
-      embed.footer?.text || "";
+    const footer = embed.footer?.text || "";
 
-    const match =
-      footer.match(
-        /CHUPPYS_VOUCH_ORIGIN:(\d{17,20}):(\d{17,20})/
-      );
+    const match = footer.match(
+      /CHUPPYS_VOUCH_ORIGIN:(\d{17,20}):(\d{17,20})/
+    );
 
     if (match) {
       return `${match[1]}:${match[2]}`;
@@ -2510,10 +2360,6 @@ function getMoveOrigin(message) {
 
   return null;
 }
-
-// ============================================================
-// NORMALIZED FINGERPRINT
-// ============================================================
 
 function normalizedVouchText(value) {
   return String(value || "")
@@ -2527,43 +2373,34 @@ function normalizedVouchText(value) {
 }
 
 function vouchFingerprint(message) {
-  const data =
-    getVouchData(message);
+  const data = getVouchData(message);
 
-  const embeds =
-    getEmbeds(message).map(embed => ({
-      title:
-        normalizedVouchText(embed.title),
+  const embeds = getEmbeds(message).map(embed => ({
+    title: normalizedVouchText(embed.title),
 
-      description:
-        normalizedVouchText(embed.description),
+    description:
+      normalizedVouchText(embed.description),
 
-      fields:
-        (embed.fields || []).map(field => ({
-          name:
-            normalizedVouchText(field.name),
+    fields: (embed.fields || []).map(field => ({
+      name: normalizedVouchText(field.name),
+      value: normalizedVouchText(field.value)
+    })),
 
-          value:
-            normalizedVouchText(field.value)
-        })),
+    image: embed.image?.url || ""
+  }));
 
-      image:
-        embed.image?.url || ""
-    }));
-
-  const attachments =
-    getAttachments(message)
-      .map(attachment =>
+  const attachments = getAttachments(message)
+    .map(
+      attachment =>
         attachment.url ||
         attachment.name ||
         ""
-      )
-      .sort();
+    )
+    .sort();
 
-  const content =
-    normalizedVouchText(
-      data.content
-    );
+  const content = normalizedVouchText(
+    data.content
+  );
 
   if (
     !content &&
@@ -2582,28 +2419,21 @@ function vouchFingerprint(message) {
     .digest("hex");
 }
 
-// ============================================================
-// UNIQUE VOUCH KEY
-// ============================================================
-
 function originalVouchKey(message) {
-  const movedOrigin =
-    getMoveOrigin(message);
+  const movedOrigin = getMoveOrigin(message);
 
   if (movedOrigin) {
     return movedOrigin;
   }
 
-  const originalReference =
-    getOriginalReference(message);
+  const originalReference = getOriginalReference(message);
 
   if (originalReference) {
     return originalReference;
   }
 
   if (isForward(message)) {
-    const fingerprint =
-      vouchFingerprint(message);
+    const fingerprint = vouchFingerprint(message);
 
     if (fingerprint) {
       return `forward:${fingerprint}`;
@@ -2614,28 +2444,24 @@ function originalVouchKey(message) {
 }
 
 // ============================================================
-// DETECT VOUCH TYPE
+// VOUCH TYPE DETECTION
 // ============================================================
 
 function detectVouchType(message) {
-  const embeds =
-    getEmbeds(message);
+  const embeds = getEmbeds(message);
 
   for (const embed of embeds) {
-    const description =
-      embed.description || "";
+    const description = embed.description || "";
 
-    const typeMatch =
-      description.match(
-        /\*\*vouch type:\*\*\s*([^\n]+)/i
-      );
+    const typeMatch = description.match(
+      /\*\*vouch type:\*\*\s*([^\n]+)/i
+    );
 
     if (typeMatch) {
-      const type =
-        typeMatch[1]
-          .replace(/<a?:\w+:\d+>/g, "")
-          .trim()
-          .toLowerCase();
+      const type = typeMatch[1]
+        .replace(/<a?:\w+:\d+>/g, "")
+        .trim()
+        .toLowerCase();
 
       if (/converter/.test(type)) {
         return "converter";
@@ -2649,16 +2475,13 @@ function detectVouchType(message) {
         return "giveaway";
       }
 
-      if (
-        /market|purchase|cash out/.test(type)
-      ) {
+      if (/market|purchase|cash out/.test(type)) {
         return "market";
       }
     }
   }
 
-  const data =
-    getVouchData(message);
+  const data = getVouchData(message);
 
   const text = [
     data.content || "",
@@ -2670,29 +2493,21 @@ function detectVouchType(message) {
     )
   ].join("\n").toLowerCase();
 
-  if (
-    !/\bvouch(?:es|ed|ing)?\b/.test(text)
-  ) {
+  if (!/\bvouch(?:es|ed|ing)?\b/.test(text)) {
     return null;
   }
 
   const types = [];
 
-  if (
-    /converter|conversion fee/.test(text)
-  ) {
+  if (/converter|conversion fee/.test(text)) {
     types.push("converter");
   }
 
-  if (
-    /invite challenge|invite vouch/.test(text)
-  ) {
+  if (/invite challenge|invite vouch/.test(text)) {
     types.push("invite");
   }
 
-  if (
-    /giveaway vouch|giveaway reward/.test(text)
-  ) {
+  if (/giveaway vouch|giveaway reward/.test(text)) {
     types.push("giveaway");
   }
 
@@ -2707,10 +2522,6 @@ function detectVouchType(message) {
     : null;
 }
 
-// ============================================================
-// RECOGNIZE VALID VOUCH
-// ============================================================
-
 function looksLikeVouch(message) {
   if (message.system) {
     return false;
@@ -2720,8 +2531,7 @@ function looksLikeVouch(message) {
     return true;
   }
 
-  const embeds =
-    getEmbeds(message);
+  const embeds = getEmbeds(message);
 
   if (
     embeds.some(embed =>
@@ -2737,8 +2547,7 @@ function looksLikeVouch(message) {
     return true;
   }
 
-  const data =
-    getVouchData(message);
+  const data = getVouchData(message);
 
   const text = [
     data.content || "",
@@ -2752,10 +2561,6 @@ function looksLikeVouch(message) {
 
   return /\bvouch\b/i.test(text);
 }
-
-// ============================================================
-// VOUCH DESTINATION
-// ============================================================
 
 function vouchDestination(type, message) {
   if (type === "converter") {
@@ -2771,21 +2576,15 @@ function vouchDestination(type, message) {
   }
 
   if (type === "market") {
-    const description =
-      getEmbeds(message)
-        .map(embed =>
-          embed.description || ""
-        )
-        .join("\n");
+    const description = getEmbeds(message)
+      .map(embed => embed.description || "")
+      .join("\n");
 
-    const sellerId =
-      description.match(
-        /\*\*seller:\*\*\s*<@!?(\d{17,20})>/i
-      )?.[1];
+    const sellerId = description.match(
+      /\*\*seller:\*\*\s*<@!?(\d{17,20})>/i
+    )?.[1];
 
-    if (
-      PERSONAL_SELLER_IDS.includes(sellerId)
-    ) {
+    if (PERSONAL_SELLER_IDS.includes(sellerId)) {
       return PERSONAL_VOUCH_CHANNEL_ID;
     }
 
@@ -2797,39 +2596,30 @@ function vouchDestination(type, message) {
   return null;
 }
 
-// ============================================================
-// BUILD MOVED VOUCH
-// ============================================================
-
 function buildMovedVouch(message) {
-  const data =
-    getVouchData(message);
-
-  const embeds =
-    getEmbeds(message);
+  const data = getVouchData(message);
+  const embeds = getEmbeds(message);
 
   const origin =
     getMoveOrigin(message) ||
     getOriginalReference(message) ||
     `${message.channel.id}:${message.id}`;
 
-  const movedEmbeds =
-    embeds.slice(0, 10).map(original => {
-      const json =
-        typeof original.toJSON === "function"
-          ? original.toJSON()
-          : { ...original };
+  const movedEmbeds = embeds.slice(0, 10).map(original => {
+    const json =
+      typeof original.toJSON === "function"
+        ? original.toJSON()
+        : { ...original };
 
-      const previousFooter =
-        json.footer?.text || "";
+    const previousFooter = json.footer?.text || "";
 
-      return new EmbedBuilder(json)
-        .setFooter({
-          text:
-            `${previousFooter ? previousFooter + " • " : ""}` +
-            `${VOUCH_ORIGIN_MARKER}:${origin}`
-        });
-    });
+    return new EmbedBuilder(json)
+      .setFooter({
+        text:
+          `${previousFooter ? previousFooter + " • " : ""}` +
+          `${VOUCH_ORIGIN_MARKER}:${origin}`
+      });
+  });
 
   if (!movedEmbeds.length) {
     movedEmbeds.push(
@@ -2843,17 +2633,15 @@ function buildMovedVouch(message) {
           )
         )
         .setFooter({
-          text:
-            `${VOUCH_ORIGIN_MARKER}:${origin}`
+          text: `${VOUCH_ORIGIN_MARKER}:${origin}`
         })
         .setTimestamp()
     );
   }
 
-  const attachmentUrls =
-    getAttachments(message)
-      .map(attachment => attachment.url)
-      .filter(Boolean);
+  const attachmentUrls = getAttachments(message)
+    .map(attachment => attachment.url)
+    .filter(Boolean);
 
   return {
     content: "",
@@ -2864,7 +2652,7 @@ function buildMovedVouch(message) {
 }
 
 // ============================================================
-// AUTOMATIC VOUCH REACTION
+// VOUCH REACTIONS
 // ============================================================
 
 async function reactToVouch(message) {
@@ -2876,6 +2664,7 @@ async function reactToVouch(message) {
     await message.react(
       CHUPPY_TY_EMOJI
     );
+
   } catch (error) {
     console.error(
       `[VOUCH REACTION] ${message.id}:`,
@@ -2885,7 +2674,7 @@ async function reactToVouch(message) {
 }
 
 // ============================================================
-// AUTOMATIC VOUCH ROUTING
+// VOUCH ROUTING
 // ============================================================
 
 async function routeVouch(message) {
@@ -2913,15 +2702,16 @@ async function routeVouch(message) {
     return false;
   }
 
-  const type =
-    detectVouchType(message);
+  const type = detectVouchType(message);
 
   if (!type) {
     return false;
   }
 
-  const destinationId =
-    vouchDestination(type, message);
+  const destinationId = vouchDestination(
+    type,
+    message
+  );
 
   if (
     !destinationId ||
@@ -2934,10 +2724,7 @@ async function routeVouch(message) {
     return false;
   }
 
-  if (!lock(
-    locks.vouchRoute,
-    message.id
-  )) {
+  if (!lock(locks.vouchRoute, message.id)) {
     return false;
   }
 
@@ -2953,8 +2740,7 @@ async function routeVouch(message) {
       );
     }
 
-    const bot =
-      await message.guild.members.fetchMe();
+    const bot = await message.guild.members.fetchMe();
 
     const sourcePermissions =
       message.channel.permissionsFor(bot);
@@ -2986,8 +2772,7 @@ async function routeVouch(message) {
       return false;
     }
 
-    const payload =
-      buildMovedVouch(message);
+    const payload = buildMovedVouch(message);
 
     if (
       getAttachments(message).length !==
@@ -2996,13 +2781,12 @@ async function routeVouch(message) {
       return false;
     }
 
-    const files =
-      payload.attachmentUrls.map(
-        (url, index) => ({
-          attachment: url,
-          name: `vouch-proof-${index + 1}`
-        })
-      );
+    const files = payload.attachmentUrls.map(
+      (url, index) => ({
+        attachment: url,
+        name: `vouch-proof-${index + 1}`
+      })
+    );
 
     if (
       files.length &&
@@ -3013,16 +2797,14 @@ async function routeVouch(message) {
       return false;
     }
 
-    const recent =
-      await destination.messages.fetch({
-        limit: 100
-      });
+    const recent = await destination.messages.fetch({
+      limit: 100
+    });
 
-    const existingCopy =
-      recent.find(candidate =>
-        getMoveOrigin(candidate) ===
-        payload.origin
-      );
+    const existingCopy = recent.find(
+      candidate =>
+        getMoveOrigin(candidate) === payload.origin
+    );
 
     if (existingCopy) {
       await message.delete();
@@ -3033,16 +2815,16 @@ async function routeVouch(message) {
       return true;
     }
 
-    const copied =
-      await destination.send({
-        content: payload.content,
-        embeds: payload.embeds,
-        files,
-        allowedMentions: NONE
-      });
+    const copied = await destination.send({
+      content: payload.content,
+      embeds: payload.embeds,
+      files,
+      allowedMentions: NONE
+    });
 
     try {
       await message.delete();
+
     } catch (error) {
       console.error(
         "[VOUCH ROUTER] Source deletion failed:",
@@ -3058,7 +2840,8 @@ async function routeVouch(message) {
     routedMessages.add(message.id);
 
     console.log(
-      `[VOUCH ROUTER] ${type}: ${message.channel.id} -> ${destinationId}`
+      `[VOUCH ROUTER] ${type}: ` +
+      `${message.channel.id} -> ${destinationId}`
     );
 
     console.log(
@@ -3068,6 +2851,7 @@ async function routeVouch(message) {
     scheduleVouchCounterUpdate();
 
     return true;
+
   } catch (error) {
     console.error(
       "[VOUCH ROUTER] Failed:",
@@ -3075,10 +2859,9 @@ async function routeVouch(message) {
     );
 
     return false;
+
   } finally {
-    locks.vouchRoute.delete(
-      message.id
-    );
+    locks.vouchRoute.delete(message.id);
   }
 }
 
@@ -3091,8 +2874,7 @@ function makeVouchRecord(message) {
     return null;
   }
 
-  const key =
-    originalVouchKey(message);
+  const key = originalVouchKey(message);
 
   if (!key) {
     return null;
@@ -3107,15 +2889,10 @@ function makeVouchRecord(message) {
   };
 }
 
-// ============================================================
-// FETCH CHANNEL VOUCH HISTORY
-// ============================================================
-
 async function fetchChannelVouches(channelId) {
-  const channel =
-    await client.channels.fetch(
-      channelId
-    );
+  const channel = await client.channels.fetch(
+    channelId
+  );
 
   if (
     !channel?.messages ||
@@ -3130,11 +2907,10 @@ async function fetchChannelVouches(channelId) {
   let before;
 
   while (true) {
-    const messages =
-      await channel.messages.fetch({
-        limit: 100,
-        ...(before ? { before } : {})
-      });
+    const messages = await channel.messages.fetch({
+      limit: 100,
+      ...(before ? { before } : {})
+    });
 
     if (!messages.size) {
       break;
@@ -3150,8 +2926,7 @@ async function fetchChannelVouches(channelId) {
         VOUCH_CHANNEL_ID
       ].includes(channelId);
 
-      let record =
-        makeVouchRecord(message);
+      let record = makeVouchRecord(message);
 
       if (!record && marketChannel) {
         if (
@@ -3166,19 +2941,11 @@ async function fetchChannelVouches(channelId) {
         }
 
         record = {
-          key:
-            `${channelId}:${message.id}`,
-
-          fingerprint:
-            vouchFingerprint(message),
-
+          key: `${channelId}:${message.id}`,
+          fingerprint: vouchFingerprint(message),
           channelId,
-
-          forwarded:
-            isForward(message),
-
-          created:
-            message.createdTimestamp
+          forwarded: isForward(message),
+          created: message.createdTimestamp
         };
       }
 
@@ -3191,8 +2958,7 @@ async function fetchChannelVouches(channelId) {
       break;
     }
 
-    before =
-      messages.last().id;
+    before = messages.last().id;
   }
 
   console.log(
@@ -3202,32 +2968,22 @@ async function fetchChannelVouches(channelId) {
   return results;
 }
 
-// ============================================================
-// DEDUPLICATE VOUCH RECORDS
-// ============================================================
-
 function uniqueVouchRecords(records) {
   const byKey = new Map();
 
-  const sorted =
-    [...records].sort(
-      (a, b) => a.created - b.created
-    );
+  const sorted = [...records].sort(
+    (a, b) => a.created - b.created
+  );
 
   for (const record of sorted) {
     if (!byKey.has(record.key)) {
-      byKey.set(
-        record.key,
-        record
-      );
+      byKey.set(record.key, record);
     }
   }
 
-  const values =
-    [...byKey.values()];
+  const values = [...byKey.values()];
 
-  const seenForwardFingerprints =
-    new Set();
+  const seenForwardFingerprints = new Set();
 
   return values.filter(record => {
     if (
@@ -3265,10 +3021,9 @@ async function findOrCreateCountChannel(
   prefix
 ) {
   if (configuredId) {
-    const existing =
-      await guild.channels.fetch(
-        configuredId
-      ).catch(() => null);
+    const existing = await guild.channels.fetch(
+      configuredId
+    ).catch(() => null);
 
     if (existing) {
       return existing;
@@ -3277,21 +3032,19 @@ async function findOrCreateCountChannel(
 
   await guild.channels.fetch();
 
-  const found =
-    guild.channels.cache.find(
-      channel =>
-        channel.parentId === COUNT_CATEGORY_ID &&
-        channel.name?.startsWith(prefix)
-    );
+  const found = guild.channels.cache.find(
+    channel =>
+      channel.parentId === COUNT_CATEGORY_ID &&
+      channel.name?.startsWith(prefix)
+  );
 
   if (found) {
     return found;
   }
 
-  const original =
-    await guild.channels.fetch(
-      CHUPPY_COUNT_CHANNEL_ID
-    );
+  const original = await guild.channels.fetch(
+    CHUPPY_COUNT_CHANNEL_ID
+  );
 
   if (!original) {
     throw new Error(
@@ -3299,10 +3052,9 @@ async function findOrCreateCountChannel(
     );
   }
 
-  const category =
-    await guild.channels.fetch(
-      COUNT_CATEGORY_ID
-    );
+  const category = await guild.channels.fetch(
+    COUNT_CATEGORY_ID
+  );
 
   if (
     !category ||
@@ -3323,22 +3075,21 @@ async function findOrCreateCountChannel(
       ? PermissionFlagsBits.Connect
       : PermissionFlagsBits.SendMessages;
 
-  const created =
-    await guild.channels.create({
-      name: `${prefix}0`,
-      type,
-      parent: COUNT_CATEGORY_ID,
+  const created = await guild.channels.create({
+    name: `${prefix}0`,
+    type,
+    parent: COUNT_CATEGORY_ID,
 
-      permissionOverwrites: [
-        {
-          id: guild.id,
-          deny: [permission]
-        }
-      ],
+    permissionOverwrites: [
+      {
+        id: guild.id,
+        deny: [permission]
+      }
+    ],
 
-      reason:
-        "Chuppys automatic vouch counter"
-    });
+    reason:
+      "Chuppys automatic vouch counter"
+  });
 
   console.log(
     `[VOUCH COUNTER] Created ${created.id}`
@@ -3348,7 +3099,7 @@ async function findOrCreateCountChannel(
 }
 
 // ============================================================
-// RENAME COUNTERS
+// COUNTER RENAMING
 // ============================================================
 
 async function renameCounterChannel(
@@ -3397,9 +3148,7 @@ async function orderVouchCounters(
     giveaway,
     converter
   ]) {
-    if (
-      channel.parentId !== COUNT_CATEGORY_ID
-    ) {
+    if (channel.parentId !== COUNT_CATEGORY_ID) {
       await channel.setParent(
         COUNT_CATEGORY_ID,
         {
@@ -3409,12 +3158,11 @@ async function orderVouchCounters(
     }
   }
 
-  const refreshed =
-    await Promise.all(
-      counters.map(channel =>
-        guild.channels.fetch(channel.id)
-      )
-    );
+  const refreshed = await Promise.all(
+    counters.map(channel =>
+      guild.channels.fetch(channel.id)
+    )
+  );
 
   if (
     !refreshed.every(
@@ -3429,20 +3177,18 @@ async function orderVouchCounters(
     return;
   }
 
-  const alreadyOrdered =
-    refreshed.every(
-      (channel, index) =>
-        index === 0 ||
-        refreshed[index - 1].position <
-          channel.position
-    );
+  const alreadyOrdered = refreshed.every(
+    (channel, index) =>
+      index === 0 ||
+      refreshed[index - 1].position <
+        channel.position
+  );
 
   if (alreadyOrdered) {
     return;
   }
 
-  const base =
-    refreshed[0].position;
+  const base = refreshed[0].position;
 
   await guild.channels.setPositions(
     refreshed.map(
@@ -3455,7 +3201,7 @@ async function orderVouchCounters(
 }
 
 // ============================================================
-// RECOUNT ALL VOUCHES
+// RECOUNT VOUCHES
 // ============================================================
 
 async function recountAllVouches() {
@@ -3478,74 +3224,53 @@ async function recountAllVouches() {
       giveawayMessages,
       converterMessages
     ] = await Promise.all([
-      fetchChannelVouches(
-        PERSONAL_VOUCH_CHANNEL_ID
-      ),
-
-      fetchChannelVouches(
-        VOUCH_CHANNEL_ID
-      ),
-
-      fetchChannelVouches(
-        INVITE_VOUCH_CHANNEL_ID
-      ),
-
-      fetchChannelVouches(
-        GIVEAWAY_VOUCH_CHANNEL_ID
-      ),
-
-      fetchChannelVouches(
-        CONVERTER_VOUCH_CHANNEL_ID
-      )
+      fetchChannelVouches(PERSONAL_VOUCH_CHANNEL_ID),
+      fetchChannelVouches(VOUCH_CHANNEL_ID),
+      fetchChannelVouches(INVITE_VOUCH_CHANNEL_ID),
+      fetchChannelVouches(GIVEAWAY_VOUCH_CHANNEL_ID),
+      fetchChannelVouches(CONVERTER_VOUCH_CHANNEL_ID)
     ]);
 
-    const personalCount =
-      uniqueVouches(
-        personalMessages
-      );
+    const personalCount = uniqueVouches(
+      personalMessages
+    );
 
-    const marketCount =
-      uniqueVouches(
-        marketMessages
-      );
+    const marketCount = uniqueVouches(
+      marketMessages
+    );
 
-    const inviteCount =
-      uniqueVouches(
-        inviteMessages
-      );
+    const inviteCount = uniqueVouches(
+      inviteMessages
+    );
 
-    const giveawayCount =
-      uniqueVouches(
-        giveawayMessages
-      );
+    const giveawayCount = uniqueVouches(
+      giveawayMessages
+    );
 
-    const converterCount =
-      uniqueVouches(
-        converterMessages
-      );
+    const converterCount = uniqueVouches(
+      converterMessages
+    );
 
     // CHUPPY TOTAL:
-    // Personal + Invite + Giveaway + Converter
+    // PERSONAL + INVITE + GIVEAWAY + CONVERTER
 
-    const chuppyTotal =
-      uniqueVouches([
-        ...personalMessages,
-        ...inviteMessages,
-        ...giveawayMessages,
-        ...converterMessages
-      ]);
+    const chuppyTotal = uniqueVouches([
+      ...personalMessages,
+      ...inviteMessages,
+      ...giveawayMessages,
+      ...converterMessages
+    ]);
 
     // SERVER TOTAL:
-    // ALL FIVE VOUCH SOURCE CHANNELS
+    // ALL FIVE CHANNELS
 
-    const serverTotal =
-      uniqueVouches([
-        ...personalMessages,
-        ...marketMessages,
-        ...inviteMessages,
-        ...giveawayMessages,
-        ...converterMessages
-      ]);
+    const serverTotal = uniqueVouches([
+      ...personalMessages,
+      ...marketMessages,
+      ...inviteMessages,
+      ...giveawayMessages,
+      ...converterMessages
+    ]);
 
     const personalCounter =
       await guild.channels.fetch(
@@ -3557,10 +3282,7 @@ async function recountAllVouches() {
         SERVER_COUNT_CHANNEL_ID
       );
 
-    if (
-      !personalCounter ||
-      !serverCounter
-    ) {
+    if (!personalCounter || !serverCounter) {
       throw new Error(
         "Original counter channels missing."
       );
@@ -3587,33 +3309,32 @@ async function recountAllVouches() {
         COUNT_NAMES.converter
       );
 
-    const updates =
-      await Promise.allSettled([
-        renameCounterChannel(
-          personalCounter,
-          `${COUNT_NAMES.personal}${chuppyTotal}`
-        ),
+    const updates = await Promise.allSettled([
+      renameCounterChannel(
+        personalCounter,
+        `${COUNT_NAMES.personal}${chuppyTotal}`
+      ),
 
-        renameCounterChannel(
-          inviteCounter,
-          `${COUNT_NAMES.invite}${inviteCount}`
-        ),
+      renameCounterChannel(
+        inviteCounter,
+        `${COUNT_NAMES.invite}${inviteCount}`
+      ),
 
-        renameCounterChannel(
-          giveawayCounter,
-          `${COUNT_NAMES.giveaway}${giveawayCount}`
-        ),
+      renameCounterChannel(
+        giveawayCounter,
+        `${COUNT_NAMES.giveaway}${giveawayCount}`
+      ),
 
-        renameCounterChannel(
-          converterCounter,
-          `${COUNT_NAMES.converter}${converterCount}`
-        ),
+      renameCounterChannel(
+        converterCounter,
+        `${COUNT_NAMES.converter}${converterCount}`
+      ),
 
-        renameCounterChannel(
-          serverCounter,
-          `${COUNT_NAMES.server}${serverTotal}`
-        )
-      ]);
+      renameCounterChannel(
+        serverCounter,
+        `${COUNT_NAMES.server}${serverTotal}`
+      )
+    ]);
 
     for (const result of updates) {
       if (result.status === "rejected") {
@@ -3648,11 +3369,13 @@ async function recountAllVouches() {
       "[VOUCH COUNTER] Recount:",
       counterCache
     );
+
   } catch (error) {
     console.error(
       "[VOUCH COUNTER] Recount failed:",
       error
     );
+
   } finally {
     vouchCounterUpdateRunning = false;
 
@@ -3674,29 +3397,15 @@ function scheduleVouchCounterUpdate() {
 // ============================================================
 // VOUCH TUTORIAL SETTINGS
 // ============================================================
-//
-// SMALL INLINE /VOUCH DISPLAY.
-//
-// ============================================================
 
-const VOUCH_COMMAND_BOX =
-  "`/vouch`";
+const VOUCH_COMMAND_BOX = "`/vouch`";
 
 const VOUCH_TUTORIAL_CHANNELS = Object.freeze({
-  personal:
-    VOUCH_TUTORIAL_CHANNEL_ID,
-
-  market:
-    VOUCH_TUTORIAL_CHANNEL_ID,
-
-  invite:
-    INVITE_VOUCH_TUTORIAL_CHANNEL_ID,
-
-  giveaway:
-    GIVEAWAY_VOUCH_TUTORIAL_CHANNEL_ID,
-
-  converter:
-    CONVERTER_VOUCH_TUTORIAL_CHANNEL_ID
+  personal: VOUCH_TUTORIAL_CHANNEL_ID,
+  market: VOUCH_TUTORIAL_CHANNEL_ID,
+  invite: INVITE_VOUCH_TUTORIAL_CHANNEL_ID,
+  giveaway: GIVEAWAY_VOUCH_TUTORIAL_CHANNEL_ID,
+  converter: CONVERTER_VOUCH_TUTORIAL_CHANNEL_ID
 });
 
 // ============================================================
@@ -3904,7 +3613,7 @@ const VOUCH_TUTORIALS = {
 };
 
 // ============================================================
-// TUTORIAL COMMANDS
+// VOUCH TUTORIAL COMMANDS
 // ============================================================
 
 const VOUCH_TUTORIAL_COMMANDS = Object.freeze({
@@ -3917,8 +3626,7 @@ const VOUCH_TUTORIAL_COMMANDS = Object.freeze({
 });
 
 function makeVouchTutorialEmbed(type) {
-  const tutorial =
-    VOUCH_TUTORIALS[type];
+  const tutorial = VOUCH_TUTORIALS[type];
 
   if (!tutorial) {
     throw new Error(
@@ -3936,8 +3644,7 @@ function makeVouchTutorialEmbed(type) {
 }
 
 function makeVouchTutorialImageEmbeds(type) {
-  const tutorial =
-    VOUCH_TUTORIALS[type];
+  const tutorial = VOUCH_TUTORIALS[type];
 
   if (!tutorial) {
     return [];
@@ -3963,8 +3670,7 @@ function makeVouchTutorialImageEmbeds(type) {
 }
 
 function getVouchTutorialChannelId(type) {
-  const channelId =
-    VOUCH_TUTORIAL_CHANNELS[type];
+  const channelId = VOUCH_TUTORIAL_CHANNELS[type];
 
   if (!channelId) {
     throw new Error(
@@ -3979,8 +3685,7 @@ async function sendSingleVouchTutorial(
   guild,
   type
 ) {
-  const tutorial =
-    VOUCH_TUTORIALS[type];
+  const tutorial = VOUCH_TUTORIALS[type];
 
   if (!tutorial) {
     throw new Error(
@@ -3988,13 +3693,11 @@ async function sendSingleVouchTutorial(
     );
   }
 
-  const channelId =
-    getVouchTutorialChannelId(type);
+  const channelId = getVouchTutorialChannelId(type);
 
-  const channel =
-    await guild.channels.fetch(
-      channelId
-    );
+  const channel = await guild.channels.fetch(
+    channelId
+  );
 
   if (!channel?.send || !channel?.messages) {
     throw new Error(
@@ -4007,25 +3710,24 @@ async function sendSingleVouchTutorial(
     ...makeVouchTutorialImageEmbeds(type)
   ];
 
-  const result =
-    await upsertBotMessage(
-      channel,
+  const result = await upsertBotMessage(
+    channel,
 
-      message =>
-        message.embeds.some(
-          existing =>
-            existing.title === tutorial.title
-        ),
+    message =>
+      message.embeds.some(
+        existing =>
+          existing.title === tutorial.title
+      ),
 
-      {
-        content: "",
-        embeds,
-        components: [],
-        allowedMentions: NONE
-      },
+    {
+      content: "",
+      embeds,
+      components: [],
+      allowedMentions: NONE
+    },
 
-      10
-    );
+    10
+  );
 
   return {
     ...result,
@@ -4047,11 +3749,10 @@ async function sendVouchTutorial(guild) {
 
   for (const type of types) {
     try {
-      const result =
-        await sendSingleVouchTutorial(
-          guild,
-          type
-        );
+      const result = await sendSingleVouchTutorial(
+        guild,
+        type
+      );
 
       results.push({
         type,
@@ -4059,6 +3760,7 @@ async function sendVouchTutorial(guild) {
         success: true,
         updated: result.updated
       });
+
     } catch (error) {
       console.error(
         `[VOUCH TUTORIAL] ${type}:`,
@@ -4097,28 +3799,28 @@ async function handleVouchTutorialCommand(
 
   try {
     if (type === "all") {
-      const results =
-        await sendVouchTutorial(
-          message.guild
-        );
+      const results = await sendVouchTutorial(
+        message.guild
+      );
 
-      const successful =
-        results.filter(r => r.success);
+      const successful = results.filter(
+        r => r.success
+      );
 
-      const failed =
-        results.filter(r => !r.success);
+      const failed = results.filter(
+        r => !r.success
+      );
 
-      const details =
-        successful.map(r =>
-          `**${r.type}:** <#${r.channelId}>`
-        );
+      const details = successful.map(
+        r => `**${r.type}:** <#${r.channelId}>`
+      );
 
       if (failed.length) {
         details.push(
           "",
           "**Failed:**",
-          ...failed.map(r =>
-            `${r.type}: ${safeText(r.error, 150)}`
+          ...failed.map(
+            r => `${r.type}: ${safeText(r.error, 150)}`
           )
         );
       }
@@ -4132,11 +3834,10 @@ async function handleVouchTutorialCommand(
       });
     }
 
-    const result =
-      await sendSingleVouchTutorial(
-        message.guild,
-        type
-      );
+    const result = await sendSingleVouchTutorial(
+      message.guild,
+      type
+    );
 
     return message.reply({
       content:
@@ -4146,6 +3847,7 @@ async function handleVouchTutorialCommand(
 
       allowedMentions: NONE
     });
+
   } finally {
     locks.vouchTutorial.delete(key);
   }
@@ -4336,11 +4038,6 @@ async function sendVouchReminder(
 // ============================================================
 // HELP EMBED
 // ============================================================
-//
-// NO VERIFICATION APPROVAL COMMANDS.
-// NO TICKET CLOSE/DELETE COMMANDS.
-//
-// ============================================================
 
 function makeHelpEmbed() {
   return new EmbedBuilder()
@@ -4360,7 +4057,8 @@ function makeHelpEmbed() {
           "`/vouch` — Submit a vouch\n" +
           "`,afk [reason]` — Set AFK\n" +
           "`,pay` — Payment methods\n" +
-          "`,client` — Client role panel"
+          "`,client` — Client role panel\n" +
+          "`,welcome` — Verification welcome embed"
       },
 
       {
@@ -4496,8 +4194,7 @@ function paymentMethods() {
     {
       name: "Chime",
       details: "chuppysss",
-      url:
-        "https://app.chime.com/link/qr?u=chuppysss"
+      url: "https://app.chime.com/link/qr?u=chuppysss"
     },
 
     {
@@ -4538,8 +4235,7 @@ function makePaymentEmbed() {
 
   for (const method of paymentMethods()) {
     embed.addFields({
-      name:
-        method.name.slice(0, 256),
+      name: method.name.slice(0, 256),
 
       value:
         `\`${String(method.details || "Ask staff")
@@ -4552,23 +4248,24 @@ function makePaymentEmbed() {
 }
 
 function makePaymentButtons() {
-  const buttons =
-    paymentMethods()
-      .filter(
-        method => validPaymentUrl(method.url)
-      )
-      .slice(0, 5)
-      .map(
-        method =>
-          new ButtonBuilder()
-            .setLabel(method.name.slice(0, 80))
-            .setStyle(ButtonStyle.Link)
-            .setURL(method.url)
-      );
+  const buttons = paymentMethods()
+    .filter(
+      method => validPaymentUrl(method.url)
+    )
+    .slice(0, 5)
+    .map(
+      method =>
+        new ButtonBuilder()
+          .setLabel(method.name.slice(0, 80))
+          .setStyle(ButtonStyle.Link)
+          .setURL(method.url)
+    );
 
   return buttons.length
     ? [
-        new ActionRowBuilder().addComponents(buttons)
+        new ActionRowBuilder().addComponents(
+          buttons
+        )
       ]
     : [];
 }
@@ -4580,16 +4277,14 @@ async function sendPaymentEmbed(channel) {
     );
   }
 
-  const sent =
-    await channel.send({
-      content: "",
-      embeds: [
-        makePaymentEmbed()
-      ],
-      components:
-        makePaymentButtons(),
-      allowedMentions: NONE
-    });
+  const sent = await channel.send({
+    content: "",
+    embeds: [
+      makePaymentEmbed()
+    ],
+    components: makePaymentButtons(),
+    allowedMentions: NONE
+  });
 
   console.log(
     `[PAY] New payment embed ${sent.id}`
@@ -4649,40 +4344,39 @@ async function updateServiceMessage(
 // ============================================================
 
 async function sendDecorServices(channel) {
-  const embed =
-    new EmbedBuilder()
-      .setColor(WHITE)
-      .setDescription(
-        `# DECOR ${SERVICE_EMOJI}\n\n` +
+  const embed = new EmbedBuilder()
+    .setColor(WHITE)
+    .setDescription(
+      `# DECOR ${SERVICE_EMOJI}\n\n` +
 
-        "*original price • our price*\n\n" +
+      "*original price • our price*\n\n" +
 
-        "$4.99-$5.99 • **$3.00**\n" +
-        "$6.99-$8.99 • **$5.00**\n" +
-        "$9.99-$11.99 • **$8.00**\n" +
-        "$12.99-$14.99 • **$9.00**\n" +
-        "$15.99-$17.99 • **$10.00**\n" +
-        "$18.99-$20.00 • **$13.00**\n" +
-        "$21.99-$23.99 • **$15.00**\n\n" +
+      "$4.99-$5.99 • **$3.00**\n" +
+      "$6.99-$8.99 • **$5.00**\n" +
+      "$9.99-$11.99 • **$8.00**\n" +
+      "$12.99-$14.99 • **$9.00**\n" +
+      "$15.99-$17.99 • **$10.00**\n" +
+      "$18.99-$20.00 • **$13.00**\n" +
+      "$21.99-$23.99 • **$15.00**\n\n" +
 
-        `# BUNDLES ${SERVICE_EMOJI}\n\n` +
+      `# BUNDLES ${SERVICE_EMOJI}\n\n` +
 
-        "*original price • our price*\n\n" +
+      "*original price • our price*\n\n" +
 
-        "$8.99 • **$6.50**\n" +
-        "$10.99 • **$7.50**\n" +
-        "$12.99 • **$8.50**\n" +
-        "$14.99 • **$9.50**\n" +
-        "$17.99 • **$13.50**\n" +
-        "$21.99 • **$15.00**\n" +
-        "$22.99 • **$16.00**\n\n" +
+      "$8.99 • **$6.50**\n" +
+      "$10.99 • **$7.50**\n" +
+      "$12.99 • **$8.50**\n" +
+      "$14.99 • **$9.50**\n" +
+      "$17.99 • **$13.50**\n" +
+      "$21.99 • **$15.00**\n" +
+      "$22.99 • **$16.00**\n\n" +
 
-        "All legally purchased and sent the same day!\n\n" +
+      "All legally purchased and sent the same day!\n\n" +
 
-        `${PAYMENT_METHODS_TEXT}\n\n` +
+      `${PAYMENT_METHODS_TEXT}\n\n` +
 
-        "**.gg/chuppys**"
-      );
+      "**.gg/chuppys**"
+    );
 
   return updateServiceMessage(
     channel,
@@ -4696,20 +4390,19 @@ async function sendDecorServices(channel) {
 // ============================================================
 
 async function sendNitroServices(channel) {
-  const embed =
-    new EmbedBuilder()
-      .setColor(WHITE)
-      .setDescription(
-        `# NITRO ${SERVICE_EMOJI}\n\n` +
+  const embed = new EmbedBuilder()
+    .setColor(WHITE)
+    .setDescription(
+      `# NITRO ${SERVICE_EMOJI}\n\n` +
 
-        "**1 Month + No War — $7.25**\n\n" +
+      "**1 Month + No War — $7.25**\n\n" +
 
-        "**1 Month + War — $9.25**\n\n" +
+      "**1 Month + War — $9.25**\n\n" +
 
-        `${PAYMENT_METHODS_TEXT}\n\n` +
+      `${PAYMENT_METHODS_TEXT}\n\n` +
 
-        "**.gg/chuppys**"
-      );
+      "**.gg/chuppys**"
+    );
 
   return updateServiceMessage(
     channel,
@@ -4751,29 +4444,27 @@ async function sendBoostiesServices(channel) {
     [30, "$27.00"]
   ];
 
-  const lines =
-    list =>
-      list.map(
-        ([count, price]) =>
-          `${BOOST_EMOJI} **${count} • ${price}**`
-      ).join("\n");
+  const lines = list =>
+    list.map(
+      ([count, price]) =>
+        `${BOOST_EMOJI} **${count} • ${price}**`
+    ).join("\n");
 
-  const embed =
-    new EmbedBuilder()
-      .setColor(WHITE)
-      .setDescription(
-        `# 1 MONTH ${BOOST_EMOJI}\n\n` +
+  const embed = new EmbedBuilder()
+    .setColor(WHITE)
+    .setDescription(
+      `# 1 MONTH ${BOOST_EMOJI}\n\n` +
 
-        `${lines(one)}\n\n` +
+      `${lines(one)}\n\n` +
 
-        `# 3 MONTHS ${BOOST_EMOJI}\n\n` +
+      `# 3 MONTHS ${BOOST_EMOJI}\n\n` +
 
-        `${lines(three)}\n\n` +
+      `${lines(three)}\n\n` +
 
-        `${PAYMENT_METHODS_TEXT}\n\n` +
+      `${PAYMENT_METHODS_TEXT}\n\n` +
 
-        "**.gg/chuppys**"
-      );
+      "**.gg/chuppys**"
+    );
 
   return updateServiceMessage(
     channel,
@@ -4857,7 +4548,9 @@ function makeStaffEmbed() {
     );
 
     if (limit) {
-      lines.push(`Limit: ${limit}`);
+      lines.push(
+        `Limit: ${limit}`
+      );
     }
 
     lines.push(
@@ -4922,8 +4615,7 @@ async function sendEmbedToChannel(
   embed,
   label
 ) {
-  const channel =
-    await guild.channels.fetch(id);
+  const channel = await guild.channels.fetch(id);
 
   if (!channel?.send) {
     throw new Error(
@@ -4948,41 +4640,41 @@ async function sendRobuxCashoutEmbed(channel) {
     );
   }
 
-  const embed =
-    new EmbedBuilder()
-      .setColor(WHITE)
-      .setTitle(
-        "Cashing Out Robux\n\n"
-      )
-      .setThumbnail(
-        ROBUX_CASHOUT_THUMBNAIL_URL
-      )
-      .setDescription(
-        "RATES\n\n" +
+  const embed = new EmbedBuilder()
+    .setColor(WHITE)
+    .setTitle(
+      "Cashing Out Robux"
+    )
+    .setThumbnail(
+      ROBUX_CASHOUT_THUMBNAIL_URL
+    )
+    .setDescription(
+      "RATES\n\n" +
 
-        "**Below 10k**\n3/k\n\n" +
+      "**Below 10k**\n3/k\n\n" +
 
-        "**Above 10k**\n3.5/k\n\n" +
+      "**Above 10k**\n3.5/k\n\n" +
 
-        "-# make a cash out ticket now !! " +
-        "make sure u ping me in tickets " +
-        "<:uppyty:1561094713153429746>"
-      )
-      .setFooter({
-        text: BRAND
-      });
+      "-# make a cash out ticket now !! " +
+      "make sure u ping me in tickets " +
+      "<:uppyty:1561094713153429746>"
+    )
+    .setFooter({
+      text: BRAND
+    });
 
   return upsertBotMessage(
     channel,
 
     message =>
-      message.embeds.some(existing =>
-        (existing.title || "").startsWith(
-          "Cashing Out Robux"
-        ) ||
-        (existing.title || "").startsWith(
-          "Robux Cash out"
-        )
+      message.embeds.some(
+        existing =>
+          (existing.title || "").startsWith(
+            "Cashing Out Robux"
+          ) ||
+          (existing.title || "").startsWith(
+            "Robux Cash out"
+          )
       ),
 
     {
@@ -5024,10 +4716,9 @@ async function handleAFK(message) {
   const key =
     `${message.guild.id}:${message.author.id}`;
 
-  const match =
-    message.content.trim().match(
-      /^,afk(?:\s+([\s\S]*))?$/i
-    );
+  const match = message.content.trim().match(
+    /^,afk(?:\s+([\s\S]*))?$/i
+  );
 
   if (match) {
     const reason =
@@ -5077,10 +4768,9 @@ async function handleAFK(message) {
       continue;
     }
 
-    const info =
-      afkUsers.get(
-        `${message.guild.id}:${id}`
-      );
+    const info = afkUsers.get(
+      `${message.guild.id}:${id}`
+    );
 
     if (info) {
       await message.channel.send({
@@ -5121,8 +4811,7 @@ client.once(
       sendOrUpdateVerificationMessage()
     ];
 
-    const results =
-      await Promise.allSettled(tasks);
+    const results = await Promise.allSettled(tasks);
 
     for (const result of results) {
       if (result.status === "rejected") {
@@ -5152,11 +4841,11 @@ client.once(
     );
 
     console.log(
-      "[READY] Verification creation owned by tickets.js."
+      "[READY] ,welcome command enabled."
     );
 
     console.log(
-      "[READY] Duplicate index.js verification ticket system removed."
+      `[READY] Rules channel: ${RULES_CHANNEL_ID}`
     );
 
     console.log(
@@ -5164,52 +4853,28 @@ client.once(
     );
 
     console.log(
-      "[READY] No automatic verification role grants."
+      "[READY] Verification creation handled by tickets.js."
     );
 
     console.log(
-      "[READY] Verification commands hidden from /help."
+      "[READY] No automatic verification."
     );
 
     console.log(
-      "[READY] Category-specific vouch reminders enabled."
+      "[READY] Vouch tutorial commands enabled."
     );
 
     console.log(
-      "[READY] Five vouch tutorial commands enabled."
+      "[READY] Vouch reminders enabled."
     );
 
     console.log(
-      "[READY] Original vouch counter names preserved."
-    );
-
-    console.log(
-      "[READY] Chuppy total = personal + invite + giveaway + converter."
-    );
-
-    console.log(
-      "[READY] Server total = all five vouch sources."
-    );
-
-    console.log(
-      "[READY] Vouch duplicate recognition enabled."
-    );
-
-    console.log(
-      "[READY] Automatic vouch reactions enabled."
+      "[READY] Vouch counters enabled."
     );
 
     console.log(
       `[READY] Automatic vouch routing: ${AUTO_ROUTE_VOUCHES}`
     );
-
-    for (const [type, channelId] of Object.entries(
-      VOUCH_TUTORIAL_CHANNELS
-    )) {
-      console.log(
-        `[READY] ${type} tutorial -> ${channelId}`
-      );
-    }
   }
 );
 
@@ -5222,13 +4887,7 @@ client.on(
 
   async interaction => {
 
-    // ========================================================
-    // MODULE INTERACTIONS
-    // ========================================================
-
-    // tickets.js owns its own ticket buttons,
-    // verification button, unblacklist button,
-    // ticket select menu and ticket modals.
+    // Ticket module owns ticket interactions.
 
     if (
       interaction.isButton() &&
@@ -5253,9 +4912,7 @@ client.on(
       [
         "ticketpanel",
         "vouch"
-      ].includes(
-        interaction.commandName
-      )
+      ].includes(interaction.commandName)
     ) {
       return;
     }
@@ -5270,9 +4927,7 @@ client.on(
         "ticket_category",
         "ticket_open",
         "ticket_create"
-      ].includes(
-        interaction.customId
-      )
+      ].includes(interaction.customId)
     ) {
       return;
     }
@@ -5294,13 +4949,12 @@ client.on(
     try {
 
       // ======================================================
-      // OLD AUTO-VERIFY BUTTON — DISABLED
+      // OLD AUTO-VERIFY BUTTON
       // ======================================================
 
       if (
         interaction.isButton() &&
-        interaction.customId ===
-          VERIFY_BUTTON_ID
+        interaction.customId === VERIFY_BUTTON_ID
       ) {
         return interaction.reply(
           ephemeral(
@@ -5312,7 +4966,7 @@ client.on(
       }
 
       // ======================================================
-      // OLD INDEPENDENT VERIFICATION BUTTON
+      // OLD VERIFICATION BUTTON
       // ======================================================
 
       if (
@@ -5324,7 +4978,7 @@ client.on(
           ephemeral(
             "This verification panel has been updated.\n\n" +
             `Visit <#${VERIFY_CHANNEL_ID}> ` +
-            "and use the current Create Verification Ticket button."
+            "and use the current verification ticket button."
           )
         );
       }
@@ -5333,17 +4987,14 @@ client.on(
       // SELF ROLE SELECTION
       // ======================================================
 
-      if (
-        interaction.isStringSelectMenu()
-      ) {
-        const type =
-          Object.keys(
-            ROLE_MENU_CONFIG
-          ).find(
-            key =>
-              ROLE_MENU_CONFIG[key].customId ===
-              interaction.customId
-          );
+      if (interaction.isStringSelectMenu()) {
+        const type = Object.keys(
+          ROLE_MENU_CONFIG
+        ).find(
+          key =>
+            ROLE_MENU_CONFIG[key].customId ===
+            interaction.customId
+        );
 
         if (type) {
           return await handleRoleSelection(
@@ -5365,6 +5016,7 @@ client.on(
           embeds: [
             makeHelpEmbed()
           ],
+
           flags: EPHEMERAL
         });
       }
@@ -5426,10 +5078,9 @@ client.on(
           )
           .setTimestamp();
 
-        const channel =
-          await client.channels.fetch(
-            REQUEST_CHANNEL_ID
-          );
+        const channel = await client.channels.fetch(
+          REQUEST_CHANNEL_ID
+        );
 
         await channel.send({
           embeds: [embed],
@@ -5462,11 +5113,10 @@ client.on(
           flags: EPHEMERAL
         });
 
-        const member =
-          await interaction.guild.members.fetch({
-            user: interaction.user.id,
-            force: true
-          });
+        const member = await interaction.guild.members.fetch({
+          user: interaction.user.id,
+          force: true
+        });
 
         if (await isBlacklisted(member)) {
           return interaction.editReply(
@@ -5539,9 +5189,7 @@ client.on(
 
         if (
           picture &&
-          !picture.contentType?.startsWith(
-            "image/"
-          )
+          !picture.contentType?.startsWith("image/")
         ) {
           return interaction.reply(
             ephemeral(
@@ -5575,32 +5223,20 @@ client.on(
         const buttons =
           new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-              .setCustomId(
-                "question_ticket"
-              )
-              .setLabel(
-                "Make a Support Ticket"
-              )
+              .setCustomId("question_ticket")
+              .setLabel("Make a Support Ticket")
               .setEmoji({
                 id: VERIFY_BUTTON_EMOJI_ID
               })
-              .setStyle(
-                ButtonStyle.Secondary
-              ),
+              .setStyle(ButtonStyle.Secondary),
 
             new ButtonBuilder()
-              .setCustomId(
-                "question_reply"
-              )
-              .setLabel(
-                "Reply to Question"
-              )
+              .setCustomId("question_reply")
+              .setLabel("Reply to Question")
               .setEmoji({
                 id: VERIFY_BUTTON_EMOJI_ID
               })
-              .setStyle(
-                ButtonStyle.Primary
-              )
+              .setStyle(ButtonStyle.Primary)
           );
 
         await interaction.channel.send({
@@ -5620,30 +5256,25 @@ client.on(
 
       if (
         interaction.isButton() &&
-        interaction.customId.startsWith(
-          "question_ticket"
-        )
+        interaction.customId === "question_ticket"
       ) {
-        const embed =
-          new EmbedBuilder()
-            .setColor(WHITE)
-            .setThumbnail(
-              QUESTION_EMOJI_URL
-            )
-            .setDescription(
-              "This question requires a support ticket.\n\n" +
+        const embed = new EmbedBuilder()
+          .setColor(WHITE)
+          .setThumbnail(QUESTION_EMOJI_URL)
+          .setDescription(
+            "This question requires a support ticket.\n\n" +
 
-              `Please make one in <#${QUESTION_TICKET_CHANNEL_ID}> ` +
-              "using the ticket dropdown menu.\n\n" +
+            `Please make one in <#${QUESTION_TICKET_CHANNEL_ID}> ` +
+            "using the ticket dropdown menu.\n\n" +
 
-              `Our <@&${TICKET_SUPPORT_ROLE_ID}> team ` +
-              "will assist you there.\n\n" +
+            `Our <@&${TICKET_SUPPORT_ROLE_ID}> team ` +
+            "will assist you there.\n\n" +
 
-              "Thank you! <:uppyty:1561094713153429746>"
-            )
-            .setFooter({
-              text: BRAND
-            });
+            "Thank you! <:uppyty:1561094713153429746>"
+          )
+          .setFooter({
+            text: BRAND
+          });
 
         return interaction.reply({
           embeds: [embed],
@@ -5683,45 +5314,41 @@ client.on(
           )?.[1] ||
           null;
 
-        const suffix =
-          userId
-            ? `${userId}:${interaction.message.id}`
-            : interaction.message.id;
+        const suffix = userId
+          ? `${userId}:${interaction.message.id}`
+          : interaction.message.id;
 
-        const modal =
-          new ModalBuilder()
-            .setCustomId(
-              `question_reply_modal:${suffix}`
-            )
-            .setTitle(
-              "Reply to Question"
-            );
+        const modal = new ModalBuilder()
+          .setCustomId(
+            `question_reply_modal:${suffix}`
+          )
+          .setTitle(
+            "Reply to Question"
+          );
 
-        const input =
-          new TextInputBuilder()
-            .setCustomId(
-              "question_reply_text"
-            )
-            .setLabel(
-              "Your response"
-            )
-            .setPlaceholder(
-              "Write your response..."
-            )
-            .setStyle(
-              TextInputStyle.Paragraph
-            )
-            .setRequired(true)
-            .setMaxLength(2000);
+        const input = new TextInputBuilder()
+          .setCustomId(
+            "question_reply_text"
+          )
+          .setLabel(
+            "Your response"
+          )
+          .setPlaceholder(
+            "Write your response..."
+          )
+          .setStyle(
+            TextInputStyle.Paragraph
+          )
+          .setRequired(true)
+          .setMaxLength(2000);
 
         modal.addComponents(
-          new ActionRowBuilder()
-            .addComponents(input)
+          new ActionRowBuilder().addComponents(
+            input
+          )
         );
 
-        return interaction.showModal(
-          modal
-        );
+        return interaction.showModal(modal);
       }
 
       // ======================================================
@@ -5759,10 +5386,9 @@ client.on(
             ? parts[1]
             : null;
 
-        const channel =
-          await client.channels.fetch(
-            QUESTION_CHANNEL_ID
-          );
+        const channel = await client.channels.fetch(
+          QUESTION_CHANNEL_ID
+        );
 
         const questionMessage =
           await channel?.messages?.fetch(
@@ -5776,8 +5402,7 @@ client.on(
         }
 
         const footer =
-          questionMessage.embeds[0]?.footer?.text ||
-          "";
+          questionMessage.embeds[0]?.footer?.text || "";
 
         const userId =
           footer.match(
@@ -5791,10 +5416,9 @@ client.on(
           );
         }
 
-        const user =
-          await client.users.fetch(
-            userId
-          ).catch(() => null);
+        const user = await client.users.fetch(
+          userId
+        ).catch(() => null);
 
         if (!user) {
           return interaction.editReply(
@@ -5824,6 +5448,7 @@ client.on(
             embeds: [embed],
             allowedMentions: NONE
           });
+
         } catch {
           return interaction.editReply(
             "I couldn't DM the user. Their DMs may be disabled."
@@ -5859,13 +5484,10 @@ client.on(
       return;
     }
 
-    const raw =
-      message.content.trim();
+    const raw = message.content.trim();
+    const cmd = raw.toLowerCase();
 
-    const cmd =
-      raw.toLowerCase();
-
-    // Normal ticket commands are handled by tickets.js.
+    // Ticket commands belong to tickets.js.
 
     if (
       /^,(?:claim|forceclaim|close|reopen|delete)(?:\s|$)/i
@@ -5874,28 +5496,35 @@ client.on(
       return;
     }
 
-    const reply =
-      content =>
-        message.reply({
-          content,
+    const reply = content =>
+      message.reply({
+        content,
 
-          allowedMentions: {
-            parse: [],
-            repliedUser: false
-          }
-        });
+        allowedMentions: {
+          parse: [],
+          repliedUser: false
+        }
+      });
 
     try {
 
       // ======================================================
-      // OLD VERIFICATION CLOSE COMMANDS
+      // FIXED ,WELCOME COMMAND
       // ======================================================
       //
-      // These old commands are no longer used.
-      // tickets.js owns ticket closing.
+      // Same as ,client.
+      // No special permission checks.
+      // Works in any accessible text channel.
       //
-      // Delete an old typed command when possible.
-      //
+      // ======================================================
+
+      if (cmd === ",welcome") {
+        await handleWelcomeCommand(message);
+        return;
+      }
+
+      // ======================================================
+      // OLD VERIFICATION CLOSE COMMANDS
       // ======================================================
 
       if (
@@ -5908,15 +5537,12 @@ client.on(
           )
         ) {
           const hidden =
-            await hideVerificationCommand(
-              message
-            );
+            await hideVerificationCommand(message);
 
           if (hidden) {
             await privateNotice(
               message.author,
-              "Verification tickets now use " +
-              "the normal ticket controls."
+              "Verification tickets now use the normal ticket controls."
             );
           }
         }
@@ -5928,24 +5554,17 @@ client.on(
       // HIDDEN MANUAL VERIFICATION APPROVAL
       // ======================================================
 
-      const verifyCommand =
-        raw.match(
-          /^,r\s+<@!?(\d{17,20})>\s+c\s*$/i
-        );
+      const verifyCommand = raw.match(
+        /^,r\s+<@!?(\d{17,20})>\s+c\s*$/i
+      );
 
       if (verifyCommand) {
-        if (
-          !isVerificationStaff(
-            message.member
-          )
-        ) {
+        if (!isVerificationStaff(message.member)) {
           return;
         }
 
         const hidden =
-          await hideVerificationCommand(
-            message
-          );
+          await hideVerificationCommand(message);
 
         if (!hidden) {
           return;
@@ -6047,6 +5666,7 @@ client.on(
               allowedMentions: NONE
             }
           );
+
         } finally {
           locks.client.delete(
             message.channel.id
@@ -6088,6 +5708,7 @@ client.on(
               allowedMentions: NONE
             }
           );
+
         } finally {
           locks.promoter.delete(
             message.channel.id
@@ -6126,9 +5747,7 @@ client.on(
           );
         }
 
-        await sendRankedRoles(
-          message.guild
-        );
+        await sendRankedRoles(message.guild);
 
         return reply(
           "The ranked roles embed has been sent!"
@@ -6140,10 +5759,9 @@ client.on(
       // ======================================================
 
       if (/^,r(?:\s|$)/i.test(raw)) {
-        const match =
-          raw.match(
-            /^,r\s+<@!?(\d{17,20})>\s+(b|r|rmarket|rinv|rgive|rconv|rall)(?:\s+([\s\S]*))?$/i
-          );
+        const match = raw.match(
+          /^,r\s+<@!?(\d{17,20})>\s+(b|r|rmarket|rinv|rgive|rconv|rall)(?:\s+([\s\S]*))?$/i
+        );
 
         if (!match) {
           return reply(
@@ -6168,10 +5786,7 @@ client.on(
         const action =
           actionRaw.toLowerCase();
 
-        // ====================================================
         // BLACKLIST
-        // ====================================================
-
         if (action === "b") {
           return handleBlacklistCommand(
             message,
@@ -6180,10 +5795,7 @@ client.on(
           );
         }
 
-        // ====================================================
         // VOUCH REMINDERS
-        // ====================================================
-
         if (
           !isVerificationStaff(
             message.member
@@ -6317,35 +5929,34 @@ client.on(
         }
 
         try {
-          const embed =
-            new EmbedBuilder()
-              .setColor(WHITE)
-              .setDescription(
-                "**Interested in selling at .gg/chuppys**\n\n" +
+          const embed = new EmbedBuilder()
+            .setColor(WHITE)
+            .setDescription(
+              "**Interested in selling at .gg/chuppys**\n\n" +
 
-                "**Permanent fees**\n\n" +
+              "**Permanent fees**\n\n" +
 
-                "$10 - permanent fee with no personal commands\n\n" +
+              "$10 - permanent fee with no personal commands\n\n" +
 
-                "$15 - permanent fee with personal commands\n\n" +
+              "$15 - permanent fee with personal commands\n\n" +
 
-                "Personal commands are commands we can create " +
-                "for you or insert your code for.\n\n" +
+              "Personal commands are commands we can create " +
+              "for you or insert your code for.\n\n" +
 
-                "Your limit is based primarily on your " +
-                "personal vouches. Server vouches from " +
-                "other sellers do not increase your limit.\n\n" +
+              "Your limit is based primarily on your " +
+              "personal vouches. Server vouches from " +
+              "other sellers do not increase your limit.\n\n" +
 
-                "After your limit is determined, every " +
-                "2 vouches gained in .gg/chuppys increases " +
-                "your limit by $5.\n\n" +
+              "After your limit is determined, every " +
+              "2 vouches gained in .gg/chuppys increases " +
+              "your limit by $5.\n\n" +
 
-                `If you agree, please ping <@&${TICKET_SUPPORT_ROLE_ID}> ` +
-                "to assist you further. Thank you!"
-              )
-              .setFooter({
-                text: BRAND
-              });
+              `If you agree, please ping <@&${TICKET_SUPPORT_ROLE_ID}> ` +
+              "to assist you further. Thank you!"
+            )
+            .setFooter({
+              text: BRAND
+            });
 
           await upsertBotMessage(
             message.channel,
@@ -6365,6 +5976,7 @@ client.on(
               allowedMentions: NONE
             }
           );
+
         } finally {
           locks.seller.delete(
             message.channel.id
@@ -6409,9 +6021,8 @@ client.on(
         }
 
         try {
-          await sendPaymentEmbed(
-            message.channel
-          );
+          await sendPaymentEmbed(message.channel);
+
         } catch (error) {
           console.error(
             "[PAY] Error:",
@@ -6421,6 +6032,7 @@ client.on(
           await reply(
             "I couldn't send the payment methods."
           );
+
         } finally {
           locks.payment.delete(
             message.channel.id
@@ -6532,10 +6144,9 @@ client.on(
       // ======================================================
 
       if (cmd === "!testwelcome") {
-        const channel =
-          await client.channels.fetch(
-            WELCOME_CHANNEL_ID
-          );
+        const channel = await client.channels.fetch(
+          WELCOME_CHANNEL_ID
+        );
 
         const embed = whiteEmbed(
           `Welcome to .gg/chuppys ${AFK_RETURN_EMOJI}`,
@@ -6555,9 +6166,7 @@ client.on(
           });
 
         await channel.send({
-          content:
-            `<@${message.author.id}>`,
-
+          content: `<@${message.author.id}>`,
           embeds: [embed],
 
           allowedMentions: {
@@ -6575,10 +6184,9 @@ client.on(
       // ======================================================
 
       if (cmd === "!testgoodbye") {
-        const channel =
-          await client.channels.fetch(
-            GOODBYE_CHANNEL_ID
-          );
+        const channel = await client.channels.fetch(
+          GOODBYE_CHANNEL_ID
+        );
 
         const embed = whiteEmbed(
           `Goodbye ${AFK_GOING_EMOJI}`,
@@ -6638,6 +6246,7 @@ client.on(
       await message.react(
         INVITE_REACTION_EMOJI
       );
+
     } catch (error) {
       console.error(
         "[INVITE REACTION]",
@@ -6672,6 +6281,7 @@ client.on(
       if (AUTO_ROUTE_VOUCHES) {
         await routeVouch(message);
       }
+
     } catch (error) {
       console.error(
         "[VOUCH MESSAGE] Error:",
@@ -6684,7 +6294,7 @@ client.on(
 );
 
 // ============================================================
-// VOUCH DELETE
+// VOUCH MESSAGE DELETE
 // ============================================================
 
 client.on(
@@ -6747,7 +6357,7 @@ client.on(
 );
 
 // ============================================================
-// WELCOME
+// AUTOMATIC MEMBER WELCOME
 // ============================================================
 
 client.on(
@@ -6764,10 +6374,9 @@ client.on(
         );
       });
 
-      const channel =
-        await member.guild.channels.fetch(
-          WELCOME_CHANNEL_ID
-        );
+      const channel = await member.guild.channels.fetch(
+        WELCOME_CHANNEL_ID
+      );
 
       if (!channel?.send) {
         return;
@@ -6792,15 +6401,14 @@ client.on(
         });
 
       await channel.send({
-        content:
-          `${member}`,
-
+        content: `${member}`,
         embeds: [embed],
 
         allowedMentions: {
           users: [member.id]
         }
       });
+
     } catch (error) {
       console.error(
         "[WELCOME] Error:",
@@ -6819,10 +6427,9 @@ client.on(
 
   async member => {
     try {
-      const channel =
-        await member.guild.channels.fetch(
-          GOODBYE_CHANNEL_ID
-        );
+      const channel = await member.guild.channels.fetch(
+        GOODBYE_CHANNEL_ID
+      );
 
       if (!channel?.send) {
         return;
@@ -6846,6 +6453,7 @@ client.on(
       await channel.send({
         embeds: [embed]
       });
+
     } catch (error) {
       console.error(
         "[GOODBYE] Error:",
@@ -6881,10 +6489,12 @@ if (!TOKEN) {
   console.error(
     "[LOGIN] DISCORD_BOT_TOKEN is missing."
   );
+
 } else if (!GUILD_ID) {
   console.error(
     "[LOGIN] DISCORD_GUILD_ID is missing."
   );
+
 } else {
   client.login(TOKEN).catch(error => {
     console.error(
