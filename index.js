@@ -2224,7 +2224,7 @@ async function approveVerification(message, targetId) {
       `${guild.id}/${RULES_CHANNEL_ID}`;
 
     const embed = whiteEmbed(
-      "Verification Approved ♡",
+      "Verification Approved ",
 
       `**Member:** <@${member.id}>\n\n` +
 
@@ -2234,12 +2234,12 @@ async function approveVerification(message, targetId) {
 
       "You now have access to **.gg/chuppys**.\n\n" +
 
-      "**♡ SERVER RULES**\n" +
+      "** SERVER RULES**\n" +
       `Please review <#${RULES_CHANNEL_ID}>.\n\n` +
 
       `[Click Here to Read the Rules](${rulesUrl})\n\n` +
 
-      "**♡ SERVER ROLES**\n" +
+      "** SERVER ROLES**\n" +
       `Please select your roles in <#${ROLES_CHANNEL_ID}>.\n\n` +
 
       "Thank you for verifying! Welcome to Chuppy's! ♡"
@@ -4743,7 +4743,6 @@ async function sendBoostiesServices(channel) {
 
 function makeSellersEmbed() {
   const sellers = [
-    ["1192248188409749684", "services seller", "no limit"],
     ["1079241163455873074", "seller", "no limit"],
     ["1032693136163622993", "seller", "$75"],
     ["1320199904219496530", "seller", "$65"],
@@ -4752,8 +4751,7 @@ function makeSellersEmbed() {
     ["1472856287527309313", "seller", "$100"],
     ["1269188505935024141", "seller", "$250"],
     ["1427118849215692920", "seller", "$50"],
-    ["1328450205774909441", "seller", "$100"],
-    ["1475237851414401105", "seller", "$75"]
+    ["1328450205774909441", "seller", "$100"]
   ];
 
   const lines = [
