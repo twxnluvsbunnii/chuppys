@@ -5989,6 +5989,9 @@ async function deleteTicket(
  await privateReply(context, "Finalizing the ticket archive.").catch(() => {});
 
  let deleted = false;
+ let archive = null;
+ let logs = null;
+ let archiveVerified = false;
 
  try {
 await freezeTicket(
@@ -5996,7 +5999,7 @@ await freezeTicket(
    state
 );
 
-let archive = null;
+archive = null;
 
 for (
  let attempt = 1;
@@ -6039,7 +6042,7 @@ await commitArchive(
    archive
 );
 
-let logs =
+logs =
   await textChannel(
      channel.guild,
      IDS.logs,
@@ -6081,9 +6084,13 @@ if (
 
 // Only delete after the final archive is verified.
 
-await channel.delete(
-   `Ticket deleted by ${member.id}; archive verified`
-);
+archiveVerified = true;
+try {
+ await channel.delete(`Ticket deleted by ${member.id}; archive verified`);
+} catch (error) {
+ if (Number(error.code) !== 10003) throw error;
+ // Discord confirms the ticket channel no longer exists.
+}
 
 deleted = true;
 
@@ -6143,6 +6150,22 @@ await saveState(
  );
 
 } catch (error) {
+  if (!deleted && Number(error.code) === 10003) {
+    // Confirm the missing channel is the ticket, not the archive.
+    const missing = await channel.guild.channels.fetch(channel.id, {force:true}).then(c => !c, e => Number(e.code) === 10003);
+    if (missing) {
+      deleted = true;
+      state.deleted = true;
+      await saveState(channel, entry).catch(console.error);
+      if (archiveVerified && archive && logs) {
+        const root = await logs.messages.fetch(archive.archiveRootId).catch(() => null);
+        if (root) { const payload = archiveRootPayload(state, archive); payload.embeds[0].addFields({name:"Ticket Status",value:"Deleted • Archive preserved"}); await root.edit(payload).catch(console.error); }
+      } else {
+        await reportError(channel.guild, "Ticket channel already missing; archive not verified during deletion", error, state).catch(console.error);
+      }
+      await privateReply(context, archiveVerified ? "Ticket already deleted; archive preserved." : "Ticket channel no longer exists. Check the private archive.").catch(() => {});
+    }
+  }
   if (!deleted) {
     await applyPermissions(
       channel,
