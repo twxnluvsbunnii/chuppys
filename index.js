@@ -1,33 +1,37 @@
-
 "use strict";
 
 // ============================================================
 // CHUPPYS MAIN BOT — DISCORD.JS V14 / RENDER
-// COMPLETE UPDATED INDEX.JS
+// COMPLETE INDEX.JS
 // ============================================================
 //
 // MODULES:
 // - vouch.js
 // - transactions.js
 // - tickets.js
+// - tiktok.js
 //
-// UPDATES:
-// - Shorter ,welcome embed
-// - No hearts in ,welcome
-// - Faster ,welcome response
-// - No 1,000-message scan for ,welcome
-// - Repeated ,welcome edits cached embed
-// - No staff restriction on ,welcome
-// - Correct rules channel for verification
-// - All existing systems preserved
+// TIKTOK:
+// - Automatic live detection
+// - minitwxn
+// - twxn (@a04120326)
+// - Automatic live announcement embeds
+// - Separate TikTok error handling
+// - No additional Discord client
 //
-// REQUIREMENTS:
-// - Node.js 18+
-// - discord.js v14
-// - Message Content intent enabled
-// - Server Members intent enabled
-// - DISCORD_BOT_TOKEN environment variable
-// - DISCORD_GUILD_ID environment variable
+// EXISTING SYSTEMS:
+// - Manual verification
+// - Fast ,welcome command
+// - Vouches and automatic counters
+// - Transactions
+// - Tickets
+// - Blacklist and appeals
+// - Self roles
+// - Payment methods
+// - Questions and requests
+// - Service commands
+// - AFK
+// - Welcome and goodbye
 //
 // Run only one instance on Render.
 //
@@ -138,7 +142,6 @@ const QUESTION_TICKET_CHANNEL_ID =
 const TICKET_SUPPORT_ROLE_ID =
   "1563003884656398406";
 
-// Correct rules channel.
 const RULES_CHANNEL_ID =
   "1551275482857865336";
 
@@ -326,7 +329,6 @@ const WELCOME_ROLE_ID =
 const VERIFICATION_TICKET_CATEGORY_ID =
   process.env.VERIFICATION_TICKET_CATEGORY_ID || "";
 
-// Updated welcome title — no hearts.
 const VERIFICATION_WELCOME_TITLE =
   "Welcome to Chuppy's";
 
@@ -603,13 +605,6 @@ const locks = {
   verifyApprove: new Set()
 };
 
-// Fast welcome message tracking.
-//
-// Stores the message ID by channel.
-// No full message-history scan required.
-//
-// Memory resets when the bot restarts.
-
 const welcomeMessageIds = new Map();
 
 const blacklistRoleJobs = new Map();
@@ -620,6 +615,8 @@ let vouchCounterRecountRequested = false;
 let counterCache = null;
 
 const routedMessages = new Set();
+
+let tiktokModuleLoaded = false;
 
 // ============================================================
 // DISCORD CLIENT
@@ -635,11 +632,15 @@ const client = new Client({
 });
 
 // ============================================================
-// LOAD MODULES
+// LOAD VOUCH AND TRANSACTION MODULES
 // ============================================================
 
 require("./vouch")(client);
 require("./transactions")(client);
+
+// ============================================================
+// LOAD TICKET MODULE
+// ============================================================
 
 const ticketModule = require("./tickets");
 
@@ -657,6 +658,64 @@ ticketModule(client);
 console.log(
   "[MODULES] Vouch, transactions and tickets loaded."
 );
+
+// ============================================================
+// LOAD TIKTOK MODULE
+// ============================================================
+//
+// tiktok.js owns all TikTok live detection.
+//
+// Accounts:
+// - @minitwxn
+// - @a04120326 (twxn)
+//
+// Announcement channel:
+// 1574946167274348544
+//
+// Thumbnail:
+// <:zymochasing:1575025948993003590>
+//
+// The same Discord client is passed to tiktok.js.
+//
+// TikTok registers its own ClientReady listener.
+// Do not initialize it a second time inside READY.
+//
+// ============================================================
+
+try {
+  const tiktokModule = require("./tiktok");
+
+  const setupTikTok =
+    typeof tiktokModule === "function"
+      ? tiktokModule
+      : tiktokModule.setupTikTok;
+
+  if (typeof setupTikTok !== "function") {
+    throw new Error(
+      "tiktok.js must export a setup function."
+    );
+  }
+
+  setupTikTok(client);
+
+  tiktokModuleLoaded = true;
+
+  console.log(
+    "[MODULES] TikTok live notification module loaded."
+  );
+
+} catch (error) {
+  tiktokModuleLoaded = false;
+
+  console.error(
+    "[TIKTOK] Module failed to load:",
+    error
+  );
+
+  console.warn(
+    "[TIKTOK] Main bot will continue without TikTok notifications."
+  );
+}
 
 // ============================================================
 // GENERAL HELPERS
@@ -779,12 +838,6 @@ async function interactionError(interaction, error) {
 // ============================================================
 // BOT MESSAGE HELPERS
 // ============================================================
-//
-// Used for other panel commands.
-//
-// ,welcome DOES NOT use the history-scanning helper.
-//
-// ============================================================
 
 async function findBotMessages(
   channel,
@@ -862,21 +915,6 @@ async function upsertBotMessage(
 // ============================================================
 // FAST ,WELCOME EMBED
 // ============================================================
-//
-// COMMAND:
-// ,welcome
-//
-// FEATURES:
-// - Short professional message
-// - No hearts
-// - White embed
-// - No staff restrictions
-// - No ticket category restrictions
-// - Immediate send on first command
-// - Edits cached message on repeated commands
-// - No history scan
-//
-// ============================================================
 
 function makeVerificationWelcomeEmbed() {
   return new EmbedBuilder()
@@ -911,10 +949,6 @@ function makeVerificationWelcomeEmbed() {
     });
 }
 
-// ============================================================
-// FAST ,WELCOME COMMAND HANDLER
-// ============================================================
-
 async function handleWelcomeCommand(message) {
   const channelId = message.channel.id;
 
@@ -935,15 +969,8 @@ async function handleWelcomeCommand(message) {
     const previousMessageId =
       welcomeMessageIds.get(channelId);
 
-    // ========================================================
-    // UPDATE PREVIOUS CACHED WELCOME
-    // ========================================================
-
     if (previousMessageId) {
       try {
-        // Direct message fetch only.
-        // No searching through channel history.
-
         const previousMessage =
           message.channel.messages.cache.get(
             previousMessageId
@@ -974,10 +1001,6 @@ async function handleWelcomeCommand(message) {
 
       welcomeMessageIds.delete(channelId);
     }
-
-    // ========================================================
-    // SEND NEW WELCOME IMMEDIATELY
-    // ========================================================
 
     const sent = await message.channel.send(
       payload
@@ -2068,11 +2091,6 @@ async function hideVerificationCommand(message) {
 
 // ============================================================
 // MANUAL VERIFICATION
-// ============================================================
-//
-// COMMAND:
-// ,r @user c
-//
 // ============================================================
 
 async function approveVerification(message, targetId) {
@@ -3485,9 +3503,6 @@ async function recountAllVouches() {
     const converterCount =
       uniqueVouches(converterMessages);
 
-    // CHUPPY TOTAL:
-    // PERSONAL + INVITE + GIVEAWAY + CONVERTER
-
     const chuppyTotal =
       uniqueVouches([
         ...personalMessages,
@@ -3495,9 +3510,6 @@ async function recountAllVouches() {
         ...giveawayMessages,
         ...converterMessages
       ]);
-
-    // SERVER TOTAL:
-    // ALL FIVE VOUCH SOURCES
 
     const serverTotal =
       uniqueVouches([
@@ -4182,7 +4194,7 @@ function makeGiveawayVouchReminder() {
     "**HOW TO VOUCH**\n\n" +
     VOUCH_COMMAND_BOX + "\n\n" +
 
-    "Select **Giveaway**, complete the form, " +
+    "Select **Giveaway**, complete the form " +
     "and attach proof of your received reward.\n\n" +
 
     "Only one genuine vouch per completed reward."
@@ -4406,14 +4418,14 @@ function makePromoterEmbed() {
     "• Represent Chuppys positively.\n" +
     "• Follow platform rules and avoid spam.\n\n" +
 
-    "**Promoter Application Questions**\n" +
+    "**Promoter Application Questions**\n\n" +
 
     "1. Do you have a following base? " +
     "How many followers and on which platform?\n\n" +
 
     "2. How many invites do you think you will gain monthly?\n\n" +
 
-    "**Payment Information**\n" +
+    "**Payment Information**\n\n" +
 
     "Promoters are paid **monthly**. " +
     "Details will be discussed with management."
@@ -5071,6 +5083,17 @@ client.once(
       }
     );
 
+    // TikTok starts from its own ClientReady listener.
+    // Do not call setupTikTok again here.
+
+    console.log(
+      `[READY] TikTok module: ${
+        tiktokModuleLoaded
+          ? "Initialized"
+          : "Unavailable"
+      }`
+    );
+
     const tasks = [
       registerQuestionCommand(),
       recountAllVouches(),
@@ -5162,9 +5185,7 @@ client.on(
 
   async interaction => {
 
-    // ========================================================
-    // TICKET MODULE INTERACTIONS
-    // ========================================================
+    // Ticket module interactions.
 
     if (
       interaction.isButton() &&
@@ -5225,9 +5246,7 @@ client.on(
 
     try {
 
-      // ======================================================
-      // OLD AUTO-VERIFY BUTTON
-      // ======================================================
+      // Old automatic verification button.
 
       if (
         interaction.isButton() &&
@@ -5243,9 +5262,7 @@ client.on(
         );
       }
 
-      // ======================================================
-      // OLD VERIFICATION BUTTON
-      // ======================================================
+      // Old verification button.
 
       if (
         interaction.isButton() &&
@@ -5261,9 +5278,7 @@ client.on(
         );
       }
 
-      // ======================================================
-      // SELF ROLE SELECTION
-      // ======================================================
+      // Self role selection.
 
       if (
         interaction.isStringSelectMenu()
@@ -5285,9 +5300,7 @@ client.on(
         }
       }
 
-      // ======================================================
-      // /HELP
-      // ======================================================
+      // /help
 
       if (
         interaction.isChatInputCommand() &&
@@ -5301,9 +5314,7 @@ client.on(
         });
       }
 
-      // ======================================================
-      // /REQUEST
-      // ======================================================
+      // /request
 
       if (
         interaction.isChatInputCommand() &&
@@ -5373,9 +5384,7 @@ client.on(
         );
       }
 
-      // ======================================================
-      // CLIENT ROLE BUTTON
-      // ======================================================
+      // Client role button.
 
       if (
         interaction.isButton() &&
@@ -5438,9 +5447,7 @@ client.on(
         );
       }
 
-      // ======================================================
-      // /QUESTION
-      // ======================================================
+      // /question
 
       if (
         interaction.isChatInputCommand() &&
@@ -5547,9 +5554,7 @@ client.on(
         );
       }
 
-      // ======================================================
-      // QUESTION TICKET BUTTON
-      // ======================================================
+      // Question ticket button.
 
       if (
         interaction.isButton() &&
@@ -5584,9 +5589,7 @@ client.on(
         });
       }
 
-      // ======================================================
-      // QUESTION REPLY BUTTON
-      // ======================================================
+      // Question reply button.
 
       if (
         interaction.isButton() &&
@@ -5656,9 +5659,7 @@ client.on(
         );
       }
 
-      // ======================================================
-      // QUESTION REPLY MODAL
-      // ======================================================
+      // Question reply modal.
 
       if (
         interaction.isModalSubmit() &&
@@ -5798,10 +5799,10 @@ client.on(
     const cmd =
       raw.toLowerCase();
 
-    // Normal ticket commands belong to tickets.js.
+    // Ticket commands belong to tickets.js.
 
     if (
-      /^,(?:claim|forceclaim|close|reopen|delete)(?:\s|$)/i
+      /^,(?:claim|forceclaim|close|reopen|delete|recoverlogs)(?:\s|$)/i
         .test(raw)
     ) {
       return;
@@ -5820,19 +5821,15 @@ client.on(
 
     try {
 
-      // ======================================================
-      // FAST ,WELCOME
-      // ======================================================
+      // ,welcome
 
       if (cmd === ",welcome") {
-        return handleWelcomeCommand(
+        return await handleWelcomeCommand(
           message
         );
       }
 
-      // ======================================================
-      // OLD VERIFICATION CLOSE COMMANDS
-      // ======================================================
+      // Old verification close commands.
 
       if (
         cmd === ",vclose" ||
@@ -5859,9 +5856,7 @@ client.on(
         return;
       }
 
-      // ======================================================
-      // HIDDEN MANUAL VERIFICATION
-      // ======================================================
+      // Hidden manual verification.
 
       const verifyCommand =
         raw.match(
@@ -5886,15 +5881,13 @@ client.on(
           return;
         }
 
-        return approveVerification(
+        return await approveVerification(
           message,
           verifyCommand[1]
         );
       }
 
-      // ======================================================
-      // GREETING
-      // ======================================================
+      // Greeting.
 
       if (
         /^(?:hi+|hey+|hello+|heya+)[!.?,\s]*$/i
@@ -5905,17 +5898,13 @@ client.on(
         );
       }
 
-      // ======================================================
-      // AFK
-      // ======================================================
+      // AFK.
 
       if (await handleAFK(message)) {
         return;
       }
 
-      // ======================================================
-      // ROLE COMMANDS
-      // ======================================================
+      // Role commands.
 
       if (
         Object.prototype.hasOwnProperty.call(
@@ -5931,9 +5920,7 @@ client.on(
         return;
       }
 
-      // ======================================================
-      // APPEAL PANEL
-      // ======================================================
+      // Appeal panel.
 
       if (
         [
@@ -5948,9 +5935,7 @@ client.on(
         return;
       }
 
-      // ======================================================
-      // CLIENT PANEL
-      // ======================================================
+      // Client panel.
 
       if (cmd === ",client") {
         if (!lock(
@@ -5992,9 +5977,7 @@ client.on(
         return;
       }
 
-      // ======================================================
-      // PROMOTER
-      // ======================================================
+      // Promoter.
 
       if (cmd === ",promoter") {
         if (!lock(
@@ -6034,9 +6017,7 @@ client.on(
         return;
       }
 
-      // ======================================================
-      // VOUCH TUTORIAL COMMANDS
-      // ======================================================
+      // Vouch tutorials.
 
       if (
         Object.prototype.hasOwnProperty.call(
@@ -6052,9 +6033,7 @@ client.on(
         return;
       }
 
-      // ======================================================
-      // RANKED ROLES
-      // ======================================================
+      // Ranked roles.
 
       if (cmd === "!ranked") {
         if (!canManageServer(message.member)) {
@@ -6072,9 +6051,7 @@ client.on(
         );
       }
 
-      // ======================================================
-      // ,R @USER COMMANDS
-      // ======================================================
+      // ,r @user commands.
 
       if (/^,r(?:\s|$)/i.test(raw)) {
         const match =
@@ -6105,16 +6082,14 @@ client.on(
         const action =
           actionRaw.toLowerCase();
 
-        // BLACKLIST
         if (action === "b") {
-          return handleBlacklistCommand(
+          return await handleBlacklistCommand(
             message,
             targetId,
             reason
           );
         }
 
-        // VOUCH REMINDERS
         if (
           !isVerificationStaff(
             message.member
@@ -6150,9 +6125,7 @@ client.on(
         }
       }
 
-      // ======================================================
-      // PARTNER
-      // ======================================================
+      // Partner.
 
       if (cmd === ",partner") {
         if (!isTicketSupport(message.member)) {
@@ -6201,9 +6174,7 @@ client.on(
         return;
       }
 
-      // ======================================================
-      // MOD
-      // ======================================================
+      // Mod.
 
       if (cmd === ",mod") {
         if (!isTicketSupport(message.member)) {
@@ -6235,9 +6206,7 @@ client.on(
         return;
       }
 
-      // ======================================================
-      // SELLER
-      // ======================================================
+      // Seller.
 
       if (cmd === ",seller") {
         if (!lock(
@@ -6306,9 +6275,7 @@ client.on(
         return;
       }
 
-      // ======================================================
-      // ROBUX CASHOUT
-      // ======================================================
+      // Robux cashout.
 
       if (cmd === "!robuxcashout") {
         if (!canManageServer(message.member)) {
@@ -6328,9 +6295,7 @@ client.on(
         );
       }
 
-      // ======================================================
-      // PAY
-      // ======================================================
+      // Pay.
 
       if (cmd === ",pay") {
         if (!lock(
@@ -6364,9 +6329,7 @@ client.on(
         return;
       }
 
-      // ======================================================
-      // ADMIN SERVICE COMMANDS
-      // ======================================================
+      // Admin service commands.
 
       const adminCommands = [
         "!nitro",
@@ -6461,9 +6424,7 @@ client.on(
         }
       }
 
-      // ======================================================
-      // TEST WELCOME
-      // ======================================================
+      // Test welcome.
 
       if (cmd === "!testwelcome") {
         const channel =
@@ -6502,9 +6463,7 @@ client.on(
         return;
       }
 
-      // ======================================================
-      // TEST GOODBYE
-      // ======================================================
+      // Test goodbye.
 
       if (cmd === "!testgoodbye") {
         const channel =
