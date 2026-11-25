@@ -5,7 +5,7 @@
 // COMPLETE TICKETS.JS
 // ============================================================
 //
-// TICKET COMMANDS:
+// COMMANDS:
 // ,claim
 // ,forceclaim
 // ,close
@@ -14,32 +14,30 @@
 // ,delete
 // ,savelog
 //
-// RECOVERY COMMANDS:
+// RECOVERY:
 // ,recoverlogs
 // ,recoverlogs 693
 // ,recoverlogs 779
-// ,recoverlogs 2026-11-18
 // ,recoverlogs 11/18/26
+// ,recoverlogs 2026-11-18
 //
 // ARCHIVE SYSTEM:
-// - No fixed total transcript size limit
-// - Automatically split large HTML transcripts
-// - Preserve original image quality
-// - Upload original attachments separately
-// - Embed images directly inside HTML when possible
-// - Split oversized individual attachments into parts
-// - Stable Discord message links for archived files
-// - Recover available old images
-// - Original logs preserved
-// - Prevent deletion if archiving fails
-//
-// TWO STORAGE CHANNELS:
-// - Ticket logs
-// - Data storage
+// - Closing does not download attachments.
+// - Final archive is created before deletion.
+// - One organized archive thread per ticket.
+// - Previously archived attachments are reused.
+// - Original images are not duplicated inside HTML.
+// - HTML contains links to saved original attachments.
+// - Large attachments are split when necessary.
+// - Failed downloads are retried.
+// - No fixed combined archive size limit.
+// - Failed archives do not cause ticket deletion.
+// - Original ticket logs are preserved.
 //
 // Node.js 18+
+// Discord.js v14
 // No additional npm packages required.
-// Run one bot instance on Render.
+// Run only one bot instance on Render.
 //
 // ============================================================
 
@@ -69,12 +67,8 @@ const { createHash } = require("node:crypto");
 
 const IDS = Object.freeze({
   panel: "1530811385678790716",
-
   logs: "1570913954333728808",
-
-  // Same channel as ticket logs.
   transcripts: "1570913954333728808",
-
   data: "1571112668037644388",
 
   owner: "1530988662970650865",
@@ -126,19 +120,29 @@ const PREFIX = ",";
 const NONE = { parse: [] };
 
 // ============================================================
-// ARCHIVE SETTINGS
-// ============================================================
-//
-// These are PER-FILE limits.
-// There is no fixed combined transcript limit.
-//
+// ARCHIVE CONFIGURATION
 // ============================================================
 
 const HTML_PART_SIZE = 7 * 1024 * 1024;
 const FILE_PART_SIZE = 9 * 1024 * 1024;
-const INLINE_IMAGE_SIZE = 4 * 1024 * 1024;
 
 const DOWNLOAD_TIMEOUT = 120000;
+const DOWNLOAD_RETRIES = 5;
+
+const ARCHIVE_ROOT_MARKER =
+  "CHUPPYS_ARCHIVE_ROOT_V4";
+
+const ARCHIVE_FILE_MARKER =
+  "CHUPPYS_ARCHIVE_FILE_V4";
+
+const ARCHIVE_HTML_MARKER =
+  "CHUPPYS_ARCHIVE_HTML_V4";
+
+const ARCHIVE_COMPLETE_MARKER =
+  "CHUPPYS_ARCHIVE_COMPLETE_V4";
+
+const ARCHIVE_STATUS_MARKER =
+  "CHUPPYS_ARCHIVE_STATUS_V4";
 
 let recoveryRunning = false;
 
@@ -208,7 +212,7 @@ const UNBLACKLIST_STAFF_ROLES = [
 ];
 
 // ============================================================
-// ORIGINAL METADATA — PRESERVED
+// EXISTING METADATA
 // ============================================================
 
 const STATE_PREFIX =
@@ -281,16 +285,12 @@ const TYPES = Object.freeze({
   purchase: {
     label: "Purchase",
     env: "PURCHASE_TICKET_CATEGORY_ID",
-
     categories: [
       "chuppys-purchase",
       "Purchasing tickets",
       "Purchase tickets"
     ],
-
-    description:
-      "Please provide your purchase details.",
-
+    description: "Please provide your purchase details.",
     questions: [
       "What are you purchasing?",
       "Who are you buying from?",
@@ -302,16 +302,12 @@ const TYPES = Object.freeze({
   cashout: {
     label: "Cash Out",
     env: "CASHOUT_TICKET_CATEGORY_ID",
-
     categories: [
       "chuppys-cashout",
       "Cashout tickets",
       "Cash Out tickets"
     ],
-
-    description:
-      "Please provide your cashout details.",
-
+    description: "Please provide your cashout details.",
     questions: [
       "What are you cashing out?",
       "How much are you looking for?",
@@ -323,28 +319,21 @@ const TYPES = Object.freeze({
   giveaway: {
     label: "Giveaway",
     env: "GIVEAWAY_TICKET_CATEGORY_ID",
-
     categories: [
       "chuppys-giveaway",
       "Giveaway tickets"
     ],
-
-    description:
-      "Please explain the giveaway you won."
+    description: "Please explain the giveaway you won."
   },
 
   partnership: {
     label: "Partnership",
     env: "PARTNERSHIP_TICKET_CATEGORY_ID",
-
     categories: [
       "chuppys-partnership",
       "Partnership tickets"
     ],
-
-    description:
-      "Please provide your partnership details.",
-
+    description: "Please provide your partnership details.",
     questions: [
       "How many vouches?",
       "How many server members?"
@@ -354,7 +343,6 @@ const TYPES = Object.freeze({
   support: {
     label: "Support",
     env: "SUPPORT_TICKET_CATEGORY_ID",
-
     categories: [
       "chuppys-support",
       "Support tickets",
@@ -363,18 +351,13 @@ const TYPES = Object.freeze({
       "Support-tickets",
       "Help and Support"
     ],
-
-    description:
-      "Please explain what you need help with."
+    description: "Please explain what you need help with."
   },
 
   verification: {
     label: "Verification",
     env: "VERIFICATION_TICKET_CATEGORY_ID",
-
-    categories:
-      VERIFICATION_CATEGORY_ALIASES,
-
+    categories: VERIFICATION_CATEGORY_ALIASES,
     description:
       "A member of the verification team will assist you shortly."
   },
@@ -382,13 +365,9 @@ const TYPES = Object.freeze({
   unblacklist: {
     label: "Unblacklist",
     env: "UNBLACKLIST_TICKET_CATEGORY_ID",
-
-    categories:
-      UNBLACKLIST_CATEGORY_ALIASES,
-
+    categories: UNBLACKLIST_CATEGORY_ALIASES,
     description:
       "Please explain why your blacklist should be reviewed.",
-
     questions: [
       "Why were you blacklisted?",
       "Why should we remove your blacklist?"
@@ -411,13 +390,15 @@ const command = new SlashCommandBuilder()
 
 const tickets = new Map();
 const ticketQueues = new Map();
-const transcriptJobs = new Map();
 const categoryJobs = new Map();
+const archiveJobs = new Map();
 
 let initialization = null;
 let initialized = false;
+
 let globalCounter = 0;
 let counterMessageId = null;
+
 let creationQueue = Promise.resolve();
 
 // ============================================================
@@ -426,9 +407,7 @@ let creationQueue = Promise.resolve();
 
 function queued(task) {
   const next = creationQueue.then(task);
-
   creationQueue = next.catch(() => {});
-
   return next;
 }
 
@@ -437,7 +416,6 @@ function queuedTicket(id, task) {
     ticketQueues.get(id) || Promise.resolve();
 
   const next = previous.then(task);
-
   const settled = next.catch(() => {});
 
   ticketQueues.set(id, settled);
@@ -451,23 +429,21 @@ function queuedTicket(id, task) {
   return next;
 }
 
-function trackTranscriptJob(id, job) {
-  const tracked = Promise.resolve(job);
-
-  transcriptJobs.set(id, tracked);
-
-  void tracked.finally(() => {
-    if (transcriptJobs.get(id) === tracked) {
-      transcriptJobs.delete(id);
-    }
-  }).catch(() => {});
-
-  return tracked;
-}
-
 // ============================================================
 // HELPERS
 // ============================================================
+
+function sleep(ms) {
+  return new Promise(resolve =>
+    setTimeout(resolve, ms)
+  );
+}
+
+function hash(value) {
+  return createHash("sha256")
+    .update(value)
+    .digest("hex");
+}
 
 function safe(value, max = 900) {
   return String(value ?? "")
@@ -492,7 +468,7 @@ function escapeHtml(value) {
 function safeFilename(value) {
   return String(value || "attachment")
     .replace(/[^a-zA-Z0-9._-]/g, "_")
-    .slice(0, 140) || "attachment";
+    .slice(0, 120) || "attachment";
 }
 
 function numberText(number) {
@@ -550,17 +526,9 @@ function whiteEmbed(title, description) {
 }
 
 async function textChannel(guild, id, label) {
-  let channel;
-
-  try {
-    channel =
-      guild.channels.cache.get(id) ||
-      await guild.channels.fetch(id);
-  } catch (error) {
-    throw new Error(
-      `${label} unavailable (${id}): ${error.message}`
-    );
-  }
+  const channel =
+    guild.channels.cache.get(id) ||
+    await guild.channels.fetch(id);
 
   if (
     !channel?.isTextBased() ||
@@ -576,20 +544,26 @@ async function textChannel(guild, id, label) {
   return channel;
 }
 
-// ============================================================
-// EXACT MEMBER FETCH
-// ============================================================
+function footerText(message) {
+  return message.embeds
+    .map(embed => embed.footer?.text || "")
+    .join("\n");
+}
+
+function messageUrl(guildId, channelId, messageId) {
+  return (
+    `https://discord.com/channels/` +
+    `${guildId}/${channelId}/${messageId}`
+  );
+}
 
 async function getMember(context) {
-  const guild = context.guild;
-  const userId = context.user?.id;
-
-  if (!guild || !userId) {
+  if (!context.guild || !context.user?.id) {
     throw new Error("Could not identify server member.");
   }
 
-  return guild.members.fetch({
-    user: userId,
+  return context.guild.members.fetch({
+    user: context.user.id,
     force: true
   });
 }
@@ -639,8 +613,8 @@ async function isBlacklisted(member) {
 // ROLE HELPERS
 // ============================================================
 
-function hasRole(member, roleId) {
-  return Boolean(member?.roles?.cache?.has(roleId));
+function hasRole(member, id) {
+  return Boolean(member?.roles?.cache?.has(id));
 }
 
 function isOwner(member) {
@@ -670,7 +644,7 @@ function isSeller(member) {
 }
 
 function isVerificationStaff(member) {
-  return Boolean(
+  return (
     isOwner(member) ||
     isAdmin(member) ||
     isMod(member) ||
@@ -679,7 +653,7 @@ function isVerificationStaff(member) {
 }
 
 function isAppealStaff(member) {
-  return Boolean(
+  return (
     isOwner(member) ||
     isAdmin(member) ||
     isMod(member)
@@ -702,7 +676,7 @@ function isAppealTicket(state) {
 }
 
 // ============================================================
-// TICKET MANAGEMENT PERMISSIONS
+// MANAGEMENT PERMISSIONS
 // ============================================================
 
 function canClaim(member, state) {
@@ -753,25 +727,14 @@ function canManage(member, state) {
     return false;
   }
 
-  if (isMod(member) || isAdmin(member)) {
-    return true;
-  }
-
   return canClaim(member, state);
 }
 
 function canDelete(member, state) {
-  if (state.status !== "closed") return false;
-
-  if (isAppealTicket(state)) {
-    return isAppealStaff(member);
-  }
-
-  if (isVerificationTicket(state)) {
-    return isVerificationStaff(member);
-  }
-
-  return isOwner(member) || canManage(member, state);
+  return (
+    state.status === "closed" &&
+    canManage(member, state)
+  );
 }
 
 // ============================================================
@@ -822,70 +785,41 @@ function messageContext(message) {
   };
 }
 
+async function archiveNotice(context, channel, description) {
+  if (context.kind !== "prefix") {
+    await reply(context, description).catch(() => {});
+  }
+
+  return channel.send({
+    embeds: [
+      whiteEmbed(
+        "Ticket Archive",
+        description
+      ).setFooter({
+        text: `${BRAND} • ${ARCHIVE_STATUS_MARKER}`
+      })
+    ],
+    allowedMentions: NONE
+  });
+}
+
+async function editArchiveNotice(message, title, description) {
+  if (!message) return;
+
+  await message.edit({
+    embeds: [
+      whiteEmbed(title, description)
+        .setFooter({
+          text: `${BRAND} • ${ARCHIVE_STATUS_MARKER}`
+        })
+    ],
+    allowedMentions: NONE
+  }).catch(console.error);
+}
+
 // ============================================================
-// EMBED-ONLY METADATA
+// METADATA
 // ============================================================
-
-function encodeStateMetadata(state) {
-  return Buffer.from(
-    JSON.stringify(state),
-    "utf8"
-  ).toString("base64url");
-}
-
-function decodeStateMetadata(value) {
-  if (!value) return null;
-
-  try {
-    return normalizeState(
-      JSON.parse(
-        Buffer.from(value, "base64url").toString("utf8")
-      )
-    );
-  } catch {
-    return null;
-  }
-}
-
-function metadataUrl(guildId, state) {
-  const url =
-    `https://discord.com/channels/${guildId}/${state.channelId}` +
-    `?${EMBED_STATE_KEY}=${encodeStateMetadata(state)}`;
-
-  if (url.length > 2048) {
-    throw new Error(
-      "Ticket metadata exceeds the Discord embed URL limit."
-    );
-  }
-
-  return url;
-}
-
-function counterMetadataUrl(guildId, number) {
-  return (
-    `https://discord.com/channels/${guildId}/${IDS.data}` +
-    `?${EMBED_COUNTER_KEY}=${number}`
-  );
-}
-
-function readEmbedParameter(embed, key) {
-  if (!embed?.url) return null;
-
-  try {
-    const url = new URL(embed.url);
-
-    if (
-      url.hostname !== "discord.com" &&
-      url.hostname !== "www.discord.com"
-    ) {
-      return null;
-    }
-
-    return url.searchParams.get(key);
-  } catch {
-    return null;
-  }
-}
 
 function normalizeState(data) {
   if (
@@ -898,7 +832,10 @@ function normalizeState(data) {
 
   const number = Number(data.number);
 
-  if (!Number.isSafeInteger(number) || number < 1) {
+  if (
+    !Number.isSafeInteger(number) ||
+    number < 1
+  ) {
     return null;
   }
 
@@ -921,18 +858,90 @@ function normalizeState(data) {
       data.closeControlMessageId || null,
 
     closeReason:
-      data.closeReason || "No further action required.",
+      String(
+        data.closeReason ||
+        "No further action required."
+      ).slice(0, 500),
 
     transcriptUrl:
       data.transcriptUrl || null,
+
+    archiveRootId:
+      data.archiveRootId || null,
+
+    archiveThreadId:
+      data.archiveThreadId || null,
 
     createdAt:
       data.createdAt || null
   };
 }
 
+function encodeStateMetadata(state) {
+  return Buffer.from(
+    JSON.stringify(state),
+    "utf8"
+  ).toString("base64url");
+}
+
+function decodeStateMetadata(value) {
+  try {
+    return normalizeState(
+      JSON.parse(
+        Buffer.from(value, "base64url")
+          .toString("utf8")
+      )
+    );
+  } catch {
+    return null;
+  }
+}
+
+function metadataUrl(guildId, state) {
+  const compact = {
+    ...state
+  };
+
+  let url =
+    `https://discord.com/channels/${guildId}/${state.channelId}` +
+    `?${EMBED_STATE_KEY}=${encodeStateMetadata(compact)}`;
+
+  // Avoid Discord's embed URL length limit.
+  // Full close reason is still saved in an embed field.
+
+  if (url.length > 2048) {
+    compact.closeReason = "";
+
+    url =
+      `https://discord.com/channels/${guildId}/${state.channelId}` +
+      `?${EMBED_STATE_KEY}=${encodeStateMetadata(compact)}`;
+  }
+
+  if (url.length > 2048) {
+    throw new Error("Ticket metadata is too large.");
+  }
+
+  return url;
+}
+
+function readEmbedParameter(embed, key) {
+  if (!embed?.url) return null;
+
+  try {
+    const url = new URL(embed.url);
+
+    if (url.hostname !== "discord.com") {
+      return null;
+    }
+
+    return url.searchParams.get(key);
+  } catch {
+    return null;
+  }
+}
+
 function parseState(message) {
-  const content = message?.content || "";
+  const content = message.content || "";
 
   const prefix = [
     STATE_PREFIX,
@@ -951,7 +960,7 @@ function parseState(message) {
     }
   }
 
-  for (const embed of message?.embeds || []) {
+  for (const embed of message.embeds || []) {
     const encoded = readEmbedParameter(
       embed,
       EMBED_STATE_KEY
@@ -961,18 +970,28 @@ function parseState(message) {
 
     const state = decodeStateMetadata(encoded);
 
-    if (state) return state;
+    if (!state) continue;
+
+    const reason = embed.fields?.find(
+      field => field.name === "Close Reason"
+    );
+
+    if (reason?.value) {
+      state.closeReason = reason.value;
+    }
+
+    return state;
   }
 
   return null;
 }
 
 // ============================================================
-// GLOBAL COUNTER
+// COUNTER
 // ============================================================
 
 function parseCounter(message) {
-  const content = message?.content || "";
+  const content = message.content || "";
 
   if (content.startsWith(COUNTER_PREFIX)) {
     const number = Number(
@@ -984,7 +1003,7 @@ function parseCounter(message) {
     }
   }
 
-  for (const embed of message?.embeds || []) {
+  for (const embed of message.embeds || []) {
     const encoded = readEmbedParameter(
       embed,
       EMBED_COUNTER_KEY
@@ -1005,127 +1024,98 @@ function parseCounter(message) {
         /Total Tickets Created:\*\*\s*`?(\d+)`?/i
       );
 
-      if (match) {
-        const number = Number(match[1]);
-
-        if (Number.isSafeInteger(number) && number >= 0) {
-          return number;
-        }
-      }
+      if (match) return Number(match[1]);
     }
   }
 
   return null;
 }
 
-// ============================================================
-// STORAGE EMBEDS
-// ============================================================
-
-function stateEmbed(state, guildId) {
-  const label = TYPES[state.type]?.label || state.type;
-
-  const status =
-    state.status === "closed" ? "Closed" : "Open";
-
-  const embed = new EmbedBuilder()
-    .setColor(WHITE)
-    .setTitle(
-      `Ticket #${numberText(state.number)} • ${label}`
-    )
-    .setURL(metadataUrl(guildId, state))
-    .setDescription(
-      `**Status:** ${status}\n\n` +
-      `**Ticket:** <#${state.channelId}>\n` +
-      `**Creator:** <@${state.ownerId}>\n` +
-      `**Claimed By:** ${
-        state.claimedBy
-          ? `<@${state.claimedBy}>`
-          : "Not claimed"
-      }`
-    )
-    .addFields(
-      {
-        name: "Ticket Information",
-        value:
-          `**Category:** ${label}\n` +
-          `**Number:** ${numberText(state.number)}\n` +
-          `**Channel ID:** \`${state.channelId}\``
-      },
-      {
-        name: "Close Information",
-        value:
-          `**Reason:** ${safe(state.closeReason, 450)}\n\n` +
-          `**Status:** ${status}`
-      },
-      {
-        name: "Transcript",
-        value:
-          state.transcriptUrl
-            ? `[View Transcript](${state.transcriptUrl})`
-            : "Not available yet."
-      },
-      {
-        name: "Control Messages",
-        value:
-          "**Opening Message:** " +
-          (
-            state.controlMessageId
-              ? `\`${state.controlMessageId}\``
-              : "Not saved"
-          ) +
-          "\n**Closed Message:** " +
-          (
-            state.closeControlMessageId
-              ? `\`${state.closeControlMessageId}\``
-              : "Not saved"
-          )
-      }
-    )
-    .setFooter({
-      text: `${BRAND} • Private Ticket Storage`
-    });
-
-  if (
-    state.createdAt &&
-    !Number.isNaN(Date.parse(state.createdAt))
-  ) {
-    embed.setTimestamp(new Date(state.createdAt));
-  }
-
-  return embed;
-}
-
-function counterEmbed(number, guildId) {
-  return whiteEmbed(
-    "Chuppys Global Ticket Counter",
-
-    `**Total Tickets Created:** \`${number}\`\n\n` +
-    `**Next Ticket Number:** \`${numberText(number + 1)}\`\n\n` +
-    "Ticket numbering is preserved across restarts."
-  ).setURL(
-    counterMetadataUrl(guildId, number)
-  );
-}
-
-function storagePayload(state, guildId) {
-  return {
-    content: "",
-    embeds: [stateEmbed(state, guildId)],
-    allowedMentions: NONE
-  };
-}
-
 function counterPayload(number, guildId) {
   return {
     content: "",
-    embeds: [counterEmbed(number, guildId)],
+    embeds: [
+      whiteEmbed(
+        "Chuppys Global Ticket Counter",
+
+        `**Total Tickets Created:** \`${number}\`\n\n` +
+        `**Next Ticket Number:** \`${numberText(number + 1)}\`\n\n` +
+        "Ticket numbering is preserved across restarts."
+      ).setURL(
+        `https://discord.com/channels/${guildId}/${IDS.data}` +
+        `?${EMBED_COUNTER_KEY}=${number}`
+      )
+    ],
     allowedMentions: NONE
   };
 }
 
 // ============================================================
-// CHANNEL SCANNING
+// STORAGE EMBED
+// ============================================================
+
+function storagePayload(state, guildId) {
+  const label = TYPES[state.type].label;
+
+  return {
+    content: "",
+
+    embeds: [
+      whiteEmbed(
+        `Ticket #${numberText(state.number)} • ${label}`,
+
+        `**Status:** ${state.status}\n\n` +
+        `**Ticket:** <#${state.channelId}>\n` +
+        `**Creator:** <@${state.ownerId}>\n` +
+        `**Claimed By:** ${
+          state.claimedBy
+            ? `<@${state.claimedBy}>`
+            : "Not claimed"
+        }`
+      )
+        .setURL(metadataUrl(guildId, state))
+        .addFields(
+          {
+            name: "Ticket Information",
+            value:
+              `**Category:** ${label}\n` +
+              `**Number:** ${numberText(state.number)}\n` +
+              `**Channel ID:** \`${state.channelId}\``
+          },
+          {
+            name: "Close Reason",
+            value: state.closeReason.slice(0, 500)
+          },
+          {
+            name: "Archive",
+            value: state.transcriptUrl
+              ? `[View Archive](${state.transcriptUrl})`
+              : "Not archived yet."
+          },
+          {
+            name: "Archive Thread",
+            value: state.archiveThreadId
+              ? `<#${state.archiveThreadId}>`
+              : "Not created."
+          },
+          {
+            name: "Control Messages",
+            value:
+              `Opening: ${state.controlMessageId || "None"}\n` +
+              `Closed: ${state.closeControlMessageId || "None"}`
+          }
+        )
+        .setFooter({
+          text: `${BRAND} • Private Ticket Storage`
+        })
+    ],
+
+    allowedMentions: NONE
+  };
+}
+
+// ============================================================
+// UNLIMITED MESSAGE SCANNING
 // ============================================================
 
 async function scan(channel, callback, pages = Infinity) {
@@ -1154,8 +1144,25 @@ async function scan(channel, callback, pages = Infinity) {
   }
 }
 
+async function allMessages(channel) {
+  const messages = [];
+
+  await scan(
+    channel,
+    message => messages.push(message)
+  );
+
+  return messages.sort(
+    (a, b) =>
+      a.createdTimestamp - b.createdTimestamp ||
+      (
+        BigInt(a.id) < BigInt(b.id) ? -1 : 1
+      )
+  );
+}
+
 // ============================================================
-// SAVE STATE
+// SAVE TICKET STATE
 // ============================================================
 
 async function saveState(channel, entry) {
@@ -1178,6 +1185,7 @@ async function saveState(channel, entry) {
         entry.storageMessageId,
         payload
       );
+
     } catch (error) {
       if (
         error.code !== 10008 &&
@@ -1190,11 +1198,8 @@ async function saveState(channel, entry) {
 
   if (!message) {
     message = await storage.send(payload);
-
     entry.storageMessageId = message.id;
   }
-
-  entry.needsMigration = false;
 
   tickets.set(channel.id, entry);
 
@@ -1207,6 +1212,7 @@ async function saveState(channel, entry) {
 
 async function init(guild) {
   if (initialized) return;
+
   if (initialization) return initialization;
 
   initialization = (async () => {
@@ -1216,16 +1222,10 @@ async function init(guild) {
       "Ticket data"
     );
 
-    const logs = await textChannel(
-      guild,
-      IDS.logs,
-      "Ticket logs"
-    );
-
     let highest = 0;
     let counterMessage = null;
 
-    function processMessage(message, inData) {
+    await scan(data, message => {
       if (message.author.id !== guild.client.user.id) {
         return;
       }
@@ -1235,32 +1235,23 @@ async function init(guild) {
       if (state) {
         highest = Math.max(highest, state.number);
 
-        const previous = tickets.get(state.channelId);
-
-        if (
-          !previous ||
-          (inData && !previous.storageMessageId)
-        ) {
+        if (!tickets.has(state.channelId)) {
           tickets.set(state.channelId, {
             state,
-
-            storageMessageId:
-              inData ? message.id : null,
-
-            recovered: false,
-
-            needsMigration:
-              inData && Boolean(message.content)
+            storageMessageId: message.id
           });
         }
       }
 
       const counter = parseCounter(message);
 
-      if (counter !== null) {
+      if (
+        counter !== null &&
+        Number.isSafeInteger(counter)
+      ) {
         highest = Math.max(highest, counter);
 
-        if (inData && !counterMessage) {
+        if (!counterMessage) {
           counterMessage = message;
         }
       }
@@ -1268,22 +1259,50 @@ async function init(guild) {
       if (message.content.startsWith(OLD_COUNTER_PREFIX)) {
         try {
           const old = JSON.parse(
-            message.content.slice(OLD_COUNTER_PREFIX.length)
+            message.content.slice(
+              OLD_COUNTER_PREFIX.length
+            )
           );
 
           const total = Object.values(old)
             .map(Number)
             .filter(Number.isSafeInteger)
-            .reduce((sum, number) => sum + number, 0);
+            .reduce((sum, value) => sum + value, 0);
 
           highest = Math.max(highest, total);
         } catch {
-          // Ignore damaged legacy counters.
+          // Ignore invalid legacy counters.
         }
       }
+    });
 
-      // Recover ticket numbers from old log embeds.
-      if (!inData) {
+    // Scan old logs if no saved counter exists.
+
+    if (!counterMessage) {
+      const logs = await textChannel(
+        guild,
+        IDS.logs,
+        "Ticket logs"
+      );
+
+      await scan(logs, message => {
+        if (message.author.id !== guild.client.user.id) {
+          return;
+        }
+
+        const state = parseState(message);
+
+        if (state) {
+          highest = Math.max(highest, state.number);
+
+          if (!tickets.has(state.channelId)) {
+            tickets.set(state.channelId, {
+              state,
+              storageMessageId: null
+            });
+          }
+        }
+
         for (const embed of message.embeds) {
           const match = String(
             embed.description || ""
@@ -1298,19 +1317,7 @@ async function init(guild) {
             );
           }
         }
-      }
-    }
-
-    await scan(
-      data,
-      message => processMessage(message, true)
-    );
-
-    if (logs.id !== data.id) {
-      await scan(
-        logs,
-        message => processMessage(message, false)
-      );
+      });
     }
 
     await guild.channels.fetch();
@@ -1340,56 +1347,15 @@ async function init(guild) {
       counterMessageId = message.id;
     }
 
-    let migrated = 0;
-
-    for (const [id, entry] of tickets) {
-      if (entry.storageMessageId && !entry.needsMigration) {
-        continue;
-      }
-
-      const channel =
-        guild.channels.cache.get(id) ||
-        await guild.channels.fetch(id).catch(() => null);
-
-      if (channel?.type === ChannelType.GuildText) {
-        try {
-          await saveState(channel, entry);
-          migrated++;
-        } catch (error) {
-          console.error(
-            `[TICKETS] Migration ${id}:`,
-            error
-          );
-        }
-      } else if (
-        entry.storageMessageId &&
-        entry.needsMigration
-      ) {
-        try {
-          const oldMessage = await data.messages.fetch(
-            entry.storageMessageId
-          );
-
-          await oldMessage.edit(
-            storagePayload(entry.state, guild.id)
-          );
-
-          entry.needsMigration = false;
-          migrated++;
-        } catch (error) {
-          console.error(
-            `[TICKETS] Archived migration ${id}:`,
-            error
-          );
-        }
-      }
-    }
-
     initialized = true;
 
-    console.log(`[TICKETS] Loaded ${tickets.size} tickets.`);
-    console.log(`[TICKETS] Global counter: ${globalCounter}`);
-    console.log(`[TICKETS] Migrated ${migrated} records.`);
+    console.log(
+      `[TICKETS] Loaded ${tickets.size} records.`
+    );
+
+    console.log(
+      `[TICKETS] Global counter: ${globalCounter}`
+    );
   })();
 
   try {
@@ -1400,25 +1366,25 @@ async function init(guild) {
 }
 
 // ============================================================
-// GLOBAL TICKET NUMBERING
+// GLOBAL NUMBERING
 // ============================================================
 
 async function nextNumber(guild) {
   await init(guild);
 
-  const storage = await textChannel(
+  const data = await textChannel(
     guild,
     IDS.data,
     "Ticket data"
   );
 
   let message = counterMessageId
-    ? await storage.messages.fetch(counterMessageId)
+    ? await data.messages.fetch(counterMessageId)
         .catch(() => null)
     : null;
 
   if (!message) {
-    message = await storage.send(
+    message = await data.send(
       counterPayload(globalCounter, guild.id)
     );
 
@@ -1427,21 +1393,22 @@ async function nextNumber(guild) {
 
   const stored = parseCounter(message);
 
-  if (
-    stored !== null &&
-    Number.isSafeInteger(stored) &&
-    stored >= 0
-  ) {
-    globalCounter = Math.max(globalCounter, stored);
+  if (stored !== null) {
+    globalCounter = Math.max(
+      globalCounter,
+      stored
+    );
   }
 
-  globalCounter++;
+  const next = globalCounter + 1;
 
   await message.edit(
-    counterPayload(globalCounter, guild.id)
+    counterPayload(next, guild.id)
   );
 
-  return globalCounter;
+  globalCounter = next;
+
+  return next;
 }
 
 // ============================================================
@@ -1452,33 +1419,34 @@ function fromTopic(channel) {
   if (!channel.topic) return null;
 
   try {
-    const raw = channel.topic.startsWith("chuppys-ticket:")
-      ? channel.topic.slice("chuppys-ticket:".length)
+    const raw = channel.topic.startsWith(
+      "chuppys-ticket:"
+    )
+      ? channel.topic.slice(
+          "chuppys-ticket:".length
+        )
       : channel.topic;
 
     return normalizeState({
       ...JSON.parse(raw),
       channelId: channel.id
     });
+
   } catch {
     return null;
   }
 }
 
 function validWelcome(message, parsed, botId) {
-  if (message.author.id !== botId) return false;
-
-  const hasButtons = message.components.some(
-    row => row.components.some(
-      component =>
-        Object.values(BUTTONS).includes(component.customId) ||
-        String(component.customId || "")
-          .startsWith("chuppys_ticket:")
-    )
-  );
+  if (message.author.id !== botId) {
+    return false;
+  }
 
   const validTitle = message.embeds.some(embed => {
-    const title = String(embed.title || "").toLowerCase();
+    const title = String(
+      embed.title || ""
+    ).toLowerCase();
+
     const match = title.match(/#\s*0*(\d+)/);
 
     if (!match || Number(match[1]) !== parsed.number) {
@@ -1486,7 +1454,9 @@ function validWelcome(message, parsed, botId) {
     }
 
     return (
-      title.includes(TYPES[parsed.type].label.toLowerCase()) ||
+      title.includes(
+        TYPES[parsed.type].label.toLowerCase()
+      ) ||
       (
         parsed.type === "cashout" &&
         title.includes("cashout")
@@ -1494,9 +1464,7 @@ function validWelcome(message, parsed, botId) {
     );
   });
 
-  return validTitle && (
-    hasButtons || parsed.closed
-  );
+  return validTitle;
 }
 
 function extractOwner(message) {
@@ -1519,68 +1487,81 @@ async function recoverTicket(channel) {
 
   if (!parsed) return null;
 
-  let before;
+  const messages = await allMessages(channel);
 
-  for (;;) {
-    const batch = await channel.messages.fetch({
-      limit: 100,
-      cache: false,
-      ...(before ? { before } : {})
-    });
+  const opening = messages.find(message =>
+    validWelcome(
+      message,
+      parsed,
+      channel.client.user.id
+    )
+  );
 
-    if (!batch.size) break;
+  if (!opening) return null;
 
-    for (const message of batch.values()) {
-      if (
-        !validWelcome(
-          message,
-          parsed,
-          channel.client.user.id
-        )
-      ) {
-        continue;
-      }
+  const ownerId = extractOwner(opening);
 
-      const ownerId = extractOwner(message);
+  if (!ownerId) return null;
 
-      if (!ownerId) return null;
+  let claimedBy = null;
+  let closeControlMessageId = null;
+  let closeReason = "No further action required.";
 
-      const entry = {
-        state: {
-          channelId: channel.id,
-          ownerId,
-          type: parsed.type,
-          number: parsed.number,
-          status: parsed.closed ? "closed" : "open",
-          claimedBy: null,
-          controlMessageId: message.id,
-          closeControlMessageId: null,
-          closeReason: "No further action required.",
-          transcriptUrl: null,
-          createdAt: message.createdAt.toISOString()
-        },
-
-        storageMessageId: null,
-        recovered: true
-      };
-
-      await saveState(channel, entry);
-
-      return entry;
+  for (const message of messages) {
+    if (message.author.id !== channel.client.user.id) {
+      continue;
     }
 
-    if (batch.size < 100) break;
+    for (const embed of message.embeds) {
+      if (embed.title === "Ticket Claimed") {
+        const match = String(
+          embed.description || ""
+        ).match(/Claimed by <@!?(\d{17,20})>/i);
 
-    before = batch.last().id;
+        if (match) claimedBy = match[1];
+      }
+
+      if (embed.title === "Ticket Closed") {
+        closeControlMessageId = message.id;
+
+        const match = String(
+          embed.description || ""
+        ).match(/\*\*Reason:\*\*\s*([^\n]+)/i);
+
+        if (match) closeReason = match[1];
+      }
+    }
   }
 
-  return null;
+  const entry = {
+    state: normalizeState({
+      channelId: channel.id,
+      ownerId,
+      type: parsed.type,
+      number: parsed.number,
+      status: parsed.closed ? "closed" : "open",
+      claimedBy,
+      controlMessageId: opening.id,
+      closeControlMessageId,
+      closeReason,
+      transcriptUrl: null,
+      createdAt: opening.createdAt.toISOString()
+    }),
+
+    storageMessageId: null
+  };
+
+  await saveState(channel, entry);
+
+  return entry;
 }
 
 async function loadState(channel) {
   if (channel?.type !== ChannelType.GuildText) {
     return null;
   }
+
+  // Storage initialization is shared by all commands.
 
   await init(channel.guild);
 
@@ -1593,8 +1574,7 @@ async function loadState(channel) {
   if (legacy) {
     const entry = {
       state: legacy,
-      storageMessageId: null,
-      recovered: false
+      storageMessageId: null
     };
 
     await saveState(channel, entry);
@@ -1606,7 +1586,7 @@ async function loadState(channel) {
 }
 
 // ============================================================
-// DUPLICATE PREVENTION
+// DUPLICATE TICKET PREVENTION
 // ============================================================
 
 async function existingTicket(guild, userId, type) {
@@ -1631,8 +1611,6 @@ async function existingTicket(guild, userId, type) {
     if (channel) return channel;
   }
 
-  await guild.channels.fetch();
-
   for (const channel of guild.channels.cache.values()) {
     if (
       channel.type !== ChannelType.GuildText ||
@@ -1643,7 +1621,11 @@ async function existingTicket(guild, userId, type) {
 
     const parsed = parseTicketName(channel.name);
 
-    if (!parsed || parsed.closed || parsed.type !== type) {
+    if (
+      !parsed ||
+      parsed.closed ||
+      parsed.type !== type
+    ) {
       continue;
     }
 
@@ -1669,7 +1651,8 @@ const FULL = [
   P.ViewChannel,
   P.SendMessages,
   P.ReadMessageHistory,
-  P.AttachFiles
+  P.AttachFiles,
+  P.EmbedLinks
 ];
 
 const READ_ONLY = [
@@ -1679,30 +1662,28 @@ const READ_ONLY = [
 
 const WRITE_PERMISSIONS = [
   P.SendMessages,
-  P.AttachFiles
+  P.AttachFiles,
+  P.SendMessagesInThreads,
+  P.CreatePublicThreads,
+  P.CreatePrivateThreads
 ];
 
 const BOT_PERMISSIONS = [
   ...FULL,
-  P.EmbedLinks,
   P.ManageChannels,
-  P.ManageMessages
+  P.ManageMessages,
+  P.ManageRoles
 ];
 
-function permissionEntry(id, type, closed) {
-  return {
-    id,
-    type,
-    allow: closed ? READ_ONLY : FULL,
-    deny: closed ? WRITE_PERMISSIONS : []
-  };
-}
-
 // ============================================================
-// PRIVATE CATEGORIES
+// CATEGORY LOOKUP
 // ============================================================
 
-async function ensurePrivateCategory(guild, type) {
+async function category(guild, type) {
+  if (!TYPES[type]) {
+    throw new Error("Invalid ticket type.");
+  }
+
   const key = `${guild.id}:${type}`;
 
   if (categoryJobs.has(key)) {
@@ -1710,18 +1691,12 @@ async function ensurePrivateCategory(guild, type) {
   }
 
   const job = (async () => {
-    await guild.channels.fetch();
-    await guild.roles.fetch();
-
-    if (type !== "verification" && type !== "unblacklist") {
-      throw new Error("Invalid private category type.");
-    }
-
     const config = TYPES[type];
 
-    const configuredId = type === "verification"
-      ? VERIFICATION_TICKET_CATEGORY_ID
-      : process.env.UNBLACKLIST_TICKET_CATEGORY_ID;
+    await guild.channels.fetch();
+
+    const configuredId =
+      process.env[config.env];
 
     if (configuredId) {
       const configured =
@@ -1729,15 +1704,11 @@ async function ensurePrivateCategory(guild, type) {
         await guild.channels.fetch(configuredId)
           .catch(() => null);
 
-      if (configured?.type !== ChannelType.GuildCategory) {
+      if (
+        configured?.type !== ChannelType.GuildCategory
+      ) {
         throw new Error(
-          `Configured ${type} category ID is invalid.`
-        );
-      }
-
-      if (configured.children.cache.size >= 50) {
-        throw new Error(
-          `The configured ${type} category is full.`
+          `Invalid category configured: ${config.env}`
         );
       }
 
@@ -1747,24 +1718,44 @@ async function ensurePrivateCategory(guild, type) {
     const categories = [
       ...guild.channels.cache.values()
     ].filter(
-      channel => channel.type === ChannelType.GuildCategory
+      channel =>
+        channel.type === ChannelType.GuildCategory
     );
 
     for (const alias of config.categories) {
-      const normalized = normalizeCategoryName(alias);
-
       const found = categories.find(
         channel =>
-          normalizeCategoryName(channel.name) === normalized &&
-          channel.children.cache.size < 50
+          normalizeCategoryName(channel.name) ===
+          normalizeCategoryName(alias)
       );
 
       if (found) return found;
     }
 
-    const staffRoles = type === "verification"
-      ? VERIFICATION_STAFF_ROLES
-      : UNBLACKLIST_STAFF_ROLES;
+    if (type === "support") {
+      const found = categories.find(
+        channel =>
+          channel.name.toLowerCase()
+            .includes("support")
+      );
+
+      if (found) return found;
+    }
+
+    if (
+      type !== "verification" &&
+      type !== "unblacklist"
+    ) {
+      throw new Error(
+        `Could not find the ${config.label} category. ` +
+        `Check ${config.env} in Render.`
+      );
+    }
+
+    const staffRoles =
+      type === "verification"
+        ? VERIFICATION_STAFF_ROLES
+        : UNBLACKLIST_STAFF_ROLES;
 
     const overwrites = [
       {
@@ -1779,14 +1770,14 @@ async function ensurePrivateCategory(guild, type) {
       }
     ];
 
-    for (const roleId of staffRoles) {
-      if (guild.roles.cache.has(roleId)) {
-        overwrites.push({
-          id: roleId,
-          type: OverwriteType.Role,
-          allow: FULL
-        });
-      }
+    for (const id of staffRoles) {
+      if (!guild.roles.cache.has(id)) continue;
+
+      overwrites.push({
+        id,
+        type: OverwriteType.Role,
+        allow: FULL
+      });
     }
 
     return guild.channels.create({
@@ -1797,8 +1788,7 @@ async function ensurePrivateCategory(guild, type) {
 
       type: ChannelType.GuildCategory,
       permissionOverwrites: overwrites,
-
-      reason: `Chuppys private ${type} ticket category`
+      reason: `Chuppys private ${type} category`
     });
   })();
 
@@ -1807,93 +1797,27 @@ async function ensurePrivateCategory(guild, type) {
   try {
     return await job;
   } finally {
-    if (categoryJobs.get(key) === job) {
-      categoryJobs.delete(key);
-    }
+    categoryJobs.delete(key);
   }
-}
-
-async function ensureVerificationCategory(guild) {
-  return ensurePrivateCategory(guild, "verification");
-}
-
-async function ensureUnblacklistCategory(guild) {
-  return ensurePrivateCategory(guild, "unblacklist");
 }
 
 // ============================================================
-// CATEGORY LOOKUP
+// TICKET PERMISSIONS
 // ============================================================
-
-async function category(guild, type) {
-  const config = TYPES[type];
-
-  if (!config) {
-    throw new Error(`Invalid ticket type: ${type}`);
-  }
-
-  if (type === "verification") {
-    return ensureVerificationCategory(guild);
-  }
-
-  if (type === "unblacklist") {
-    return ensureUnblacklistCategory(guild);
-  }
-
-  const configuredId = process.env[config.env];
-
-  if (configuredId) {
-    const configured =
-      guild.channels.cache.get(configuredId) ||
-      await guild.channels.fetch(configuredId)
-        .catch(() => null);
-
-    if (configured?.type === ChannelType.GuildCategory) {
-      return configured;
-    }
-  }
-
-  await guild.channels.fetch();
-
-  const categories = [
-    ...guild.channels.cache.values()
-  ].filter(
-    channel => channel.type === ChannelType.GuildCategory
-  );
-
-  for (const name of config.categories) {
-    const found = categories.find(
-      channel =>
-        normalizeCategoryName(channel.name) ===
-        normalizeCategoryName(name)
-    );
-
-    if (found) return found;
-  }
-
-  if (type === "support") {
-    const found = categories.find(
-      channel => channel.name.toLowerCase().includes("support")
-    );
-
-    if (found) return found;
-  }
-
-  throw new Error(
-    `Could not find the ${config.label} category. ` +
-    `Check ${config.env} in Render.`
-  );
-}
-
-// ============================================================
-// TICKET PERMISSION BUILDER
+//
+// FIX:
+// Closed tickets remain writable by authorized staff.
+// Ticket creator becomes read-only.
+// Staff can still type ,delete, ,savelog and ,reopen.
+//
 // ============================================================
 
 async function permissions(guild, state) {
   const closed = state.status === "closed";
-  const claimed = Boolean(state.claimedBy);
-  const trading = isTradingTicket(state);
-  const claimedTrading = trading && claimed;
+
+  const claimedTrading =
+    isTradingTicket(state) &&
+    Boolean(state.claimedBy);
 
   const result = new Map();
 
@@ -1904,30 +1828,85 @@ async function permissions(guild, state) {
   function allowRole(id) {
     if (!guild.roles.cache.has(id)) return;
 
-    add(
-      permissionEntry(id, OverwriteType.Role, closed)
-    );
+    add({
+      id,
+      type: OverwriteType.Role,
+      allow: FULL,
+      deny: []
+    });
   }
 
-  function allowMember(id) {
+  function allowMember(id, readOnly = false) {
     if (!id) return;
 
-    add(
-      permissionEntry(id, OverwriteType.Member, closed)
-    );
+    add({
+      id,
+      type: OverwriteType.Member,
+
+      allow: readOnly ? READ_ONLY : FULL,
+
+      deny: readOnly ? WRITE_PERMISSIONS : []
+    });
   }
 
   add({
     id: guild.roles.everyone.id,
     type: OverwriteType.Role,
-    allow: [],
 
     deny: [
       P.ViewChannel,
-      P.SendMessages,
-      P.AttachFiles
-    ]
+      ...WRITE_PERMISSIONS
+    ],
+
+    allow: []
   });
+
+  if (isVerificationTicket(state)) {
+    for (const id of VERIFICATION_STAFF_ROLES) {
+      allowRole(id);
+    }
+
+  } else if (isAppealTicket(state)) {
+    for (const id of UNBLACKLIST_STAFF_ROLES) {
+      allowRole(id);
+    }
+
+  } else {
+    allowRole(IDS.owner);
+    allowRole(IDS.support);
+
+    if (!claimedTrading) {
+      allowRole(IDS.admin);
+      allowRole(IDS.mod);
+    }
+
+    if (isTradingTicket(state) && !state.claimedBy) {
+      allowRole(IDS.seller);
+    }
+
+    if (
+      claimedTrading &&
+      guild.roles.cache.has(IDS.seller)
+    ) {
+      add({
+        id: IDS.seller,
+        type: OverwriteType.Role,
+
+        allow: [],
+
+        deny: [
+          P.ViewChannel,
+          P.SendMessages,
+          P.ReadMessageHistory,
+          P.AttachFiles
+        ]
+      });
+    }
+  }
+
+  allowMember(state.ownerId, closed);
+  allowMember(state.claimedBy);
+  allowMember(guild.ownerId);
 
   add({
     id: guild.client.user.id,
@@ -1936,149 +1915,102 @@ async function permissions(guild, state) {
     deny: []
   });
 
-  if (isVerificationTicket(state)) {
-    for (const roleId of VERIFICATION_STAFF_ROLES) {
-      allowRole(roleId);
-    }
-
-    allowMember(guild.ownerId);
-    allowMember(state.ownerId);
-    allowMember(state.claimedBy);
-
-    return [...result.values()];
-  }
-
-  if (isAppealTicket(state)) {
-    for (const roleId of UNBLACKLIST_STAFF_ROLES) {
-      allowRole(roleId);
-    }
-
-    allowMember(guild.ownerId);
-    allowMember(state.ownerId);
-    allowMember(state.claimedBy);
-
-    return [...result.values()];
-  }
-
-  allowRole(IDS.owner);
-  allowRole(IDS.support);
-  allowMember(guild.ownerId);
-
-  if (!claimedTrading) {
-    allowRole(IDS.admin);
-    allowRole(IDS.mod);
-  }
-
-  if (trading && !claimed) {
-    allowRole(IDS.seller);
-  }
-
-  if (claimedTrading && guild.roles.cache.has(IDS.seller)) {
-    add({
-      id: IDS.seller,
-      type: OverwriteType.Role,
-      allow: [],
-
-      deny: [
-        P.ViewChannel,
-        P.SendMessages,
-        P.ReadMessageHistory,
-        P.AttachFiles
-      ]
-    });
-  }
-
-  allowMember(state.ownerId);
-  allowMember(state.claimedBy);
-
-  if (result.size > 100) {
-    throw new Error(
-      "Ticket exceeds Discord's permission overwrite limit."
-    );
-  }
-
   return [...result.values()];
 }
 
 // ============================================================
-// CLAIM PRIVACY CHECK
+// VERIFY PRIVATE PERMISSIONS
 // ============================================================
 
-async function checkClaimPrivacy(channel, state) {
-  if (!state.claimedBy || !isTradingTicket(state)) {
-    return;
-  }
-
+async function checkPrivacy(channel, state) {
   const fresh = await channel.guild.channels.fetch(
     channel.id,
     { force: true }
   );
 
-  if (!fresh) {
-    throw new Error("Could not verify ticket channel.");
-  }
+  const overwrites =
+    fresh?.permissionOverwrites?.cache;
 
-  const overwrites = fresh.permissionOverwrites.cache;
-
-  const everyone = overwrites.get(
-    channel.guild.roles.everyone.id
-  );
-
-  if (!everyone?.deny.has(P.ViewChannel)) {
+  if (!overwrites) {
     throw new Error(
-      "Ticket privacy error: @everyone is not hidden."
+      "Could not verify ticket permissions."
     );
   }
 
   if (
-    channel.guild.roles.cache.has(IDS.seller) &&
-    !overwrites.get(IDS.seller)?.deny.has(P.ViewChannel)
+    !overwrites.get(channel.guild.roles.everyone.id)
+      ?.deny.has(P.ViewChannel)
   ) {
     throw new Error(
-      "Ticket privacy error: seller role is not restricted."
+      "Ticket privacy failed: @everyone is not hidden."
     );
   }
-
-  const claimer = overwrites.get(state.claimedBy);
 
   if (
-    !claimer ||
-    claimer.type !== OverwriteType.Member ||
-    !claimer.allow.has(P.ViewChannel)
+    !overwrites.get(state.ownerId)
+      ?.allow.has(P.ViewChannel)
   ) {
     throw new Error(
-      "Ticket privacy error: claimer lacks access."
+      "Ticket creator does not have access."
     );
   }
 
-  if (!overwrites.get(state.ownerId)?.allow.has(P.ViewChannel)) {
+  if (
+    state.claimedBy &&
+    !overwrites.get(state.claimedBy)
+      ?.allow.has(P.ViewChannel)
+  ) {
     throw new Error(
-      "Ticket privacy error: creator lacks access."
+      "Ticket claimer does not have access."
     );
   }
+
+  let allowedRoles = null;
+
+  if (isVerificationTicket(state)) {
+    allowedRoles = new Set(
+      VERIFICATION_STAFF_ROLES
+    );
+  }
+
+  if (isAppealTicket(state)) {
+    allowedRoles = new Set(
+      UNBLACKLIST_STAFF_ROLES
+    );
+  }
+
+  if (
+    isTradingTicket(state) &&
+    state.claimedBy
+  ) {
+    allowedRoles = new Set([
+      IDS.owner,
+      IDS.support
+    ]);
+
+    if (
+      channel.guild.roles.cache.has(IDS.seller) &&
+      !overwrites.get(IDS.seller)
+        ?.deny.has(P.ViewChannel)
+    ) {
+      throw new Error(
+        "Claimed ticket seller privacy failed."
+      );
+    }
+  }
+
+  if (!allowedRoles) return;
 
   const allowedMembers = new Set([
     state.ownerId,
     state.claimedBy,
     channel.guild.ownerId,
     channel.guild.client.user.id
-  ]);
-
-  const allowedRoles = new Set([
-    IDS.owner,
-    IDS.support
-  ]);
+  ].filter(Boolean));
 
   for (const overwrite of overwrites.values()) {
-    if (!overwrite.allow.has(P.ViewChannel)) continue;
-
-    if (
-      overwrite.type === OverwriteType.Member &&
-      !allowedMembers.has(overwrite.id)
-    ) {
-      throw new Error(
-        `Unexpected member has ticket access: ${overwrite.id}`
-      );
+    if (!overwrite.allow.has(P.ViewChannel)) {
+      continue;
     }
 
     if (
@@ -2086,103 +2018,28 @@ async function checkClaimPrivacy(channel, state) {
       !allowedRoles.has(overwrite.id)
     ) {
       throw new Error(
-        `Unexpected role has ticket access: ${overwrite.id}`
-      );
-    }
-  }
-}
-
-// ============================================================
-// VERIFICATION / APPEAL PRIVACY
-// ============================================================
-
-async function checkPrivatePrivacy(channel, state) {
-  if (
-    !isVerificationTicket(state) &&
-    !isAppealTicket(state)
-  ) {
-    return;
-  }
-
-  const fresh = await channel.guild.channels.fetch(
-    channel.id,
-    { force: true }
-  );
-
-  if (!fresh) {
-    throw new Error("Could not verify private ticket.");
-  }
-
-  const allowedRoleIds = new Set(
-    isAppealTicket(state)
-      ? UNBLACKLIST_STAFF_ROLES
-      : VERIFICATION_STAFF_ROLES
-  );
-
-  const allowedMemberIds = new Set([
-    state.ownerId,
-    state.claimedBy,
-    channel.guild.ownerId,
-    channel.guild.client.user.id
-  ].filter(Boolean));
-
-  const overwrites = fresh.permissionOverwrites.cache;
-
-  if (
-    !overwrites.get(channel.guild.roles.everyone.id)
-      ?.deny.has(P.ViewChannel)
-  ) {
-    throw new Error(
-      "Private ticket privacy failed: @everyone is not denied."
-    );
-  }
-
-  if (!overwrites.get(state.ownerId)?.allow.has(P.ViewChannel)) {
-    throw new Error(
-      "Private ticket privacy failed: creator lacks access."
-    );
-  }
-
-  for (const overwrite of overwrites.values()) {
-    if (!overwrite.allow.has(P.ViewChannel)) continue;
-
-    if (
-      overwrite.type === OverwriteType.Role &&
-      !allowedRoleIds.has(overwrite.id)
-    ) {
-      throw new Error(
-        `Unexpected private ticket role: ${overwrite.id}`
+        `Unexpected ticket role: ${overwrite.id}`
       );
     }
 
     if (
       overwrite.type === OverwriteType.Member &&
-      !allowedMemberIds.has(overwrite.id)
+      !allowedMembers.has(overwrite.id)
     ) {
       throw new Error(
-        `Unexpected private ticket member: ${overwrite.id}`
+        `Unexpected ticket member: ${overwrite.id}`
       );
     }
   }
 }
 
 async function applyPermissions(channel, state) {
-  const overwrites = await permissions(
-    channel.guild,
-    state
-  );
-
   await channel.permissionOverwrites.set(
-    overwrites,
-    "Chuppys private ticket permissions"
+    await permissions(channel.guild, state),
+    "Chuppys ticket permissions"
   );
 
-  await checkClaimPrivacy(channel, state);
-  await checkPrivatePrivacy(channel, state);
-
-  if (channel.topic?.startsWith("chuppys-ticket:")) {
-    await channel.setTopic(null).catch(() => {});
-  }
+  await checkPrivacy(channel, state);
 }
 
 // ============================================================
@@ -2199,7 +2056,9 @@ function ticketButton(action, label, style, disabled = false) {
 }
 
 function controls(state) {
-  if (state.status === "closed") return [];
+  if (state.status === "closed") {
+    return [];
+  }
 
   return [
     new ActionRowBuilder().addComponents(
@@ -2256,7 +2115,8 @@ function panelPayload() {
           ([value, config]) => ({
             label: config.label,
             value,
-            description: `Open a ${config.label} ticket`
+            description:
+              `Open a ${config.label} ticket`
           })
         )
     );
@@ -2285,78 +2145,23 @@ function panelPayload() {
 }
 
 // ============================================================
-// UPDATE BUTTONS
+// UPDATE CONTROLS
 // ============================================================
 
 async function updateControls(channel, state) {
   if (!state.controlMessageId) return;
 
-  try {
-    await channel.messages.edit(
-      state.controlMessageId,
-      { components: controls(state) }
-    );
-  } catch (error) {
-    console.error(
-      "[TICKETS] Opening button update:",
-      error
-    );
-  }
-}
-
-async function findClosedMessage(channel) {
-  let before;
-
-  for (let page = 0; page < 5; page++) {
-    const messages = await channel.messages.fetch({
-      limit: 100,
-      ...(before ? { before } : {})
-    });
-
-    for (const message of messages.values()) {
-      if (message.author.id !== channel.client.user.id) {
-        continue;
-      }
-
-      if (
-        message.embeds.some(
-          embed => embed.title === "Ticket Closed"
-        )
-      ) {
-        return message;
-      }
+  await channel.messages.edit(
+    state.controlMessageId,
+    {
+      components: controls(state)
     }
-
-    if (messages.size < 100) break;
-
-    before = messages.last().id;
-  }
-
-  return null;
-}
-
-async function updateClosedControls(channel, state) {
-  let message = null;
-
-  if (state.closeControlMessageId) {
-    message = await channel.messages.fetch(
-      state.closeControlMessageId
-    ).catch(() => null);
-  }
-
-  if (!message) {
-    message = await findClosedMessage(channel);
-  }
-
-  if (!message) return null;
-
-  await message.edit({
-    components: closedControls()
+  ).catch(error => {
+    console.warn(
+      "[TICKETS] Opening controls:",
+      error.message
+    );
   });
-
-  state.closeControlMessageId = message.id;
-
-  return message;
 }
 
 async function clearClosedControls(channel, state) {
@@ -2365,32 +2170,68 @@ async function clearClosedControls(channel, state) {
   await channel.messages.edit(
     state.closeControlMessageId,
     { components: [] }
-  ).catch(console.error);
+  ).catch(() => {});
 }
 
-async function syncTicketButtons(channel, entry) {
+async function findClosedMessage(channel) {
+  let found = null;
+
+  await scan(channel, message => {
+    if (
+      !found &&
+      message.author.id === channel.client.user.id &&
+      message.embeds.some(
+        embed => embed.title === "Ticket Closed"
+      )
+    ) {
+      found = message;
+    }
+  });
+
+  return found;
+}
+
+async function ensureClosedControls(channel, entry) {
   const state = entry.state;
 
-  if (state.controlMessageId) {
-    await updateControls(channel, state);
+  let message = state.closeControlMessageId
+    ? await channel.messages.fetch(
+        state.closeControlMessageId
+      ).catch(() => null)
+    : null;
+
+  if (!message) {
+    message = await findClosedMessage(channel);
   }
 
-  if (state.status === "closed") {
-    const message = await updateClosedControls(
-      channel,
-      state
-    );
+  if (!message) {
+    message = await channel.send({
+      embeds: [
+        whiteEmbed(
+          "Ticket Closed",
 
-    if (message) {
-      await saveState(channel, entry);
-    }
-  } else if (state.closeControlMessageId) {
-    await clearClosedControls(channel, state);
+          `**Reason:** ${safe(state.closeReason, 500)}\n\n` +
+          "This ticket is closed.\n\n" +
+          "The final archive will be saved before deletion."
+        )
+      ],
 
-    state.closeControlMessageId = null;
+      components: closedControls(),
+      allowedMentions: NONE
+    });
 
+  } else {
+    await message.edit({
+      components: closedControls()
+    });
+  }
+
+  if (state.closeControlMessageId !== message.id) {
+    state.closeControlMessageId = message.id;
     await saveState(channel, entry);
   }
+
+  return message;
 }
 
 // ============================================================
@@ -2401,98 +2242,75 @@ async function syncExistingTickets(guild) {
   await init(guild);
   await guild.channels.fetch();
 
-  const destinations = {};
-
-  for (const type of Object.keys(TYPES)) {
-    try {
-      destinations[type] = await category(guild, type);
-    } catch (error) {
-      console.error(
-        `[TICKETS] Category ${type}:`,
-        error.message
-      );
-    }
-  }
-
-  let moved = 0;
-  let refreshed = 0;
-  let buttonsUpdated = 0;
-
   for (const channel of guild.channels.cache.values()) {
     if (channel.type !== ChannelType.GuildText) {
       continue;
     }
 
-    const parsed = parseTicketName(channel.name);
-    const cached = tickets.get(channel.id);
-
-    if (!parsed && !cached) continue;
-
-    const entry =
-      cached ||
-      await loadState(channel).catch(() => null);
-
-    if (!entry) continue;
-
-    const target = destinations[entry.state.type];
+    if (
+      !parseTicketName(channel.name) &&
+      !tickets.has(channel.id)
+    ) {
+      continue;
+    }
 
     try {
       await queuedTicket(channel.id, async () => {
-        if (target && channel.parentId !== target.id) {
-          await channel.setParent(target.id, {
-            lockPermissions: false
-          });
+        const entry = await loadState(channel);
 
-          moved++;
+        if (!entry) return;
+
+        // Restore stored permissions.
+        // Do not automatically archive or move tickets.
+
+        await applyPermissions(
+          channel,
+          entry.state
+        );
+
+        await updateControls(
+          channel,
+          entry.state
+        );
+
+        if (entry.state.status === "closed") {
+          await ensureClosedControls(
+            channel,
+            entry
+          );
         }
 
-        await applyPermissions(channel, entry.state);
+        const expectedName = ticketName(
+          entry.state.type,
+          entry.state.number,
+          entry.state.status === "closed"
+        );
 
-        refreshed++;
-
-        await syncTicketButtons(channel, entry);
-
-        buttonsUpdated++;
+        if (channel.name !== expectedName) {
+          await channel.setName(
+            expectedName
+          ).catch(console.error);
+        }
       });
+
     } catch (error) {
       console.error(
-        `[TICKETS] Sync ${channel.name}:`,
-        error
+        `[TICKETS] Restore ${channel.name}:`,
+        error.message
       );
     }
   }
-
-  console.log(`[TICKETS] ${moved} tickets moved.`);
-  console.log(`[TICKETS] ${refreshed} permissions refreshed.`);
-  console.log(`[TICKETS] ${buttonsUpdated} buttons processed.`);
 }
 
 // ============================================================
-// FETCH ALL TICKET MESSAGES
+// PRIVATE LOG CHANNEL VALIDATION
 // ============================================================
 
-async function allMessages(channel) {
-  const messages = [];
-
-  await scan(
-    channel,
-    message => messages.push(message),
-    Infinity
-  );
-
-  return messages.sort(
-    (a, b) => a.createdTimestamp - b.createdTimestamp
-  );
-}
-
-// ============================================================
-// PRIVATE ARCHIVE VALIDATION
-// ============================================================
-
-async function validateRecoveryArchive(guild, channel) {
+async function validateArchiveChannel(guild, channel) {
   if (
     channel.id !== IDS.logs ||
-    channel.guild?.id !== guild.id
+    channel.guild?.id !== guild.id ||
+    channel.type !== ChannelType.GuildText
   ) {
     throw new Error(
       "Invalid ticket logs destination."
@@ -2504,22 +2322,20 @@ async function validateRecoveryArchive(guild, channel) {
     { force: true }
   );
 
-  if (!fresh?.permissionOverwrites) {
+  const overwrites =
+    fresh?.permissionOverwrites?.cache;
+
+  if (!overwrites) {
     throw new Error(
-      "Could not verify ticket logs permissions."
+      "Could not verify ticket logs privacy."
     );
   }
-
-  const overwrites = fresh.permissionOverwrites.cache;
 
   const everyone = overwrites.get(
     guild.roles.everyone.id
   );
 
-  if (
-    !everyone?.deny.has(P.ViewChannel) ||
-    everyone.allow.has(P.ViewChannel)
-  ) {
+  if (!everyone?.deny.has(P.ViewChannel)) {
     throw new Error(
       "Ticket logs must deny View Channel to @everyone."
     );
@@ -2545,8 +2361,7 @@ async function validateRecoveryArchive(guild, channel) {
       !allowedRoles.has(overwrite.id)
     ) {
       throw new Error(
-        "Ticket logs must be restricted to Owner/Admin roles. " +
-        `Additional role: ${overwrite.id}`
+        `Unexpected role has ticket logs access: ${overwrite.id}`
       );
     }
 
@@ -2560,19 +2375,25 @@ async function validateRecoveryArchive(guild, channel) {
     }
   }
 
-  const botPermissions = fresh.permissionsFor(
+  const bot = fresh.permissionsFor(
     guild.client.user.id
   );
 
-  if (!botPermissions?.has([
+  if (!bot?.has([
     P.ViewChannel,
-    P.ReadMessageHistory,
     P.SendMessages,
+    P.ReadMessageHistory,
+    P.AttachFiles,
     P.EmbedLinks,
-    P.AttachFiles
+    P.CreatePublicThreads,
+    P.SendMessagesInThreads,
+    P.ManageThreads
   ])) {
     throw new Error(
-      "Bot is missing required ticket logs permissions."
+      "Bot needs View Channel, Send Messages, " +
+      "Read Message History, Attach Files, Embed Links, " +
+      "Create Public Threads, Send Messages in Threads " +
+      "and Manage Threads in ticket logs."
     );
   }
 
@@ -2602,38 +2423,63 @@ function discordAttachmentUrl(value) {
     }
 
     return url;
+
   } catch {
     return null;
   }
 }
 
-// ============================================================
-// DOWNLOAD ORIGINAL ATTACHMENT
-// ============================================================
-//
-// No artificial 5 MB image download limit.
-//
-// Files are processed individually.
-// Actual host memory and network limits still apply.
-//
-// ============================================================
+function originalCdnUrl(value) {
+  const url = discordAttachmentUrl(value);
 
-async function downloadTranscriptFile(url) {
-  const valid = discordAttachmentUrl(url);
+  if (!url) return null;
 
-  if (!valid) {
-    throw new Error("Invalid Discord attachment URL.");
+  url.hostname = "cdn.discordapp.com";
+
+  // Remove image resizing and format conversion parameters.
+  // Preserve signed URL parameters.
+
+  for (const key of [
+    "width",
+    "height",
+    "format",
+    "quality"
+  ]) {
+    url.searchParams.delete(key);
   }
 
-  const response = await fetch(valid.href, {
+  return url.href;
+}
+
+// ============================================================
+// DOWNLOAD FILE
+// ============================================================
+
+async function downloadTranscriptFile(value) {
+  const url = discordAttachmentUrl(value);
+
+  if (!url) {
+    throw new Error(
+      "Invalid Discord attachment URL."
+    );
+  }
+
+  const response = await fetch(url.href, {
     redirect: "error",
 
-    signal:
-      AbortSignal.timeout(DOWNLOAD_TIMEOUT)
+    headers: {
+      "Accept": "*/*",
+      "Accept-Encoding": "identity"
+    },
+
+    signal: AbortSignal.timeout(
+      DOWNLOAD_TIMEOUT
+    )
   });
 
   if (!response.ok) {
-    await response.body?.cancel().catch(() => {});
+    await response.body?.cancel()
+      .catch(() => {});
 
     throw new Error(
       `Attachment HTTP ${response.status}`
@@ -2647,39 +2493,42 @@ async function downloadTranscriptFile(url) {
   }
 
   const chunks = [];
-
   let size = 0;
 
   for await (const chunk of response.body) {
-    chunks.push(Buffer.from(chunk));
-    size += chunk.length;
+    const part = Buffer.from(chunk);
+
+    chunks.push(part);
+    size += part.length;
   }
 
-  if (!size) {
-    throw new Error(
-      "Downloaded attachment is empty."
-    );
-  }
+  const lengthHeader =
+    response.headers.get("content-length");
 
-  const expected = Number(
-    response.headers.get("content-length")
-  );
+  const encoding =
+    response.headers.get("content-encoding");
 
   if (
-    expected > 0 &&
-    !response.headers.get("content-encoding") &&
-    expected !== size
+    lengthHeader !== null &&
+    (!encoding || encoding === "identity")
   ) {
-    throw new Error(
-      "Incomplete attachment download."
-    );
+    const expected = Number(lengthHeader);
+
+    if (
+      Number.isFinite(expected) &&
+      expected !== size
+    ) {
+      throw new Error(
+        `Incomplete HTTP download: expected ${expected}, received ${size}`
+      );
+    }
   }
 
   return Buffer.concat(chunks, size);
 }
 
 // ============================================================
-// IMAGE FORMAT VALIDATION
+// IMAGE VALIDATION
 // ============================================================
 
 function imageMime(buffer) {
@@ -2704,9 +2553,13 @@ function imageMime(buffer) {
     return "image/jpeg";
   }
 
-  const signature = buffer.subarray(0, 6).toString();
+  const signature =
+    buffer.subarray(0, 6).toString();
 
-  if (signature === "GIF87a" || signature === "GIF89a") {
+  if (
+    signature === "GIF87a" ||
+    signature === "GIF89a"
+  ) {
     return "image/gif";
   }
 
@@ -2731,318 +2584,795 @@ function imageExtension(mime) {
 }
 
 // ============================================================
-// REFRESH ATTACHMENT DOWNLOAD
+// ORIGINAL ATTACHMENT DOWNLOAD WITH RETRIES
+// ============================================================
+//
+// FIX:
+// - Refresh the Discord message.
+// - Obtain a fresh signed attachment URL.
+// - Prefer original CDN bytes.
+// - Retry temporary failures.
+// - Keep original file size validation.
+// - Never silently archive a truncated image.
+//
 // ============================================================
 
 async function downloadMessageAttachment(message, file) {
-  try {
-    const buffer = await downloadTranscriptFile(file.url);
+  let lastError = null;
 
-    if (
-      Number.isFinite(file.size) &&
-      file.size > 0 &&
-      buffer.length !== file.size
-    ) {
-      throw new Error(
-        "Attachment size does not match original."
-      );
+  for (
+    let attempt = 1;
+    attempt <= DOWNLOAD_RETRIES;
+    attempt++
+  ) {
+    try {
+      let current = file;
+
+      if (attempt > 1) {
+        const fresh = await message.channel.messages.fetch({
+          message: message.id,
+          force: true,
+          cache: false
+        });
+
+        current = fresh.attachments.get(file.id);
+
+        if (!current) {
+          throw new Error(
+            "Attachment no longer exists on the original message."
+          );
+        }
+      }
+
+      const urls = [
+        originalCdnUrl(current.url),
+        current.url
+      ].filter(Boolean);
+
+      for (const url of [...new Set(urls)]) {
+        try {
+          const buffer =
+            await downloadTranscriptFile(url);
+
+          if (
+            Number.isFinite(current.size) &&
+            buffer.length !== current.size
+          ) {
+            throw new Error(
+              `Expected ${current.size} bytes, ` +
+              `received ${buffer.length} bytes`
+            );
+          }
+
+          if (
+            !buffer.length &&
+            current.size !== 0
+          ) {
+            throw new Error(
+              "Downloaded file was empty."
+            );
+          }
+
+          return buffer;
+
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+    } catch (error) {
+      lastError = error;
     }
 
-    return buffer;
-
-  } catch (firstError) {
-    const freshMessage =
-      await message.channel.messages.fetch({
-        message: message.id,
-        force: true,
-        cache: false
-      }).catch(() => null);
-
-    const freshFile =
-      freshMessage?.attachments.get(file.id);
-
-    if (!freshFile) {
-      throw new Error(
-        `Could not preserve ${file.name}: ${firstError.message}`
-      );
-    }
-
-    const buffer = await downloadTranscriptFile(
-      freshFile.url
+    console.warn(
+      `[ARCHIVE] ${file.name}: ` +
+      `attempt ${attempt}/${DOWNLOAD_RETRIES}: ` +
+      `${lastError?.message || "Download failed"}`
     );
 
-    if (
-      freshFile.size > 0 &&
-      buffer.length !== freshFile.size
-    ) {
-      throw new Error(
-        `Incomplete download: ${file.name}`
+    if (attempt < DOWNLOAD_RETRIES) {
+      await sleep(
+        Math.min(1500 * attempt, 8000)
       );
     }
-
-    return buffer;
   }
+
+  throw new Error(
+    `Could not preserve ${file.name || file.id}: ` +
+    `${lastError?.message || "Download failed"}`
+  );
 }
 
 // ============================================================
-// PERMANENT ATTACHMENT ARCHIVE
-// ============================================================
-//
-// Each original file is uploaded independently.
-//
-// Oversized attachments are split into binary parts.
-// Their original bytes are preserved without compression.
-//
-// Normal screenshots can be opened directly in Discord.
-//
+// ARCHIVE ROOT EMBED
 // ============================================================
 
-async function archiveOriginalFile(
-  logs,
-  ticketNumber,
-  buffer,
-  originalName,
-  originalId,
-  recovered = false
-) {
-  const mime = imageMime(buffer);
+function archiveRootPayload(state, complete = null) {
+  let description =
+    `**Number:** #${numberText(state.number)}\n` +
+    `**Type:** ${TYPES[state.type]?.label || state.type}\n` +
+    `**Creator:** ${
+      state.ownerId
+        ? `<@${state.ownerId}>`
+        : "Historical ticket"
+    }\n` +
+    `**Claimed By:** ${
+      state.claimedBy
+        ? `<@${state.claimedBy}>`
+        : "Not claimed"
+    }\n\n` +
+    `**Close Reason**\n${safe(state.closeReason, 500)}\n\n`;
 
-  let name = safeFilename(originalName);
+  if (complete) {
+    description +=
+      "**Archive Status:** Complete\n" +
+      `**Messages:** ${complete.messages}\n` +
+      `**Attachments:** ${complete.attachments}\n` +
+      `**Images:** ${complete.images}\n` +
+      `**Transcript Parts:** ${complete.parts}\n\n` +
+      `[Open Complete Archive](${complete.url})`;
 
-  if (
-    mime &&
-    !/\.(png|jpe?g|gif|webp)$/i.test(name)
-  ) {
-    name += `.${imageExtension(mime)}`;
-  }
-
-  const prefix = recovered
-    ? "recovered"
-    : "ticket";
-
-  const base =
-    `${prefix}-${ticketNumber}-${originalId}-${name}`;
-
-  const checksum = createHash("sha256")
-    .update(buffer)
-    .digest("hex");
-
-  const urls = [];
-
-  // Upload ordinary images/files as original files.
-
-  if (buffer.length <= FILE_PART_SIZE) {
-    const message = await logs.send({
-      embeds: [
-        whiteEmbed(
-          recovered
-            ? "Recovered Ticket Image"
-            : "Archived Ticket Attachment",
-
-          `**Ticket:** #${numberText(ticketNumber)}\n` +
-          `**File:** ${safe(originalName, 200)}\n` +
-          `**Size:** ${buffer.length.toLocaleString()} bytes\n` +
-          "**Quality:** Original"
-        ).setFooter({
-          text:
-            `${BRAND} • Attachment ID: ${originalId}`
-        })
-      ],
-
-      files: [
-        new AttachmentBuilder(buffer, {
-          name: base
-        })
-      ],
-
-      allowedMentions: NONE
-    });
-
-    if (!message.attachments.size) {
-      throw new Error(
-        `Archive upload not confirmed: ${originalName}`
-      );
-    }
-
-    urls.push(message.url);
-
-    return {
-      name: originalName,
-      mime,
-      urls,
-      checksum,
-      size: buffer.length,
-      split: false
-    };
-  }
-
-  // Large files: split into multiple uploads.
-
-  const total = Math.ceil(
-    buffer.length / FILE_PART_SIZE
-  );
-
-  for (let index = 0; index < total; index++) {
-    const start = index * FILE_PART_SIZE;
-
-    const end = Math.min(
-      start + FILE_PART_SIZE,
-      buffer.length
-    );
-
-    const part = buffer.subarray(start, end);
-
-    const partName =
-      `${base}.part${String(index + 1).padStart(5, "0")}`;
-
-    const message = await logs.send({
-      embeds: [
-        whiteEmbed(
-          "Archived Attachment Part",
-
-          `**Ticket:** #${numberText(ticketNumber)}\n` +
-          `**File:** ${safe(originalName, 200)}\n` +
-          `**Part:** ${index + 1}/${total}\n\n` +
-          "All parts must be joined in numerical order " +
-          "to reconstruct the original file."
-        ).setFooter({
-          text:
-            `${BRAND} • Attachment ID: ${originalId}`
-        })
-      ],
-
-      files: [
-        new AttachmentBuilder(part, {
-          name: partName
-        })
-      ],
-
-      allowedMentions: NONE
-    });
-
-    if (!message.attachments.size) {
-      throw new Error(
-        `Attachment part ${index + 1} was not saved.`
-      );
-    }
-
-    urls.push(message.url);
-  }
-
-  const manifest = {
-    originalName,
-    originalId,
-    totalParts: total,
-    originalBytes: buffer.length,
-    sha256: checksum,
-
-    instructions:
-      "Download every part and concatenate their bytes " +
-      "in numerical order. Rename the output to originalName.",
-
-    parts: urls
-  };
-
-  const manifestBuffer = Buffer.from(
-    JSON.stringify(manifest, null, 2),
-    "utf8"
-  );
-
-  const manifestMessage = await logs.send({
-    embeds: [
-      whiteEmbed(
-        "Attachment Reconstruction Information",
-
-        `**Ticket:** #${numberText(ticketNumber)}\n` +
-        `**File:** ${safe(originalName, 200)}\n` +
-        `**Parts:** ${total}\n\n` +
-        "The original file has been preserved in multiple parts."
-      )
-    ],
-
-    files: [
-      new AttachmentBuilder(manifestBuffer, {
-        name: `${base}-manifest.json`
-      })
-    ],
-
-    allowedMentions: NONE
-  });
-
-  if (!manifestMessage.attachments.size) {
-    throw new Error(
-      "Could not save attachment reconstruction information."
-    );
+  } else {
+    description +=
+      "**Archive Status:** Pending / In Progress\n\n" +
+      "All saved files are organized in the attached archive thread.";
   }
 
   return {
-    name: originalName,
-    mime,
-    urls,
-    checksum,
-    size: buffer.length,
-    split: true,
-    manifestUrl: manifestMessage.url
+    content: "",
+
+    embeds: [
+      whiteEmbed(
+        `Ticket #${numberText(state.number)} — ` +
+        `${TYPES[state.type]?.label || state.type}`,
+
+        description
+      )
+        .setFooter({
+          text:
+            `${BRAND} • ${ARCHIVE_ROOT_MARKER}:${state.channelId}`
+        })
+        .setTimestamp()
+    ],
+
+    allowedMentions: NONE
   };
 }
 
 // ============================================================
-// HTML IMAGE AND ATTACHMENT DISPLAY
+// FIND EXISTING ARCHIVE ROOT
 // ============================================================
 
-function savedImageHtml(buffer, name) {
-  const mime = imageMime(buffer);
+async function findArchiveRoot(logs, state) {
+  if (state.archiveRootId) {
+    const existing = await logs.messages.fetch(
+      state.archiveRootId
+    ).catch(() => null);
 
-  if (!mime) {
-    return "";
+    if (
+      existing?.author.id === logs.client.user.id &&
+      footerText(existing).includes(
+        `${ARCHIVE_ROOT_MARKER}:${state.channelId}`
+      )
+    ) {
+      return existing;
+    }
   }
 
-  const data =
-    `data:${mime};base64,${buffer.toString("base64")}`;
+  let root = null;
 
-  return (
-    `<figure class="saved-attachment">` +
+  await scan(logs, message => {
+    if (
+      !root &&
+      message.author.id === logs.client.user.id &&
+      footerText(message).includes(
+        `${ARCHIVE_ROOT_MARKER}:${state.channelId}`
+      )
+    ) {
+      root = message;
+    }
+  });
 
-    `<img src="${data}" ` +
-    `alt="${escapeHtml(name)}">` +
-
-    `<figcaption>${escapeHtml(name)}</figcaption>` +
-
-    `</figure>`
-  );
+  return root;
 }
 
-function archiveLinkHtml(record) {
-  const links = record.urls.map(
-    (url, index) =>
-      `<p><a href="${escapeHtml(url)}">` +
-      `${
-        record.split
-          ? `Download part ${index + 1}`
-          : "Open original attachment in Discord"
-      }</a></p>`
-  ).join("");
+// ============================================================
+// CREATE OR REUSE ARCHIVE THREAD
+// ============================================================
 
-  return (
-    `<div class="saved-attachment">` +
+async function getArchiveThread(
+  logs,
+  state,
+  persist = null
+) {
+  let root = await findArchiveRoot(
+    logs,
+    state
+  );
 
-    `<p><strong>${escapeHtml(record.name)}</strong></p>` +
+  if (!root) {
+    root = await logs.send(
+      archiveRootPayload(state)
+    );
+  }
 
-    links +
+  state.archiveRootId = root.id;
 
+  if (persist) {
+    await persist();
+  }
+
+  let thread =
+    root.thread ||
+    await logs.guild.channels.fetch(
+      state.archiveThreadId || root.id
+    ).catch(() => null);
+
+  if (thread && !thread.isThread()) {
+    thread = null;
+  }
+
+  if (!thread) {
+    thread = await root.startThread({
+      name:
+        `ticket-${numberText(state.number)}-${state.type}`,
+
+      autoArchiveDuration: 1440,
+
+      reason:
+        `Organized archive for ticket #${state.number}`
+    });
+  }
+
+  if (
+    !thread.isThread() ||
+    thread.parentId !== logs.id
+  ) {
+    throw new Error(
+      "Invalid archive thread."
+    );
+  }
+
+  if (thread.locked) {
+    await thread.setLocked(false);
+  }
+
+  if (thread.archived) {
+    await thread.setArchived(false);
+  }
+
+  state.archiveThreadId = thread.id;
+
+  if (persist) {
+    await persist();
+  }
+
+  return {
+    root,
+    thread
+  };
+}
+
+// ============================================================
+// DISCOVER EXISTING ARCHIVED FILES
+// ============================================================
+//
+// Supports new archives and ordinary attachments saved
+// by your previous tickets.js.
+//
+// Previously saved original files are reused rather than
+// uploaded again.
+//
+// ============================================================
+
+async function buildArchiveCatalog(logs, thread, state) {
+  const catalog = {
+    files: new Map(),
+    hashes: new Map(),
+    parts: new Map(),
+    html: new Map(),
+    completed: new Map()
+  };
+
+  function inspect(message, inThread) {
+    if (
+      message.author.id !== logs.client.user.id
+    ) {
+      return;
+    }
+
+    const footer = footerText(message);
+
+    const fileMarker = footer.match(
+      /CHUPPYS_ARCHIVE_FILE_V4:([^:]+):([a-f0-9]{64}):(\d+):(\d+):(\d+)/
+    );
+
+    if (fileMarker && inThread) {
+      const [
+        ,
+        id,
+        checksum,
+        partText,
+        totalText,
+        bytesText
+      ] = fileMarker;
+
+      const part = Number(partText);
+      const total = Number(totalText);
+      const originalBytes = Number(bytesText);
+
+      const attachment =
+        message.attachments.first();
+
+      if (!attachment) return;
+
+      const expectedSize = Math.min(
+        FILE_PART_SIZE,
+
+        Math.max(
+          0,
+          originalBytes -
+          (part - 1) * FILE_PART_SIZE
+        )
+      );
+
+      if (
+        part < 1 ||
+        part > total ||
+        total < 1 ||
+        attachment.size !== expectedSize
+      ) {
+        return;
+      }
+
+      const key =
+        `${id}:${checksum}:${total}:${originalBytes}`;
+
+      if (!catalog.parts.has(key)) {
+        catalog.parts.set(key, {
+          id,
+          checksum,
+          total,
+          size: originalBytes,
+          messages: new Map()
+        });
+      }
+
+      const record = catalog.parts.get(key);
+
+      record.messages.set(
+        part,
+        message.url
+      );
+
+      return;
+    }
+
+    const htmlMarker = footer.match(
+      /CHUPPYS_ARCHIVE_HTML_V4:([a-f0-9]{64}):(\d+):([a-f0-9]{64})/
+    );
+
+    if (
+      inThread &&
+      htmlMarker &&
+      message.attachments.size
+    ) {
+      const [, snapshot, part, checksum] =
+        htmlMarker;
+
+      catalog.html.set(
+        `${snapshot}:${part}:${checksum}`,
+        message.url
+      );
+    }
+
+    const completeMarker = footer.match(
+      /CHUPPYS_ARCHIVE_COMPLETE_V4:([a-f0-9]{64})/
+    );
+
+    if (inThread && completeMarker) {
+      const key = completeMarker[1];
+
+      if (!catalog.completed.has(key)) {
+        catalog.completed.set(key, message);
+      }
+    }
+
+    // Reuse original files from previous ticket logs.
+
+    if (!inThread) {
+      for (const embed of message.embeds) {
+        if (
+          embed.title !== "Archived Ticket Attachment" &&
+          embed.title !== "Recovered Ticket Image"
+        ) {
+          continue;
+        }
+
+        const ticketMatch = String(
+          embed.description || ""
+        ).match(
+          /\*\*Ticket:\*\*\s*#?0*(\d+)/i
+        );
+
+        if (
+          !ticketMatch ||
+          Number(ticketMatch[1]) !== state.number
+        ) {
+          continue;
+        }
+
+        const idMatch = String(
+          embed.footer?.text || ""
+        ).match(
+          /Attachment ID: ([a-zA-Z0-9_-]+)/
+        );
+
+        const attachment =
+          message.attachments.first();
+
+        if (!idMatch || !attachment) {
+          continue;
+        }
+
+        const id = idMatch[1];
+
+        if (!catalog.files.has(id)) {
+          catalog.files.set(id, {
+            id,
+            name: attachment.name,
+            size: attachment.size,
+            urls: [message.url],
+            split: false,
+            legacy: true,
+            message,
+            attachment
+          });
+        }
+      }
+    }
+  }
+
+  await scan(
+    thread,
+    message => inspect(message, true)
+  );
+
+  await scan(
+    logs,
+    message => inspect(message, false)
+  );
+
+  for (const record of catalog.parts.values()) {
+    if (record.messages.size !== record.total) {
+      continue;
+    }
+
+    const urls = [];
+
+    for (
+      let part = 1;
+      part <= record.total;
+      part++
+    ) {
+      urls.push(record.messages.get(part));
+    }
+
+    const complete = {
+      id: record.id,
+      checksum: record.checksum,
+      size: record.size,
+      urls,
+      split: record.total > 1
+    };
+
+    catalog.files.set(
+      record.id,
+      complete
+    );
+
+    catalog.hashes.set(
+      record.checksum,
+      complete
+    );
+  }
+
+  return catalog;
+}
+
+// ============================================================
+// ARCHIVE ORIGINAL FILE ONCE
+// ============================================================
+
+async function archiveOriginalFile(
+  thread,
+  catalog,
+  state,
+  buffer,
+  originalName,
+  originalId
+) {
+  const id = String(originalId);
+
+  const checksum = hash(buffer);
+
+  const known = catalog.files.get(id);
+
+  if (
+    known &&
+    known.size === buffer.length &&
     (
-      record.manifestUrl
-        ? `<p><a href="${escapeHtml(record.manifestUrl)}">` +
-          `Reconstruction information</a></p>`
-        : ""
-    ) +
+      known.checksum === checksum ||
+      known.legacy
+    )
+  ) {
+    return {
+      ...known,
+      name: originalName
+    };
+  }
 
-    `</div>`
+  // Deduplicate identical files within the same ticket.
+
+  const sameBytes = catalog.hashes.get(
+    checksum
+  );
+
+  if (sameBytes) {
+    const record = {
+      ...sameBytes,
+      id,
+      name: originalName
+    };
+
+    catalog.files.set(id, record);
+
+    return record;
+  }
+
+  const mime = imageMime(buffer);
+
+  let filename = safeFilename(
+    originalName
+  );
+
+  if (
+    mime &&
+    !/\.(png|jpe?g|gif|webp)$/i.test(filename)
+  ) {
+    filename += `.${imageExtension(mime)}`;
+  }
+
+  const total = Math.max(
+    1,
+    Math.ceil(
+      buffer.length / FILE_PART_SIZE
+    )
+  );
+
+  const key =
+    `${id}:${checksum}:${total}:${buffer.length}`;
+
+  let partial = catalog.parts.get(key);
+
+  if (!partial) {
+    partial = {
+      id,
+      checksum,
+      total,
+      size: buffer.length,
+      messages: new Map()
+    };
+
+    catalog.parts.set(key, partial);
+  }
+
+  for (
+    let part = 1;
+    part <= total;
+    part++
+  ) {
+    // Resume a partially completed upload.
+
+    if (partial.messages.has(part)) {
+      continue;
+    }
+
+    const bytes = buffer.subarray(
+      (part - 1) * FILE_PART_SIZE,
+      part * FILE_PART_SIZE
+    );
+
+    const uploadName =
+      total === 1
+        ? filename
+        : `${filename}.part${String(part).padStart(5, "0")}`;
+
+    const description =
+      `**File:** ${safe(originalName, 200)}\n` +
+      `**Size:** ${buffer.length.toLocaleString()} bytes\n` +
+      "**Quality:** Original" +
+
+      (
+        total > 1
+          ? `\n**Part:** ${part}/${total}\n\n` +
+            "Join all parts in numerical order to restore the file."
+          : ""
+      );
+
+    const message = await thread.send({
+      embeds: [
+        whiteEmbed(
+          total > 1
+            ? "Attachment Part"
+            : "Saved Attachment",
+
+          description
+        ).setFooter({
+          text:
+            `${ARCHIVE_FILE_MARKER}:${id}:${checksum}:` +
+            `${part}:${total}:${buffer.length}`
+        })
+      ],
+
+      files: [
+        new AttachmentBuilder(bytes, {
+          name: uploadName
+        })
+      ],
+
+      allowedMentions: NONE
+    });
+
+    const uploaded =
+      message.attachments.first();
+
+    if (
+      !uploaded ||
+      uploaded.size !== bytes.length
+    ) {
+      throw new Error(
+        `Upload verification failed: ${filename}, part ${part}`
+      );
+    }
+
+    partial.messages.set(
+      part,
+      message.url
+    );
+  }
+
+  const urls = [];
+
+  for (
+    let part = 1;
+    part <= total;
+    part++
+  ) {
+    const url = partial.messages.get(part);
+
+    if (!url) {
+      throw new Error(
+        `Missing archived attachment part ${part}`
+      );
+    }
+
+    urls.push(url);
+  }
+
+  const record = {
+    id,
+    name: originalName,
+    mime,
+    size: buffer.length,
+    checksum,
+    urls,
+    split: total > 1
+  };
+
+  catalog.files.set(id, record);
+  catalog.hashes.set(checksum, record);
+
+  console.log(
+    `[ARCHIVE] Ticket ${state.number}: ` +
+    `${filename} saved once.`
+  );
+
+  return record;
+}
+
+// ============================================================
+// REUSE OR DOWNLOAD ATTACHMENT
+// ============================================================
+
+async function preserveAttachment(
+  thread,
+  catalog,
+  state,
+  message,
+  file
+) {
+  const existing =
+    catalog.files.get(file.id);
+
+  if (
+    existing &&
+    existing.size === file.size &&
+    existing.urls.length
+  ) {
+    // New-format files were verified when uploaded.
+    // Legacy files receive an extra download check.
+
+    if (existing.legacy) {
+      try {
+        const buffer = await downloadMessageAttachment(
+          existing.message,
+          existing.attachment
+        );
+
+        if (buffer.length !== file.size) {
+          throw new Error(
+            "Legacy archive size mismatch."
+          );
+        }
+
+        existing.checksum = hash(buffer);
+
+        catalog.hashes.set(
+          existing.checksum,
+          existing
+        );
+
+      } catch {
+        catalog.files.delete(file.id);
+
+        const buffer =
+          await downloadMessageAttachment(
+            message,
+            file
+          );
+
+        return archiveOriginalFile(
+          thread,
+          catalog,
+          state,
+          buffer,
+          file.name || "attachment",
+          file.id
+        );
+      }
+    }
+
+    return {
+      ...existing,
+      name: file.name || "attachment"
+    };
+  }
+
+  const buffer =
+    await downloadMessageAttachment(
+      message,
+      file
+    );
+
+  return archiveOriginalFile(
+    thread,
+    catalog,
+    state,
+    buffer,
+    file.name || "attachment",
+    file.id
   );
 }
 
 // ============================================================
 // HTML TRANSCRIPT TEMPLATE
+// ============================================================
+//
+// Images exist once as original Discord attachments.
+// HTML links to the archived message.
+// No duplicate base64 image copies.
+//
 // ============================================================
 
 function transcriptDocument(title, rows, part) {
@@ -3051,84 +3381,87 @@ function transcriptDocument(title, rows, part) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none';">
 <title>Chuppys Ticket Transcript</title>
 <style>
+* {
+  box-sizing: border-box;
+}
 body {
-  background: #15141c;
-  color: white;
-  max-width: 850px;
-  margin: 30px auto;
-  padding: 20px;
-  font: 15px/1.6 system-ui;
+  background: #17161e;
+  color: #eeeeee;
+  font: 15px/1.6 system-ui, sans-serif;
+  max-width: 900px;
+  margin: auto;
+  padding: 24px;
+}
+header {
+  border-bottom: 1px solid #45434f;
+  margin-bottom: 20px;
+  padding-bottom: 18px;
+}
+h1 {
+  font-size: 25px;
+  margin: 0;
 }
 article {
-  border-bottom: 1px solid #444;
-  padding: 15px 0;
+  border-bottom: 1px solid #35333f;
+  padding: 18px 0;
 }
-article div, p, blockquote {
+.author {
+  font-weight: 700;
+}
+small {
+  color: #b0adbd;
+}
+.body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin-top: 8px;
+}
+blockquote {
+  margin: 12px 0;
+  border-left: 3px solid #ffffff;
+  background: #25232e;
+  padding: 12px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-blockquote {
-  border-left: 3px solid white;
-  padding: 10px;
-  background: #292734;
-}
-small {
-  color: #aaa;
+.attachment {
+  border: 1px solid #45434f;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 10px 0;
+  background: #211f2a;
+  overflow-wrap: anywhere;
 }
 a {
   color: #aaccff;
 }
-img {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  border-radius: 8px;
-  margin: 10px 0;
-}
-.saved-attachment {
-  margin: 12px 0;
-  padding: 10px;
-  background: #292734;
-  border-radius: 8px;
-}
-figcaption {
-  color: #aaa;
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
 </style>
 </head>
 <body>
-<h1>${escapeHtml(BRAND)} Ticket Transcript</h1>
+<header>
+<h1>${escapeHtml(BRAND)}</h1>
+<h2>Ticket Transcript</h2>
 <p>${escapeHtml(title)}</p>
 <p>Part ${part}</p>
+<p>All attachments are saved in the ticket archive.</p>
+</header>
 ${rows.join("\n")}
 </body>
 </html>`;
 }
 
 // ============================================================
-// UNLIMITED MULTIPART HTML WRITER
-// ============================================================
-//
-// Automatically starts another file when necessary.
-//
-// No maximum number of transcript parts.
-//
-// Each individual image is processed separately,
-// preventing a large ticket from creating one enormous
-// base64 HTML document.
-//
+// MULTIPART HTML WRITER
 // ============================================================
 
 function createTranscriptWriter(
-  logs,
-  title,
-  filename,
-  ticketNumber
+  thread,
+  catalog,
+  state,
+  snapshot
 ) {
   let rows = [];
   let bytes = 0;
@@ -3142,81 +3475,103 @@ function createTranscriptWriter(
     part++;
 
     const html = transcriptDocument(
-      title,
+      `${state.type}-${numberText(state.number)}`,
       rows,
       part
     );
 
-    const buffer = Buffer.from(html, "utf8");
+    const buffer = Buffer.from(
+      html,
+      "utf8"
+    );
 
     if (buffer.length > HTML_PART_SIZE) {
       throw new Error(
-        "Internal transcript part size error."
+        "Transcript part exceeds its upload limit."
       );
     }
 
-    const message = await logs.send({
-      embeds: [
-        whiteEmbed(
-          "Ticket Transcript Part",
+    const checksum = hash(buffer);
 
-          `**Ticket:** #${numberText(ticketNumber)}\n` +
-          `**Part:** ${part}\n\n` +
-          "Download the HTML file to view saved messages and images."
-        )
-      ],
+    const key =
+      `${snapshot}:${part}:${checksum}`;
 
-      files: [
-        new AttachmentBuilder(buffer, {
-          name: `${filename}-part-${part}.html`
-        })
-      ],
+    let url = catalog.html.get(key);
 
-      allowedMentions: NONE
-    });
+    if (!url) {
+      const message = await thread.send({
+        embeds: [
+          whiteEmbed(
+            "Ticket Transcript",
 
-    if (!message.attachments.size) {
-      throw new Error(
-        `Transcript part ${part} upload not confirmed.`
-      );
+            `**Ticket:** #${numberText(state.number)}\n` +
+            `**Part:** ${part}\n\n` +
+            "Download the HTML file to read the ticket."
+          ).setFooter({
+            text:
+              `${ARCHIVE_HTML_MARKER}:${snapshot}:${part}:${checksum}`
+          })
+        ],
+
+        files: [
+          new AttachmentBuilder(buffer, {
+            name:
+              `transcript-${state.type}-` +
+              `${state.number}-part-${part}.html`
+          })
+        ],
+
+        allowedMentions: NONE
+      });
+
+      const uploaded =
+        message.attachments.first();
+
+      if (
+        !uploaded ||
+        uploaded.size !== buffer.length
+      ) {
+        throw new Error(
+          `Transcript part ${part} was not saved correctly.`
+        );
+      }
+
+      url = message.url;
+
+      catalog.html.set(key, url);
     }
 
-    urls.push(message.url);
+    urls.push(url);
 
     rows = [];
     bytes = 0;
   }
 
-  async function add(row, fallback = null) {
-    let value = row;
+  async function add(row) {
+    const value = String(row);
 
-    const max = HTML_PART_SIZE - 16384;
+    const size =
+      Buffer.byteLength(value, "utf8");
 
-    let rowBytes = Buffer.byteLength(value, "utf8");
+    const max =
+      HTML_PART_SIZE - 65536;
 
-    if (rowBytes > max && fallback) {
-      value = fallback;
-      rowBytes = Buffer.byteLength(value, "utf8");
-    }
-
-    if (rowBytes > max) {
-      // Preserve oversized text without corrupting UTF-8.
-      // This is only used when one HTML row is unusually large.
-
+    if (size > max) {
       const characters = Array.from(value);
 
-      let offset = 0;
-
-      while (offset < characters.length) {
-        const chunk = characters
-          .slice(offset, offset + 100000)
-          .join("");
-
-        offset += 100000;
-
+      for (
+        let offset = 0;
+        offset < characters.length;
+        offset += 100000
+      ) {
         await add(
-          `<article><pre style="white-space:pre-wrap;">` +
-          `${escapeHtml(chunk)}</pre></article>`
+          "<article><div class=\"body\">" +
+          escapeHtml(
+            characters
+              .slice(offset, offset + 100000)
+              .join("")
+          ) +
+          "</div></article>"
         );
       }
 
@@ -3225,18 +3580,17 @@ function createTranscriptWriter(
 
     if (
       rows.length &&
-      bytes + rowBytes + 1 > max
+      bytes + size + 1 > max
     ) {
       await flush();
     }
 
     rows.push(value);
-
-    bytes += rowBytes + 1;
+    bytes += size + 1;
   }
 
   async function finish() {
-    if (!rows.length && part === 0) {
+    if (!rows.length && !part) {
       await add(
         "<article>No messages available.</article>"
       );
@@ -3246,7 +3600,7 @@ function createTranscriptWriter(
 
     return {
       parts: part,
-      urls: [...urls]
+      urls
     };
   }
 
@@ -3257,7 +3611,7 @@ function createTranscriptWriter(
 }
 
 // ============================================================
-// MESSAGE HTML
+// HTML MESSAGE DISPLAY
 // ============================================================
 
 function messageHtml(message) {
@@ -3265,12 +3619,14 @@ function messageHtml(message) {
     message.author?.username || "Unknown"
   );
 
-  const date = escapeHtml(
-    new Date(message.createdTimestamp).toISOString()
+  const authorId = escapeHtml(
+    message.author?.id || ""
   );
 
-  const body = escapeHtml(
-    message.content || ""
+  const date = escapeHtml(
+    new Date(
+      message.createdTimestamp
+    ).toISOString()
   );
 
   const embeds = message.embeds.map(embed => {
@@ -3281,247 +3637,653 @@ function messageHtml(message) {
       ).join("");
 
     return (
-      `<blockquote>` +
-
+      "<blockquote>" +
       `<b>${escapeHtml(embed.title || "Embed")}</b>` +
-
       `<p>${escapeHtml(embed.description || "")}</p>` +
-
       fields +
-
-      `</blockquote>`
+      "</blockquote>"
     );
   }).join("");
 
+  const stickers = [
+    ...(message.stickers?.values?.() || [])
+  ].map(sticker =>
+    `<p>Sticker: ${escapeHtml(sticker.name)}</p>`
+  ).join("");
+
   return (
-    `<article>` +
+    "<article>" +
 
-    `<b>${author}</b> <small>${date}</small>` +
+    `<span class="author">${author}</span> ` +
 
-    `<div>${body}</div>` +
+    `<small>${date} • ${authorId}</small>` +
+
+    `<div class="body">${escapeHtml(message.content || "")}</div>` +
 
     embeds +
 
-    `</article>`
+    stickers +
+
+    "</article>"
+  );
+}
+
+function archiveLinkHtml(record) {
+  const links = record.urls.map(
+    (url, index) =>
+      `<p><a href="${escapeHtml(url)}">` +
+
+      (
+        record.split
+          ? `Open original file part ${index + 1}`
+          : "Open original attachment"
+      ) +
+
+      "</a></p>"
+  ).join("");
+
+  return (
+    '<div class="attachment">' +
+
+    `<strong>${escapeHtml(record.name)}</strong>` +
+
+    `<p>Original size: ${record.size.toLocaleString()} bytes</p>` +
+
+    links +
+
+    (
+      record.split
+        ? "<p>Join all file parts in numerical order.</p>"
+        : ""
+    ) +
+
+    "</div>"
   );
 }
 
 // ============================================================
-// ARCHIVE COMPLETE TICKET
+// EXCLUDE ARCHIVE COMMAND SPAM
 // ============================================================
 
-async function archiveTicket(
-  channel,
-  state,
-  logs
-) {
-  const messages = await allMessages(channel);
+function shouldArchiveMessage(message) {
+  // Preserve user conversations and actual ticket content.
+  // Exclude archive commands and bot progress notices.
 
-  const writer = createTranscriptWriter(
-    logs,
+  if (
+    !message.author.bot &&
+    /^,(?:delete|savelog)(?:\s|$)/i.test(
+      message.content.trim()
+    ) &&
+    !message.attachments.size
+  ) {
+    return false;
+  }
 
-    `${channel.name} — Ticket #${state.number}`,
+  if (
+    message.author.id === message.client.user.id
+  ) {
+    if (
+      footerText(message).includes(
+        ARCHIVE_STATUS_MARKER
+      )
+    ) {
+      return false;
+    }
 
-    `transcript-${state.type}-${state.number}-${Date.now()}`,
+    const content =
+      String(message.content || "");
 
-    state.number
+    if (
+      /^(?:Saving all ticket messages|Saving the ticket messages|Ticket archive could not be completed|Deletion cancelled because|Ticket #\d+ saved successfully)/i
+        .test(content) &&
+      !message.attachments.size
+    ) {
+      return false;
+    }
+
+    if (
+      message.embeds.some(
+        embed =>
+          embed.title === "Transcript Not Saved"
+      ) &&
+      !message.attachments.size
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// ============================================================
+// ARCHIVE SNAPSHOT
+// ============================================================
+
+function snapshotHash(messages, state) {
+  const digest = createHash("sha256");
+
+  digest.update(
+    JSON.stringify({
+      channelId: state.channelId,
+      status: state.status,
+      reason: state.closeReason
+    })
   );
 
-  let images = 0;
-  let attachments = 0;
-  let totalBytes = 0;
-
   for (const message of messages) {
-    await writer.add(
-      messageHtml(message)
+    digest.update(
+      JSON.stringify({
+        id: message.id,
+
+        content: message.content,
+
+        edited:
+          message.editedTimestamp || null,
+
+        embeds:
+          message.embeds.map(embed => ({
+            title: embed.title || "",
+            description: embed.description || "",
+            fields: embed.fields || []
+          })),
+
+        attachments:
+          [...message.attachments.values()]
+            .map(file => ({
+              id: file.id,
+              name: file.name,
+              size: file.size
+            }))
+      })
+    );
+  }
+
+  return digest.digest("hex");
+}
+
+// ============================================================
+// PARSE COMPLETED ARCHIVE
+// ============================================================
+
+async function completedArchive(message) {
+  if (!message) return null;
+
+  const manifest = message.attachments.find(
+    file =>
+      file.name?.endsWith("-manifest.json")
+  );
+
+  if (!manifest) return null;
+
+  try {
+    const buffer =
+      await downloadMessageAttachment(
+        message,
+        manifest
+      );
+
+    const result = JSON.parse(
+      buffer.toString("utf8")
     );
 
-    for (const file of message.attachments.values()) {
-      // No combined attachment size limit.
-      // Preserve all uploaded file types.
+    if (
+      !Array.isArray(result.transcriptUrls) ||
+      !Array.isArray(result.files)
+    ) {
+      return null;
+    }
 
-      const buffer = await downloadMessageAttachment(
-        message,
-        file
+    return {
+      ...result,
+      url: message.url
+    };
+
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================
+// VERIFY ARCHIVE MESSAGE REFERENCES
+// ============================================================
+
+async function archiveReferenceExists(guild, url) {
+  try {
+    const parsed = new URL(url);
+
+    if (parsed.hostname !== "discord.com") {
+      return false;
+    }
+
+    const parts = parsed.pathname.split("/");
+
+    const guildId = parts[2];
+    const channelId = parts[3];
+    const messageId = parts[4];
+
+    if (guildId !== guild.id) {
+      return false;
+    }
+
+    const channel = await guild.channels.fetch(
+      channelId
+    );
+
+    if (
+      channelId !== IDS.logs &&
+      channel?.parentId !== IDS.logs
+    ) {
+      return false;
+    }
+
+    const message = await channel.messages.fetch({
+      message: messageId,
+      force: true,
+      cache: false
+    });
+
+    return Boolean(
+      message.author.id === guild.client.user.id &&
+      message.attachments.size
+    );
+
+  } catch {
+    return false;
+  }
+}
+
+async function verifyCompletedArchive(guild, archive) {
+  const urls = new Set([
+    ...archive.transcriptUrls,
+
+    ...archive.files.flatMap(
+      file => file.urls || []
+    )
+  ]);
+
+  for (const url of urls) {
+    if (
+      !(await archiveReferenceExists(guild, url))
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// ============================================================
+// SAVE FINAL ARCHIVE MANIFEST
+// ============================================================
+
+async function saveArchiveManifest(
+  thread,
+  state,
+  snapshot,
+  result
+) {
+  const manifest = {
+    version: 4,
+    ticket: state.number,
+    channelId: state.channelId,
+    type: state.type,
+    creator: state.ownerId,
+    claimedBy: state.claimedBy,
+    closeReason: state.closeReason,
+    snapshot,
+    savedAt: new Date().toISOString(),
+
+    messages: result.messages,
+    attachments: result.attachments,
+    images: result.images,
+    totalBytes: result.totalBytes,
+
+    parts: result.parts,
+    transcriptUrls: result.transcriptUrls,
+    files: result.files
+  };
+
+  const buffer = Buffer.from(
+    JSON.stringify(manifest, null, 2),
+    "utf8"
+  );
+
+  const links = result.transcriptUrls
+    .slice(0, 15)
+    .map(
+      (url, index) =>
+        `[Transcript ${index + 1}](${url})`
+    )
+    .join(" • ");
+
+  // Normally one manifest contains the complete archive.
+  // Exceptionally large manifests are split into binary parts.
+
+  if (buffer.length > FILE_PART_SIZE) {
+    const total = Math.ceil(
+      buffer.length / FILE_PART_SIZE
+    );
+
+    const indexUrls = [];
+
+    for (
+      let index = 0;
+      index < total;
+      index++
+    ) {
+      const part = buffer.subarray(
+        index * FILE_PART_SIZE,
+        (index + 1) * FILE_PART_SIZE
       );
 
-      const record = await archiveOriginalFile(
-        logs,
-        state.number,
-        buffer,
-        file.name || "attachment",
-        file.id
-      );
+      const message = await thread.send({
+        files: [
+          new AttachmentBuilder(part, {
+            name:
+              `ticket-${state.number}-manifest.json.part` +
+              `${String(index + 1).padStart(5, "0")}`
+          })
+        ],
 
-      attachments++;
-
-      totalBytes += buffer.length;
-
-      const mime = imageMime(buffer);
-
-      if (mime) images++;
-
-      const link = archiveLinkHtml(record);
-
-      const attribution =
-        `<article><b>${escapeHtml(message.author?.username)}</b> ` +
-        `<small>${new Date(message.createdTimestamp).toISOString()}</small>`;
+        allowedMentions: NONE
+      });
 
       if (
-        mime &&
-        buffer.length <= INLINE_IMAGE_SIZE
+        message.attachments.first()?.size !==
+        part.length
       ) {
-        // Embed the actual image data inside the HTML.
-
-        await writer.add(
-          attribution +
-
-          savedImageHtml(
-            buffer,
-            file.name || "Image"
-          ) +
-
-          link +
-
-          `</article>`,
-
-          attribution + link + `</article>`
-        );
-      } else {
-        // Larger images and other attachments remain
-        // archived in their original quality.
-
-        await writer.add(
-          attribution +
-
-          link +
-
-          `</article>`
+        throw new Error(
+          "Archive manifest part failed."
         );
       }
 
-      console.log(
-        `[ARCHIVE] Ticket ${state.number}: ` +
-        `${file.name} saved (${buffer.length} bytes).`
-      );
-    }
-  }
-
-  const result = await writer.finish();
-
-  return {
-    ...result,
-    images,
-    attachments,
-    totalBytes,
-    messages: messages.length
-  };
-}
-
-// ============================================================
-// ARCHIVE INDEX
-// ============================================================
-
-async function archiveIndex(
-  logs,
-  state,
-  archive,
-  action
-) {
-  const manifest = {
-    ticket: state.number,
-    type: state.type,
-    action,
-    createdAt: new Date().toISOString(),
-
-    messages: archive.messages,
-    images: archive.images,
-    attachments: archive.attachments,
-    totalBytes: archive.totalBytes,
-
-    transcriptParts: archive.urls
-  };
-
-  const files = [];
-
-  // Create an index of all transcript part messages.
-
-  const lines = archive.urls.map(
-    (url, index) =>
-      `Part ${index + 1}: ${url}`
-  );
-
-  const header =
-    `${BRAND} Ticket #${state.number}\n\n` +
-    `Messages: ${archive.messages}\n` +
-    `Images: ${archive.images}\n` +
-    `Attachments: ${archive.attachments}\n` +
-    `Transcript parts: ${archive.parts}\n\n`;
-
-  let text = header;
-
-  for (const line of lines) {
-    if (
-      Buffer.byteLength(
-        text + line + "\n",
-        "utf8"
-      ) > HTML_PART_SIZE
-    ) {
-      files.push(text);
-      text = header;
+      indexUrls.push(message.url);
     }
 
-    text += line + "\n";
-  }
-
-  files.push(text);
-
-  const indexUrls = [];
-
-  for (let index = 0; index < files.length; index++) {
-    const message = await logs.send({
+    const summary = await thread.send({
       embeds: [
         whiteEmbed(
-          "Ticket Archive Index",
+          "Ticket Archive Complete",
 
           `**Ticket:** #${numberText(state.number)}\n` +
-          `**Transcript Parts:** ${archive.parts}\n` +
-          `**Saved Images:** ${archive.images}\n` +
-          `**Saved Attachments:** ${archive.attachments}\n` +
-          `**Index:** ${index + 1}/${files.length}`
-        )
-      ],
-
-      files: [
-        new AttachmentBuilder(
-          Buffer.from(files[index], "utf8"),
-          {
-            name:
-              `ticket-${state.number}-index-${index + 1}.txt`
-          }
-        )
+          `**Messages:** ${result.messages}\n` +
+          `**Attachments:** ${result.attachments}\n` +
+          `**Images:** ${result.images}\n\n` +
+          "The full manifest is saved in numbered parts above.\n\n" +
+          links
+        ).setFooter({
+          text:
+            `${ARCHIVE_COMPLETE_MARKER}:${snapshot}`
+        })
       ],
 
       allowedMentions: NONE
     });
 
-    if (!message.attachments.size) {
-      throw new Error(
-        "Archive index upload not confirmed."
-      );
-    }
+    return {
+      ...manifest,
+      manifestParts: indexUrls,
+      url: summary.url
+    };
+  }
 
-    indexUrls.push(message.url);
+  const message = await thread.send({
+    embeds: [
+      whiteEmbed(
+        "Ticket Archive Complete",
+
+        `**Ticket:** #${numberText(state.number)}\n` +
+        `**Messages:** ${result.messages}\n` +
+        `**Attachments:** ${result.attachments}\n` +
+        `**Images:** ${result.images}\n` +
+        `**Transcript Parts:** ${result.parts}\n\n` +
+
+        "**Transcript**\n" +
+        links +
+
+        (
+          result.parts > 15
+            ? "\n\nAll additional parts are listed in the manifest."
+            : ""
+        ) +
+
+        "\n\nAll original attachments are saved in this thread."
+      )
+        .setFooter({
+          text:
+            `${ARCHIVE_COMPLETE_MARKER}:${snapshot}`
+        })
+        .setTimestamp()
+    ],
+
+    files: [
+      new AttachmentBuilder(buffer, {
+        name:
+          `ticket-${state.number}-manifest.json`
+      })
+    ],
+
+    allowedMentions: NONE
+  });
+
+  if (
+    message.attachments.first()?.size !==
+    buffer.length
+  ) {
+    throw new Error(
+      "Final archive manifest upload failed."
+    );
   }
 
   return {
-    manifest,
-    indexUrls
+    ...manifest,
+    url: message.url
   };
 }
 
 // ============================================================
-// OLD ATTACHMENT RECOVERY
+// COMPLETE TICKET ARCHIVE
+// ============================================================
+
+async function archiveTicket(channel, entry) {
+  if (archiveJobs.has(channel.id)) {
+    return archiveJobs.get(channel.id);
+  }
+
+  const job = (async () => {
+    const state = entry.state;
+
+    let logs = await textChannel(
+      channel.guild,
+      IDS.logs,
+      "Ticket logs"
+    );
+
+    logs = await validateArchiveChannel(
+      channel.guild,
+      logs
+    );
+
+    const { root, thread } =
+      await getArchiveThread(
+        logs,
+        state,
+        () => saveState(channel, entry)
+      );
+
+    const messages = (
+      await allMessages(channel)
+    ).filter(shouldArchiveMessage);
+
+    const snapshot = snapshotHash(
+      messages,
+      state
+    );
+
+    const catalog =
+      await buildArchiveCatalog(
+        logs,
+        thread,
+        state
+      );
+
+    // Reuse the completed archive if nothing has changed.
+
+    const previous =
+      await completedArchive(
+        catalog.completed.get(snapshot)
+      );
+
+    if (
+      previous &&
+      await verifyCompletedArchive(
+        channel.guild,
+        previous
+      )
+    ) {
+      state.transcriptUrl = previous.url;
+
+      await saveState(channel, entry);
+
+      await root.edit(
+        archiveRootPayload(
+          state,
+          previous
+        )
+      );
+
+      console.log(
+        `[ARCHIVE] Reused completed ticket #${state.number}`
+      );
+
+      return previous;
+    }
+
+    const writer = createTranscriptWriter(
+      thread,
+      catalog,
+      state,
+      snapshot
+    );
+
+    let images = 0;
+    let attachments = 0;
+    let totalBytes = 0;
+
+    const files = [];
+    const seen = new Set();
+
+    for (const message of messages) {
+      await writer.add(
+        messageHtml(message)
+      );
+
+      for (const file of message.attachments.values()) {
+        if (seen.has(file.id)) {
+          continue;
+        }
+
+        seen.add(file.id);
+
+        const record =
+          await preserveAttachment(
+            thread,
+            catalog,
+            state,
+            message,
+            file
+          );
+
+        attachments++;
+
+        totalBytes += record.size;
+
+        if (
+          record.mime ||
+          /^image\//i.test(
+            file.contentType || ""
+          ) ||
+          /\.(png|jpe?g|gif|webp|avif)$/i.test(
+            file.name || ""
+          )
+        ) {
+          images++;
+        }
+
+        files.push({
+          id: file.id,
+          messageId: message.id,
+          name: file.name,
+          size: record.size,
+          checksum: record.checksum || null,
+          urls: record.urls,
+          split: record.split
+        });
+
+        await writer.add(
+          archiveLinkHtml(record)
+        );
+      }
+    }
+
+    const transcript =
+      await writer.finish();
+
+    const result = {
+      messages: messages.length,
+      images,
+      attachments,
+      totalBytes,
+      parts: transcript.parts,
+      transcriptUrls: transcript.urls,
+      files
+    };
+
+    await validateArchiveChannel(
+      channel.guild,
+      logs
+    );
+
+    const manifest =
+      await saveArchiveManifest(
+        thread,
+        state,
+        snapshot,
+        result
+      );
+
+    state.transcriptUrl = manifest.url;
+
+    await saveState(
+      channel,
+      entry
+    );
+
+    await root.edit(
+      archiveRootPayload(
+        state,
+        manifest
+      )
+    );
+
+    console.log(
+      `[ARCHIVE] Ticket #${state.number} completed.`
+    );
+
+    return manifest;
+  })();
+
+  archiveJobs.set(channel.id, job);
+
+  try {
+    return await job;
+  } finally {
+    archiveJobs.delete(channel.id);
+  }
+}
+
+// ============================================================
+// OLD TRANSCRIPT RECOVERY
 // ============================================================
 
 function decodeTranscriptUrl(value) {
@@ -3533,144 +4295,188 @@ function decodeTranscriptUrl(value) {
     .replace(/&#39;/g, "'");
 }
 
-function attachmentKey(url) {
-  const parsed = discordAttachmentUrl(url);
+function extractOldAttachments(html) {
+  const results = new Map();
 
-  if (!parsed) return null;
+  const pattern =
+    /(?:href|src)\s*=\s*["']([^"']+)["']/gi;
 
-  const parts = parsed.pathname.split("/");
+  for (const match of html.matchAll(pattern)) {
+    const value = decodeTranscriptUrl(match[1]);
 
-  return `${parts[2]}:${parts[3]}`;
+    const url = discordAttachmentUrl(value);
+
+    if (!url) continue;
+
+    const parts = url.pathname.split("/");
+
+    const channelId = parts[2];
+    const attachmentId = parts[3];
+
+    let name;
+
+    try {
+      name = decodeURIComponent(
+        parts.slice(4).join("/")
+      );
+    } catch {
+      name = "attachment";
+    }
+
+    if (!/\.(png|jpe?g|gif|webp)$/i.test(name)) {
+      continue;
+    }
+
+    results.set(
+      attachmentId,
+      {
+        channelId,
+        attachmentId,
+        name,
+        url: value
+      }
+    );
+  }
+
+  return [...results.values()];
 }
 
-async function originalAttachmentIndex(
-  guild,
-  channelId,
-  indexes
-) {
-  if (indexes.has(channelId)) {
-    return indexes.get(channelId);
-  }
+function extractEmbeddedImages(html) {
+  const results = new Map();
 
-  const result = new Map();
+  const pattern =
+    /<img\b[^>]*\bsrc=["']data:(image\/(?:png|jpeg|gif|webp));base64,([A-Za-z0-9+/=\s]+)["'][^>]*>/gi;
 
-  indexes.set(channelId, result);
+  for (const match of html.matchAll(pattern)) {
+    try {
+      const buffer = Buffer.from(
+        match[2],
+        "base64"
+      );
 
-  const channel = await guild.channels.fetch(
-    channelId,
-    { force: true }
-  ).catch(() => null);
+      const mime = imageMime(buffer);
 
-  if (
-    !channel?.isTextBased() ||
-    !channel.messages?.fetch ||
-    channel.guild?.id !== guild.id ||
-    !parseTicketName(channel.name)
-  ) {
-    return result;
-  }
+      if (!mime) continue;
 
-  try {
-    await scan(
-      channel,
-      message => {
-        for (const file of message.attachments.values()) {
-          result.set(file.id, {
-            file,
-            messageId: message.id
-          });
+      const checksum = hash(buffer);
+
+      const alt = match[0].match(
+        /\balt=["']([^"']+)["']/i
+      );
+
+      const name = alt
+        ? safeFilename(
+            decodeTranscriptUrl(alt[1])
+          )
+        : `image-${checksum.slice(0, 12)}.${imageExtension(mime)}`;
+
+      results.set(
+        checksum,
+        {
+          buffer,
+          name,
+          checksum
         }
-      },
-      Infinity
-    );
-  } catch (error) {
-    console.error(
-      "[RECOVERY] Original attachment lookup:",
-      error.message
-    );
+      );
+
+    } catch {
+      // Ignore invalid embedded image data.
+    }
   }
 
-  return result;
+  return [...results.values()];
 }
 
-async function findOriginalAttachment(
-  guild,
-  oldUrl,
-  indexes
-) {
-  const url = discordAttachmentUrl(oldUrl);
+// ============================================================
+// RECOVER ORIGINAL ATTACHMENT
+// ============================================================
 
-  if (!url) return null;
+async function recoverOldImage(guild, old, indexes) {
+  // Prefer the original Discord message when it exists.
 
-  const parts = url.pathname.split("/");
+  if (!indexes.has(old.channelId)) {
+    const result = new Map();
 
-  const channelId = parts[2];
-  const attachmentId = parts[3];
+    const channel = await guild.channels.fetch(
+      old.channelId
+    ).catch(() => null);
 
-  const index = await originalAttachmentIndex(
-    guild,
-    channelId,
-    indexes
-  );
+    if (
+      channel?.guild?.id === guild.id &&
+      channel?.messages &&
+      parseTicketName(channel.name)
+    ) {
+      await scan(channel, message => {
+        for (const attachment of message.attachments.values()) {
+          result.set(
+            attachment.id,
+            {
+              message,
+              attachment
+            }
+          );
+        }
+      });
+    }
 
-  const record = index.get(attachmentId);
-
-  if (!record) return null;
-
-  const channel = await guild.channels.fetch(
-    channelId
-  ).catch(() => null);
-
-  if (!channel?.messages) return null;
-
-  const freshMessage = await channel.messages.fetch({
-    message: record.messageId,
-    force: true,
-    cache: false
-  }).catch(() => null);
-
-  return (
-    freshMessage?.attachments.get(attachmentId) ||
-    record.file
-  );
-}
-
-async function recoverOldImage(
-  guild,
-  oldUrl,
-  indexes
-) {
-  if (!discordAttachmentUrl(oldUrl)) {
-    throw new Error(
-      "Invalid original attachment URL."
+    indexes.set(
+      old.channelId,
+      result
     );
   }
 
-  // Attempt original saved URL.
+  const original =
+    indexes.get(old.channelId)
+      ?.get(old.attachmentId);
 
-  try {
-    return await downloadTranscriptFile(oldUrl);
-  } catch {
-    // Try the original Discord message.
+  if (original) {
+    return downloadMessageAttachment(
+      original.message,
+      original.attachment
+    );
   }
 
-  const original = await findOriginalAttachment(
-    guild,
-    oldUrl,
-    indexes
-  );
+  // Old signed URLs may still be valid.
+  // If both URL and original message are gone,
+  // the original image may be unrecoverable.
 
-  if (original?.url) {
-    return downloadTranscriptFile(original.url);
+  let lastError = null;
+
+  for (
+    let attempt = 1;
+    attempt <= 3;
+    attempt++
+  ) {
+    try {
+      const buffer = await downloadTranscriptFile(
+        originalCdnUrl(old.url) || old.url
+      );
+
+      if (!imageMime(buffer)) {
+        throw new Error(
+          "Downloaded data is not a supported image."
+        );
+      }
+
+      return buffer;
+
+    } catch (error) {
+      lastError = error;
+
+      if (attempt < 3) {
+        await sleep(1500 * attempt);
+      }
+    }
   }
 
   throw new Error(
-    "Original attachment unavailable or deleted."
+    lastError?.message ||
+    "Original image is unavailable."
   );
 }
 
 // ============================================================
-// EASTERN TIME DATE FILTER
+// EASTERN TIME FILTER
 // ============================================================
 
 const easternFormatter = new Intl.DateTimeFormat(
@@ -3691,21 +4497,15 @@ function easternDate(value) {
   }
 
   const parts = Object.fromEntries(
-    easternFormatter
-      .formatToParts(date)
-      .map(part => [part.type, part.value])
+    easternFormatter.formatToParts(date)
+      .map(part => [
+        part.type,
+        part.value
+      ])
   );
 
-  return `${parts.year}-${parts.month}-${parts.day}`;
-}
-
-function transcriptMatchesDate(html, target) {
-  const timestamps = html.match(
-    /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z/g
-  ) || [];
-
-  return timestamps.some(
-    timestamp => easternDate(timestamp) === target
+  return (
+    `${parts.year}-${parts.month}-${parts.day}`
   );
 }
 
@@ -3720,7 +4520,7 @@ function parseRecoveryFilter(message) {
   if (!value) {
     return {
       type: "all",
-      value: ""
+      value: null
     };
   }
 
@@ -3729,7 +4529,10 @@ function parseRecoveryFilter(message) {
       value.replace(/^#/, "")
     );
 
-    if (!Number.isSafeInteger(number) || number < 1) {
+    if (
+      !Number.isSafeInteger(number) ||
+      number < 1
+    ) {
       return null;
     }
 
@@ -3739,25 +4542,25 @@ function parseRecoveryFilter(message) {
     };
   }
 
-  const shortDate = value.match(
+  const short = value.match(
     /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/
   );
 
-  if (shortDate) {
-    let year = shortDate[3];
-
-    if (year.length === 2) {
-      year = `20${year}`;
-    }
+  if (short) {
+    const year = short[3].length === 2
+      ? `20${short[3]}`
+      : short[3];
 
     value =
       `${year}-` +
-      `${shortDate[1].padStart(2, "0")}-` +
-      `${shortDate[2].padStart(2, "0")}`;
+      `${short[1].padStart(2, "0")}-` +
+      `${short[2].padStart(2, "0")}`;
   }
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    const date = new Date(`${value}T12:00:00Z`);
+    const date = new Date(
+      `${value}T12:00:00Z`
+    );
 
     if (
       Number.isNaN(date.getTime()) ||
@@ -3775,130 +4578,68 @@ function parseRecoveryFilter(message) {
   return null;
 }
 
-// ============================================================
-// OLD TRANSCRIPT ATTACHMENT EXTRACTION
-// ============================================================
+function transcriptMatchesDate(html, target) {
+  const timestamps = html.match(
+    /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z/g
+  ) || [];
 
-function extractOldAttachments(html) {
-  const result = new Map();
-
-  const pattern =
-    /(?:href|src)\s*=\s*["']([^"']+)["']/gi;
-
-  for (const match of html.matchAll(pattern)) {
-    const decoded = decodeTranscriptUrl(
-      match[1]
-    );
-
-    const url = discordAttachmentUrl(decoded);
-
-    if (!url) continue;
-
-    const key = attachmentKey(decoded);
-
-    if (!key || result.has(key)) {
-      continue;
-    }
-
-    let name;
-
-    try {
-      name = decodeURIComponent(
-        url.pathname.split("/").pop()
-      );
-    } catch {
-      name = "attachment";
-    }
-
-    if (!/\.(png|jpe?g|gif|webp)$/i.test(name)) {
-      continue;
-    }
-
-    result.set(key, {
-      key,
-      url: decoded,
-      name,
-      attachmentId:
-        url.pathname.split("/")[3]
-    });
-  }
-
-  return [...result.values()];
+  return timestamps.some(
+    timestamp =>
+      easternDate(timestamp) === target
+  );
 }
 
 // ============================================================
-// EXTRACT IMAGES ALREADY EMBEDDED IN OLD HTML
+// RECOVERY DEDUPLICATION
 // ============================================================
 
-function extractEmbeddedImages(html) {
-  const result = [];
+async function loadLegacyHashes(catalog) {
+  for (const record of catalog.files.values()) {
+    if (
+      !record.legacy ||
+      record.checksum
+    ) {
+      continue;
+    }
 
-  const pattern =
-    /<img\b[^>]*\bsrc=["']data:(image\/(?:png|jpeg|gif|webp));base64,([A-Za-z0-9+/=\s]+)["'][^>]*>/gi;
-
-  let index = 0;
-
-  for (const match of html.matchAll(pattern)) {
     try {
-      const buffer = Buffer.from(
-        match[2],
-        "base64"
+      const buffer =
+        await downloadMessageAttachment(
+          record.message,
+          record.attachment
+        );
+
+      const checksum = hash(buffer);
+
+      record.checksum = checksum;
+
+      catalog.hashes.set(
+        checksum,
+        record
       );
 
-      const mime = imageMime(buffer);
-
-      if (!mime) continue;
-
-      index++;
-
-      const alt = match[0].match(
-        /\balt=["']([^"']+)["']/i
+    } catch (error) {
+      console.warn(
+        "[RECOVERY] Old archived file:",
+        error.message
       );
-
-      const name = alt
-        ? safeFilename(
-            decodeTranscriptUrl(alt[1])
-          )
-        : `embedded-image-${index}.${imageExtension(mime)}`;
-
-      result.push({
-        buffer,
-        name,
-
-        key: createHash("sha256")
-          .update(buffer)
-          .digest("hex")
-      });
-
-    } catch {
-      // Ignore invalid embedded image data.
     }
   }
-
-  return result;
 }
 
 // ============================================================
-// RECOVERY COMMAND
-// ============================================================
-//
-// Supports:
-// ,recoverlogs
-// ,recoverlogs 693
-// ,recoverlogs 779
-// ,recoverlogs 11/18/26
-// ,recoverlogs 2026-11-18
-//
-// No separate transcript channel.
-// No total image count or combined size limit.
-//
+// RECOVER LOGS COMMAND
 // ============================================================
 
 async function recoverLogs(message) {
   const context = messageContext(message);
+
   const member = await getMember(context);
 
-  if (!isOwner(member) && !isAdmin(member)) {
+  if (
+    !isOwner(member) &&
+    !isAdmin(member)
+  ) {
     return reply(
       context,
       "Only owners and admins can recover ticket logs."
@@ -3908,28 +4649,27 @@ async function recoverLogs(message) {
   if (message.channel.id !== IDS.logs) {
     return reply(
       context,
-      `Use this command in <#${IDS.logs}>.\n` +
-      `Current channel ID: ${message.channel.id}`
+      `Use this command in <#${IDS.logs}>.`
     );
   }
 
   if (recoveryRunning) {
     return reply(
       context,
-      "Ticket image recovery is already running."
+      "Ticket recovery is already running."
     );
   }
 
-  const filter = parseRecoveryFilter(message);
+  const filter =
+    parseRecoveryFilter(message);
 
   if (!filter) {
     return reply(
       context,
 
-      "**Recovery commands:**\n\n" +
+      "**Recovery Commands**\n\n" +
 
       "`,recoverlogs`\n" +
-      "`,recoverlogs 693`\n" +
       "`,recoverlogs 779`\n" +
       "`,recoverlogs 11/18/26`\n" +
       "`,recoverlogs 2026-11-18`"
@@ -3943,11 +4683,14 @@ async function recoverLogs(message) {
   let checked = 0;
   let matched = 0;
   let recovered = 0;
-  let unavailable = 0;
   let skipped = 0;
+  let unavailable = 0;
   let errors = 0;
+  let existingTicketsSaved = 0;
 
-  const failedImages = new Set();
+  const failed = new Set();
+
+  const guild = message.guild;
 
   const searchLabel =
     filter.type === "all"
@@ -3956,111 +4699,157 @@ async function recoverLogs(message) {
         ? `Ticket #${numberText(filter.value)}`
         : `${filter.value} (Eastern Time)`;
 
-  try {
-    const guild = message.guild;
+  async function progress(finished = false) {
+    if (!status) return;
 
-    const logs = await validateRecoveryArchive(
-      guild,
-      message.channel
-    );
+    await status.edit({
+      embeds: [
+        whiteEmbed(
+          finished
+            ? "Ticket Recovery Complete"
+            : "Recovering Ticket Archives",
+
+          `**Search:** ${searchLabel}\n\n` +
+
+          `**Transcripts Checked:** ${checked}\n` +
+          `**Matching Transcripts:** ${matched}\n` +
+          `**Recovered Images:** ${recovered}\n` +
+          `**Already Saved:** ${skipped}\n` +
+          `**Unavailable:** ${unavailable}\n` +
+          `**Errors:** ${errors}\n` +
+          `**Existing Tickets Saved:** ${existingTicketsSaved}\n\n` +
+
+          (
+            finished
+              ? "Original logs have been preserved."
+              : "Checking available original attachments."
+          ) +
+
+          (
+            finished && failed.size
+              ? "\n\n**Unavailable files include:**\n" +
+                [...failed]
+                  .slice(0, 8)
+                  .map(name => `• ${safe(name, 100)}`)
+                  .join("\n")
+              : ""
+          )
+        )
+      ],
+
+      allowedMentions: NONE
+    }).catch(() => {});
+  }
+
+  try {
+    const logs =
+      await validateArchiveChannel(
+        guild,
+        message.channel
+      );
+
+    await init(guild);
 
     status = await message.reply({
       embeds: [
         whiteEmbed(
-          "Recovering Ticket Images",
+          "Recovering Ticket Archives",
 
           `**Search:** ${searchLabel}\n\n` +
 
-          "Searching archived transcripts and original attachments."
+          "Existing archived attachments will be reused."
         )
       ],
 
       allowedMentions: NONE
     });
 
-    const indexes = new Map();
-    const completed = new Set();
-    const recoveredKeys = new Set();
+    // First archive matching existing closed tickets.
 
-    // Discover images already archived in ticket logs.
-    // Avoid unnecessary duplicates on repeated commands.
+    await guild.channels.fetch();
 
-    await scan(
-      logs,
-      log => {
-        if (log.author.id !== guild.client.user.id) {
-          return;
-        }
+    for (const channel of guild.channels.cache.values()) {
+      if (channel.type !== ChannelType.GuildText) {
+        continue;
+      }
 
-        for (const embed of log.embeds) {
-          if (
-            embed.title !== "Recovered Ticket Image" &&
-            embed.title !== "Archived Ticket Attachment"
-          ) {
-            continue;
+      const parsed = parseTicketName(
+        channel.name
+      );
+
+      if (!parsed || !parsed.closed) {
+        continue;
+      }
+
+      if (
+        filter.type === "ticket" &&
+        parsed.number !== filter.value
+      ) {
+        continue;
+      }
+
+      try {
+        await queuedTicket(
+          channel.id,
+
+          async () => {
+            const entry = await loadState(channel);
+
+            if (
+              !entry ||
+              entry.state.status !== "closed"
+            ) {
+              return;
+            }
+
+            if (filter.type === "date") {
+              const messages =
+                await allMessages(channel);
+
+              if (
+                !messages.some(item =>
+                  easternDate(item.createdAt) ===
+                  filter.value
+                )
+              ) {
+                return;
+              }
+            }
+
+            await archiveTicket(
+              channel,
+              entry
+            );
+
+            existingTicketsSaved++;
           }
+        );
 
-          const key = embed.footer?.text?.match(
-            /Attachment ID: ([a-zA-Z0-9_-]+)/
-          );
+      } catch (error) {
+        errors++;
 
-          if (key && log.attachments.size) {
-            completed.add(key[1]);
-          }
-        }
-      },
-      Infinity
-    );
+        console.error(
+          `[RECOVERY] ${channel.name}:`,
+          error.message
+        );
+      }
 
-    async function updateProgress(finished = false) {
-      if (!status) return;
-
-      const missing = [...failedImages]
-        .slice(0, 8)
-        .map(name => `• ${safe(name, 100)}`)
-        .join("\n");
-
-      await status.edit({
-        embeds: [
-          whiteEmbed(
-            finished
-              ? "Ticket Recovery Complete"
-              : "Recovering Ticket Images",
-
-            `**Search:** ${searchLabel}\n\n` +
-
-            `**Transcripts Checked:** ${checked}\n` +
-            `**Matching Transcripts:** ${matched}\n` +
-            `**Images Recovered:** ${recovered}\n` +
-            `**Images Unavailable:** ${unavailable}\n` +
-            `**Already Archived:** ${skipped}\n` +
-            `**Errors:** ${errors}\n\n` +
-
-            (
-              finished
-                ? "Recovered pictures are posted in ticket logs."
-                : "Checking original image attachments."
-            ) +
-
-            (
-              finished && missing
-                ? `\n\n**Unavailable files include:**\n${missing}`
-                : ""
-            )
-          ).setTimestamp()
-        ],
-
-        allowedMentions: NONE
-      }).catch(() => {});
+      await progress();
     }
 
-    // Scan archived HTML files.
-    // Both original and previously repaired files supported.
+    // Recover old HTML transcripts.
+    // Do not rewrite or delete the original HTML.
+
+    const indexes = new Map();
+    const historicalArchives = new Map();
 
     await scan(
       logs,
+
       async log => {
-        if (log.author.id !== guild.client.user.id) {
+        if (
+          log.author.id !== guild.client.user.id
+        ) {
           return;
         }
 
@@ -4068,12 +4857,14 @@ async function recoverLogs(message) {
           const filename = file.name || "";
 
           const ticketMatch = filename.match(
-            /^(?:recovered-)*transcript-[a-z-]+-(\d+)(?:-\d+)?(?:-part-\d+)?\.html$/i
+            /^(?:recovered-)*transcript-([a-z-]+)-(\d+)(?:-\d+)?(?:-part-\d+)?\.html$/i
           );
 
           if (!ticketMatch) continue;
 
-          const number = Number(ticketMatch[1]);
+          const number = Number(
+            ticketMatch[2]
+          );
 
           if (
             filter.type === "ticket" &&
@@ -4085,31 +4876,14 @@ async function recoverLogs(message) {
           checked++;
 
           try {
-            const freshMessage =
-              await logs.messages.fetch({
-                message: log.id,
-                force: true,
-                cache: false
-              });
-
-            const freshFile =
-              freshMessage.attachments.get(file.id);
-
-            if (!freshFile) {
-              throw new Error(
-                "Transcript attachment is missing."
+            const buffer =
+              await downloadMessageAttachment(
+                log,
+                file
               );
-            }
 
-            const buffer = await downloadTranscriptFile(
-              freshFile.url
-            );
-
-            const html = buffer.toString("utf8");
-
-            if (!html.includes("Chuppys Ticket Transcript")) {
-              continue;
-            }
+            const html =
+              buffer.toString("utf8");
 
             if (
               filter.type === "date" &&
@@ -4121,198 +4895,172 @@ async function recoverLogs(message) {
               continue;
             }
 
-            matched++;
-
-            const writer = createTranscriptWriter(
-              logs,
-
-              `Recovered Ticket #${number}`,
-
-              `recovered-transcript-ticket-${number}-${file.id}`,
-
-              number
-            );
-
-            let savedThisTranscript = 0;
-
-            // Extract attachment links from old transcripts.
-
-            const oldAttachments =
+            const linked =
               extractOldAttachments(html);
 
-            for (const old of oldAttachments) {
+            const embedded =
+              extractEmbeddedImages(html);
+
+            if (
+              !linked.length &&
+              !embedded.length
+            ) {
+              continue;
+            }
+
+            matched++;
+
+            let archive =
+              historicalArchives.get(number);
+
+            if (!archive) {
+              const saved = [
+                ...tickets.values()
+              ].find(
+                entry =>
+                  entry.state.number === number
+              );
+
+              const historicalType =
+                TYPES[ticketMatch[1]]
+                  ? ticketMatch[1]
+                  : "support";
+
+              const state =
+                saved?.state || {
+                  channelId: `historical-${number}`,
+                  number,
+                  type: historicalType,
+                  ownerId: null,
+                  claimedBy: null,
+                  status: "closed",
+                  closeReason:
+                    "Recovered historical transcript.",
+                  archiveRootId: null,
+                  archiveThreadId: null
+                };
+
+              const { root, thread } =
+                await getArchiveThread(
+                  logs,
+                  state
+                );
+
+              const catalog =
+                await buildArchiveCatalog(
+                  logs,
+                  thread,
+                  state
+                );
+
+              await loadLegacyHashes(
+                catalog
+              );
+
+              archive = {
+                state,
+                root,
+                thread,
+                catalog,
+                added: 0
+              };
+
+              historicalArchives.set(
+                number,
+                archive
+              );
+            }
+
+            const {
+              state,
+              thread,
+              catalog
+            } = archive;
+
+            for (const old of linked) {
               if (
-                completed.has(old.attachmentId) ||
-                recoveredKeys.has(old.key)
+                catalog.files.has(
+                  old.attachmentId
+                )
               ) {
                 skipped++;
                 continue;
               }
 
               try {
-                const image = await recoverOldImage(
-                  guild,
-                  old.url,
-                  indexes
-                );
+                const image =
+                  await recoverOldImage(
+                    guild,
+                    old,
+                    indexes
+                  );
 
                 if (!imageMime(image)) {
                   throw new Error(
-                    "Downloaded attachment is not a supported image."
+                    "Invalid image."
                   );
                 }
 
-                await validateRecoveryArchive(
-                  guild,
-                  logs
-                );
+                if (catalog.hashes.has(hash(image))) {
+                  skipped++;
+                  continue;
+                }
 
-                const record = await archiveOriginalFile(
-                  logs,
-                  number,
+                await archiveOriginalFile(
+                  thread,
+                  catalog,
+                  state,
                   image,
                   old.name,
-                  old.attachmentId,
-                  true
+                  old.attachmentId
                 );
 
-                const link = archiveLinkHtml(record);
-
-                if (image.length <= INLINE_IMAGE_SIZE) {
-                  await writer.add(
-                    savedImageHtml(
-                      image,
-                      old.name
-                    ) + link,
-
-                    link
-                  );
-                } else {
-                  await writer.add(link);
-                }
-
                 recovered++;
-                savedThisTranscript++;
-
-                recoveredKeys.add(old.key);
-                completed.add(old.attachmentId);
+                archive.added++;
 
               } catch (error) {
                 unavailable++;
+                failed.add(old.name);
 
-                failedImages.add(old.name);
-
-                console.error(
-                  `[RECOVERY] Ticket ${number} ${old.name}:`,
+                console.warn(
+                  `[RECOVERY] ${old.name}:`,
                   error.message
                 );
               }
             }
 
-            // Also recover images already inside HTML.
-            // Useful when iPhone previews do not display them.
-
-            const embeddedImages =
-              extractEmbeddedImages(html);
-
-            for (const image of embeddedImages) {
-              const key =
-                `${number}-${image.key}`;
-
+            for (const image of embedded) {
               if (
-                completed.has(key) ||
-                recoveredKeys.has(key)
+                catalog.hashes.has(
+                  image.checksum
+                )
               ) {
                 skipped++;
                 continue;
               }
 
               try {
-                await validateRecoveryArchive(
-                  guild,
-                  logs
-                );
-
-                const record = await archiveOriginalFile(
-                  logs,
-                  number,
+                await archiveOriginalFile(
+                  thread,
+                  catalog,
+                  state,
                   image.buffer,
                   image.name,
-                  key,
-                  true
+                  `hash-${image.checksum}`
                 );
 
-                const link = archiveLinkHtml(record);
-
-                if (
-                  image.buffer.length <= INLINE_IMAGE_SIZE
-                ) {
-                  await writer.add(
-                    savedImageHtml(
-                      image.buffer,
-                      image.name
-                    ) + link,
-
-                    link
-                  );
-                } else {
-                  await writer.add(link);
-                }
-
                 recovered++;
-                savedThisTranscript++;
-
-                completed.add(key);
-                recoveredKeys.add(key);
+                archive.added++;
 
               } catch (error) {
                 errors++;
-
-                failedImages.add(image.name);
+                failed.add(image.name);
 
                 console.error(
                   "[RECOVERY] Embedded image:",
                   error.message
                 );
               }
-            }
-
-            if (savedThisTranscript > 0) {
-              const result = await writer.finish();
-
-              const links = result.urls
-                .slice(0, 15)
-                .map(
-                  (url, index) =>
-                    `[Part ${index + 1}](${url})`
-                )
-                .join(" • ");
-
-              await logs.send({
-                embeds: [
-                  whiteEmbed(
-                    "Recovered Ticket Transcript",
-
-                    `**Ticket:** #${numberText(number)}\n` +
-
-                    `**Images Recovered:** ${savedThisTranscript}\n` +
-
-                    `**Archive Parts:** ${result.parts}\n\n` +
-
-                    `[Original Transcript](${log.url})\n\n` +
-
-                    links +
-
-                    (
-                      result.parts > 15
-                        ? "\n\nAdditional parts are posted above."
-                        : ""
-                    )
-                  ).setTimestamp()
-                ],
-
-                allowedMentions: NONE
-              });
             }
 
           } catch (error) {
@@ -4328,135 +5076,35 @@ async function recoverLogs(message) {
             checked % 10 === 0 ||
             filter.type === "ticket"
           ) {
-            await updateProgress();
+            await progress();
           }
         }
-      },
-
-      Infinity
+      }
     );
 
-    // Also search existing ticket channels.
-    // This recovers files from closed tickets that
-    // previously failed to create a transcript.
+    // Summarize recovered images inside their own threads.
 
-    await guild.channels.fetch();
+    for (const archive of historicalArchives.values()) {
+      if (!archive.added) continue;
 
-    for (const channel of guild.channels.cache.values()) {
-      if (channel.type !== ChannelType.GuildText) {
-        continue;
-      }
+      await archive.thread.send({
+        embeds: [
+          whiteEmbed(
+            "Historical Image Recovery",
 
-      const parsed = parseTicketName(
-        channel.name
-      );
+            `**Ticket:** #${numberText(archive.state.number)}\n` +
+            `**New Images Recovered:** ${archive.added}\n\n` +
 
-      if (!parsed) continue;
+            "Recovered original images are saved above.\n" +
+            "The original historical transcript was preserved."
+          ).setTimestamp()
+        ],
 
-      if (
-        filter.type === "ticket" &&
-        parsed.number !== filter.value
-      ) {
-        continue;
-      }
-
-      // Avoid scanning unrelated live ticket channels
-      // during a general recovery.
-      if (
-        filter.type === "all" &&
-        !parsed.closed
-      ) {
-        continue;
-      }
-
-      try {
-        const messages = await allMessages(channel);
-
-        if (
-          filter.type === "date" &&
-          !messages.some(
-            item =>
-              easternDate(item.createdAt) === filter.value
-          )
-        ) {
-          continue;
-        }
-
-        for (const originalMessage of messages) {
-          for (
-            const file of originalMessage.attachments.values()
-          ) {
-            if (
-              !/^image\//i.test(file.contentType || "") &&
-              !/\.(png|jpe?g|gif|webp)$/i.test(file.name || "")
-            ) {
-              continue;
-            }
-
-            if (completed.has(file.id)) {
-              skipped++;
-              continue;
-            }
-
-            try {
-              const buffer =
-                await downloadMessageAttachment(
-                  originalMessage,
-                  file
-                );
-
-              await validateRecoveryArchive(
-                guild,
-                logs
-              );
-
-              await archiveOriginalFile(
-                logs,
-                parsed.number,
-                buffer,
-                file.name || "image",
-                file.id,
-                true
-              );
-
-              completed.add(file.id);
-
-              recovered++;
-
-            } catch (error) {
-              unavailable++;
-
-              failedImages.add(
-                file.name || "Image"
-              );
-
-              console.error(
-                `[RECOVERY] Live ticket ${parsed.number}:`,
-                error.message
-              );
-            }
-          }
-        }
-
-      } catch (error) {
-        errors++;
-
-        console.error(
-          `[RECOVERY] Channel ${channel.name}:`,
-          error.message
-        );
-      }
+        allowedMentions: NONE
+      });
     }
 
-    await updateProgress(true);
-
-    console.log(
-      `[RECOVERY] ${checked} checked, ` +
-      `${matched} matched, ` +
-      `${recovered} recovered, ` +
-      `${unavailable} unavailable, ` +
-      `${errors} errors.`
-    );
+    await progress(true);
 
   } catch (error) {
     console.error(
@@ -4464,273 +5112,30 @@ async function recoverLogs(message) {
       error
     );
 
-    const description =
-      safe(error.message, 700) +
-
-      `\n\n**Transcripts Checked:** ${checked}` +
-
-      `\n**Images Recovered:** ${recovered}`;
-
     if (status) {
       await status.edit({
         embeds: [
           whiteEmbed(
-            "Ticket Recovery Stopped",
-            description
+            "Recovery Stopped",
+
+            safe(error.message, 1000)
           )
         ],
 
         allowedMentions: NONE
       }).catch(() => {});
+
     } else {
       await reply(
         context,
-        "Recovery could not start: " + description
+
+        "Recovery could not start: " +
+        safe(error.message, 500)
       );
     }
 
   } finally {
     recoveryRunning = false;
-  }
-}
-
-// ============================================================
-// TICKET LOGGING
-// ============================================================
-
-async function logTicket(
-  guild,
-  state,
-  action,
-  actorId,
-  channel = null
-) {
-  const titles = {
-    opened: "Ticket Opened",
-    claimed: "Ticket Claimed",
-    closed: "Ticket Closed",
-    deleted: "Ticket Deleted",
-    saved: "Ticket Transcript Saved"
-  };
-
-  if (!titles[action]) return null;
-
-  let logs = await textChannel(
-    guild,
-    IDS.logs,
-    "Ticket logs"
-  );
-
-  const name = ticketName(
-    state.type,
-    state.number
-  );
-
-  let description =
-    `**Ticket:** \`${name}\`\n\n` +
-
-    `**Number:** #${numberText(state.number)}\n` +
-
-    `**Type:** ${TYPES[state.type].label}\n` +
-
-    `**Creator:** <@${state.ownerId}>\n` +
-
-    `**Action By:** <@${actorId}>\n` +
-
-    `**Status:** ${state.status}\n` +
-
-    `**Claimed By:** ${
-      state.claimedBy
-        ? `<@${state.claimedBy}>`
-        : "Not claimed"
-    }`;
-
-  if (
-    action === "closed" ||
-    action === "deleted" ||
-    action === "saved"
-  ) {
-    if (!channel) {
-      throw new Error(
-        "Ticket channel required for transcript."
-      );
-    }
-
-    logs = await validateRecoveryArchive(
-      guild,
-      logs
-    );
-
-    // Save every file and every HTML part.
-    // No fixed combined archive size limit.
-
-    const archive = await archiveTicket(
-      channel,
-      state,
-      logs
-    );
-
-    const index = await archiveIndex(
-      logs,
-      state,
-      archive,
-      action
-    );
-
-    description +=
-      "\n\n**ARCHIVE COMPLETE**\n\n" +
-
-      `**Messages:** ${archive.messages}\n` +
-
-      `**Images:** ${archive.images}\n` +
-
-      `**Attachments:** ${archive.attachments}\n` +
-
-      `**Transcript Parts:** ${archive.parts}\n` +
-
-      `**Original File Size:** ${
-        (archive.totalBytes / 1024 / 1024).toFixed(2)
-      } MB\n\n`;
-
-    if (index.indexUrls[0]) {
-      description +=
-        `[View Archive Index](${index.indexUrls[0]})\n`;
-    }
-
-    if (archive.urls[0]) {
-      description +=
-        `[Open Transcript Part 1](${archive.urls[0]})\n`;
-    }
-
-    description +=
-      "\nAll uploaded attachments have been archived.";
-
-    await validateRecoveryArchive(
-      guild,
-      logs
-    );
-  }
-
-  const message = await logs.send({
-    content: "",
-
-    embeds: [
-      whiteEmbed(
-        titles[action],
-        description
-      ).setTimestamp()
-    ],
-
-    allowedMentions: NONE
-  });
-
-  console.log(
-    `[TICKETS] ${titles[action]}: ${name} by ${actorId}`
-  );
-
-  return message;
-}
-
-// ============================================================
-// SAVELOG COMMAND
-// ============================================================
-//
-// Archive a ticket without closing, reopening or deleting it.
-//
-// Useful for tickets that previously exceeded the old limit.
-//
-// ============================================================
-
-async function saveLog(context, channel, entry) {
-  const member = await getMember(context);
-
-  const state = entry.state;
-
-  if (
-    !isOwner(member) &&
-    !isAdmin(member) &&
-    !canManage(member, state)
-  ) {
-    return reply(
-      context,
-      "You cannot save this ticket transcript."
-    );
-  }
-
-  const pending = transcriptJobs.get(channel.id);
-
-  if (pending) {
-    await pending.catch(console.error);
-  }
-
-  const notice = await reply(
-    context,
-
-    "Saving the ticket messages and original attachments..."
-  );
-
-  const job = (async () => {
-    const log = await logTicket(
-      channel.guild,
-      { ...state },
-      "saved",
-      member.id,
-      channel
-    );
-
-    state.transcriptUrl = log.url;
-
-    await saveState(channel, entry);
-
-    return log;
-  })();
-
-  trackTranscriptJob(
-    channel.id,
-    job
-  );
-
-  try {
-    const log = await job;
-
-    const content =
-      `Ticket #${numberText(state.number)} saved successfully.\n` +
-
-      `[View Ticket Archive](${log.url})`;
-
-    if (context.kind === "prefix" && notice?.edit) {
-      return notice.edit({
-        content,
-        allowedMentions: NONE
-      });
-    }
-
-    return reply(context, content);
-
-  } catch (error) {
-    console.error(
-      "[SAVELOG]",
-      error
-    );
-
-    const content =
-      "Ticket archive could not be completed.\n\n" +
-
-      `Reason: ${safe(error.message, 500)}\n\n` +
-
-      "The original ticket has been preserved.";
-
-    if (context.kind === "prefix" && notice?.edit) {
-      return notice.edit({
-        content,
-        allowedMentions: NONE
-      });
-    }
-
-    return reply(
-      context,
-      content
-    );
   }
 }
 
@@ -4742,49 +5147,48 @@ function ticketForm(type) {
   const config = TYPES[type];
 
   if (!config?.questions?.length) {
-    throw new Error("Ticket form unavailable.");
+    throw new Error(
+      "Ticket form unavailable."
+    );
   }
 
   const modal = new ModalBuilder()
     .setCustomId(FORM_PREFIX + type)
     .setTitle(`${config.label} Ticket`);
 
-  config.questions.forEach((question, index) => {
-    const appeal = type === "unblacklist";
+  config.questions.forEach(
+    (question, index) => {
+      const appeal =
+        type === "unblacklist";
 
-    const input = new TextInputBuilder()
-      .setCustomId(`answer_${index}`)
-      .setLabel(question.slice(0, 45))
-      .setStyle(
-        appeal
-          ? TextInputStyle.Paragraph
-          : TextInputStyle.Short
-      )
-      .setRequired(true)
-      .setMaxLength(appeal ? 1000 : 250);
+      const input = new TextInputBuilder()
+        .setCustomId(`answer_${index}`)
+        .setLabel(question.slice(0, 45))
+        .setStyle(
+          appeal
+            ? TextInputStyle.Paragraph
+            : TextInputStyle.Short
+        )
+        .setRequired(true)
+        .setMaxLength(
+          appeal ? 1000 : 250
+        );
 
-    if (type === "partnership" && index === 0) {
-      input.setPlaceholder(
-        "Enter amount; upload proof in ticket"
+      if (
+        type === "partnership" &&
+        index === 0
+      ) {
+        input.setPlaceholder(
+          "Enter amount; upload proof in ticket"
+        );
+      }
+
+      modal.addComponents(
+        new ActionRowBuilder()
+          .addComponents(input)
       );
     }
-
-    if (appeal && index === 0) {
-      input.setPlaceholder(
-        "Explain the original blacklist reason."
-      );
-    }
-
-    if (appeal && index === 1) {
-      input.setPlaceholder(
-        "Explain why staff should reconsider."
-      );
-    }
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(input)
-    );
-  });
+  );
 
   return modal;
 }
@@ -4817,32 +5221,33 @@ function verificationWelcomeDescription(userId) {
 
     "Your private verification ticket has been created.\n\n" +
 
-    "**HOW VERIFICATION WORKS**\n\n" +
+    "**1.** State who invited you.\n\n" +
 
-    "**1.** Wait for a member of the verification team.\n\n" +
+    "**2.** Provide screenshot proof of your invite.\n\n" +
 
-    "**2.** Answer the verification questions honestly.\n\n" +
+    "**3.** Complete your server roles.\n\n" +
 
-    "**3.** Review the server rules and follow staff instructions.\n\n" +
-
-    "**4.** Our team will review your information and approve " +
-    "your verification when appropriate.\n\n" +
-
-    "**IMPORTANT**\n\n" +
+    "**4.** Wait for a staff member to approve your verification.\n\n" +
 
     "Verification is completed manually by staff.\n\n" +
 
-    "Opening a ticket does not automatically give you " +
-    "access to the server.\n\n" +
+    "Never share passwords, account tokens or login codes."
+  );
+}
 
-    "Please remain patient while our team reviews your ticket.\n\n" +
+// ============================================================
+// BASIC LIFECYCLE LOGGING
+// ============================================================
+//
+// Ticket opening and claiming are recorded in data storage.
+// No extra attachment archive is created.
+//
+// ============================================================
 
-    "**SAFETY REMINDER**\n\n" +
-
-    "Never share passwords, account tokens, or two-factor " +
-    "authentication codes.\n\n" +
-
-    "Thank you for choosing **.gg/chuppys**!"
+function logTicketAction(state, action, actorId) {
+  console.log(
+    `[TICKETS] ${ticketName(state.type, state.number)} ` +
+    `${action} by ${actorId}`
   );
 }
 
@@ -4850,19 +5255,19 @@ function verificationWelcomeDescription(userId) {
 // CREATE TICKET
 // ============================================================
 
-async function createTicket(interaction, type, answers = []) {
+async function createTicket(
+  interaction,
+  type,
+  answers = []
+) {
   return queued(async () => {
     const guild = interaction.guild;
     const config = TYPES[type];
 
-    if (!guild) {
+    if (!guild || !config) {
       throw new Error(
-        "Ticket creation requires a server."
+        "Invalid ticket type."
       );
-    }
-
-    if (!config) {
-      throw new Error("Invalid ticket type.");
     }
 
     const member = await guild.members.fetch({
@@ -4870,35 +5275,46 @@ async function createTicket(interaction, type, answers = []) {
       force: true
     });
 
-    const blacklisted = await isBlacklisted(member);
+    const blacklisted =
+      await isBlacklisted(member);
 
-    if (type === "unblacklist" && !blacklisted) {
+    if (
+      type === "unblacklist" &&
+      !blacklisted
+    ) {
       throw new Error(
-        "Only blacklisted members can open an unblacklist appeal."
+        "Only blacklisted members can open an appeal."
       );
     }
 
-    if (type !== "unblacklist" && blacklisted) {
+    if (
+      type !== "unblacklist" &&
+      blacklisted
+    ) {
       throw new Error(
-        "You are blacklisted and cannot open normal tickets. " +
-        "Please use the unblacklist appeal panel."
+        "You are blacklisted. Please use the appeal panel."
       );
     }
 
     if (
       type === "verification" &&
-      member.roles.cache.has(VERIFIED_ROLE_ID)
+      member.roles.cache.has(
+        VERIFIED_ROLE_ID
+      )
     ) {
-      throw new Error("You are already verified.");
+      throw new Error(
+        "You are already verified."
+      );
     }
 
     await init(guild);
 
-    const existing = await existingTicket(
-      guild,
-      interaction.user.id,
-      type
-    );
+    const existing =
+      await existingTicket(
+        guild,
+        interaction.user.id,
+        type
+      );
 
     if (existing) {
       return {
@@ -4907,15 +5323,22 @@ async function createTicket(interaction, type, answers = []) {
       };
     }
 
-    const parent = await category(guild, type);
+    const parent =
+      await category(
+        guild,
+        type
+      );
 
-    if (parent.children.cache.size >= 50) {
+    if (
+      parent.children.cache.size >= 50
+    ) {
       throw new Error(
-        "This ticket category is full. Please contact staff."
+        "This ticket category is full."
       );
     }
 
-    const number = await nextNumber(guild);
+    const number =
+      await nextNumber(guild);
 
     const state = {
       channelId: null,
@@ -4924,164 +5347,166 @@ async function createTicket(interaction, type, answers = []) {
       number,
       status: "open",
       claimedBy: null,
+
       controlMessageId: null,
       closeControlMessageId: null,
-      closeReason: "No further action required.",
+
+      closeReason:
+        "No further action required.",
+
       transcriptUrl: null,
-      createdAt: new Date().toISOString()
+      archiveRootId: null,
+      archiveThreadId: null,
+
+      createdAt:
+        new Date().toISOString()
     };
 
-    const permissionOverwrites = await permissions(
-      guild,
-      state
-    );
+    const channel =
+      await guild.channels.create({
+        name: ticketName(type, number),
 
-    const channel = await guild.channels.create({
-      name: ticketName(type, number),
-      type: ChannelType.GuildText,
-      parent: parent.id,
-      topic: null,
-      permissionOverwrites,
+        type: ChannelType.GuildText,
 
-      reason:
-        `${config.label} ticket opened by ${interaction.user.id}`
-    });
+        parent: parent.id,
+
+        topic: null,
+
+        permissionOverwrites:
+          await permissions(
+            guild,
+            state
+          ),
+
+        reason:
+          `${config.label} ticket opened by ${interaction.user.id}`
+      });
 
     state.channelId = channel.id;
 
-    if (
-      isVerificationTicket(state) ||
-      isAppealTicket(state)
-    ) {
-      await checkPrivatePrivacy(channel, state);
-    }
-
     const entry = {
       state,
-      storageMessageId: null,
-      recovered: false
+      storageMessageId: null
     };
+
+    await checkPrivacy(channel, state);
 
     await saveState(channel, entry);
 
     const details =
-      config.questions?.length && answers.length
+      config.questions?.length &&
+      answers.length
+
         ? config.questions.map(
             (question, index) =>
               `**${question}**\n` +
-
               safe(
                 answers[index],
-                type === "unblacklist" ? 1000 : 250
+                type === "unblacklist"
+                  ? 1000
+                  : 250
               )
           ).join("\n\n")
+
         : config.description;
 
-    const proofInstruction =
-      type === "partnership"
-        ? "\n\n**Please show proof of your vouches in this ticket!**"
-        : "";
-
-    let pingRoles;
+    let pingRoles = [];
+    let description = "";
 
     if (type === "verification") {
-      pingRoles = VERIFICATION_STAFF_ROLES;
+      pingRoles =
+        VERIFICATION_STAFF_ROLES;
+
+      description =
+        verificationWelcomeDescription(
+          interaction.user.id
+        );
 
     } else if (type === "unblacklist") {
-      pingRoles = UNBLACKLIST_STAFF_ROLES;
+      pingRoles =
+        UNBLACKLIST_STAFF_ROLES;
 
-    } else if (isTradingTicket(state)) {
-      pingRoles = [
-        IDS.owner,
-        IDS.seller,
-        IDS.support
-      ];
-
-    } else {
-      pingRoles = [
-        IDS.owner,
-        IDS.support
-      ];
-    }
-
-    pingRoles = [
-      ...new Set(pingRoles)
-    ].filter(id => guild.roles.cache.has(id));
-
-    let welcomeDescription;
-
-    if (type === "verification") {
-      welcomeDescription =
-        verificationWelcomeDescription(interaction.user.id);
-
-    } else if (type === "unblacklist") {
-      welcomeDescription =
+      description =
         `Welcome <@${interaction.user.id}>!\n\n` +
 
         "**Unblacklist Appeal**\n\n" +
 
-        "Your appeal has been submitted for review.\n\n" +
-
         `${details}\n\n` +
 
-        "**Appeal Instructions**\n\n" +
+        "Please provide relevant screenshots or proof.\n\n" +
 
-        "• Please provide screenshots or proof.\n" +
-        "• Be honest about the circumstances.\n" +
-        "• Do not spam the moderation team.\n" +
-        "• Wait for an Owner, Admin or Moderator.\n\n" +
+        "Wait for an Owner, Admin or Moderator.\n\n" +
 
-        "**Important:** Submitting an appeal does not " +
-        "guarantee removal of your blacklist.";
+        "Submitting an appeal does not guarantee approval.";
 
     } else {
-      welcomeDescription =
+      pingRoles =
+        isTradingTicket(state)
+          ? [
+              IDS.owner,
+              IDS.seller,
+              IDS.support
+            ]
+          : [
+              IDS.owner,
+              IDS.support
+            ];
+
+      const proof =
+        type === "partnership"
+          ? "\n\n**Please show proof of your vouches!**"
+          : "";
+
+      description =
         `Welcome <@${interaction.user.id}>!\n\n` +
 
-        `${details}${proofInstruction}\n\n` +
+        `${details}${proof}\n\n` +
 
         "Our team will assist you shortly.";
     }
 
-    const welcome = await channel.send({
-      content: [
-        `<@${interaction.user.id}>`,
-        ...pingRoles.map(id => `<@&${id}>`)
-      ].join(" "),
+    pingRoles = [
+      ...new Set(pingRoles)
+    ].filter(
+      id => guild.roles.cache.has(id)
+    );
 
-      embeds: [
-        whiteEmbed(
-          `${EMOJI} ${config.label} Ticket #${numberText(number)}`,
-          welcomeDescription
-        )
-      ],
+    const welcome =
+      await channel.send({
+        content: [
+          `<@${interaction.user.id}>`,
 
-      components: controls(state),
+          ...pingRoles.map(
+            id => `<@&${id}>`
+          )
+        ].join(" "),
 
-      allowedMentions: {
-        parse: [],
-        users: [interaction.user.id],
-        roles: pingRoles
-      }
-    });
+        embeds: [
+          whiteEmbed(
+            `${EMOJI} ${config.label} Ticket #${numberText(number)}`,
 
-    state.controlMessageId = welcome.id;
+            description
+          )
+        ],
+
+        components: controls(state),
+
+        allowedMentions: {
+          parse: [],
+          users: [interaction.user.id],
+          roles: pingRoles
+        }
+      });
+
+    state.controlMessageId =
+      welcome.id;
 
     await saveState(channel, entry);
 
-    void logTicket(
-      guild,
-      { ...state },
+    logTicketAction(
+      state,
       "opened",
       interaction.user.id
-    ).catch(console.error);
-
-    console.log(
-      `[TICKETS] Created ${channel.name}`
-    );
-
-    console.log(
-      `[TICKETS] Category: ${parent.name} (${parent.id})`
     );
 
     return {
@@ -5092,7 +5517,7 @@ async function createTicket(interaction, type, answers = []) {
 }
 
 // ============================================================
-// VERIFICATION
+// OPEN VERIFICATION TICKET
 // ============================================================
 
 async function openVerificationTicket(interaction) {
@@ -5102,27 +5527,15 @@ async function openVerificationTicket(interaction) {
     !interaction.inGuild()
   ) {
     throw new Error(
-      "Verification tickets only work inside the server."
+      "Verification requires a server."
     );
   }
 
-  const member = await interaction.guild.members.fetch({
-    user: interaction.user.id,
-    force: true
-  });
-
-  if (await isBlacklisted(member)) {
-    throw new Error(
-      "Blacklisted members cannot open verification tickets. " +
-      "Please use the unblacklist appeal panel."
-    );
-  }
-
-  if (member.roles.cache.has(VERIFIED_ROLE_ID)) {
-    throw new Error("You are already verified.");
-  }
-
-  return createTicket(interaction, "verification", []);
+  return createTicket(
+    interaction,
+    "verification",
+    []
+  );
 }
 
 async function handleVerificationButton(interaction) {
@@ -5130,30 +5543,18 @@ async function handleVerificationButton(interaction) {
     flags: EPHEMERAL
   });
 
-  try {
-    const result = await openVerificationTicket(interaction);
-
-    return reply(
-      interaction,
-
-      result.existing
-        ? `You already have a verification ticket: ${result.channel}`
-        : `Your private verification ticket is ready: ${result.channel}\n\n` +
-          "Please wait for staff to assist you."
+  const result =
+    await openVerificationTicket(
+      interaction
     );
 
-  } catch (error) {
-    console.error(
-      "[VERIFY] Ticket creation:",
-      error
-    );
+  return reply(
+    interaction,
 
-    return reply(
-      interaction,
-      "Could not create verification ticket: " +
-      safe(error.message, 500)
-    );
-  }
+    result.existing
+      ? `You already have a verification ticket: ${result.channel}`
+      : `Your private verification ticket is ready: ${result.channel}`
+  );
 }
 
 // ============================================================
@@ -5161,22 +5562,8 @@ async function handleVerificationButton(interaction) {
 // ============================================================
 
 async function handleUnblacklistButton(interaction) {
-  if (!interaction.guild) {
-    return reply(
-      interaction,
-      "Unblacklist appeals only work in the server."
-    );
-  }
-
-  const member = await getMember(interaction);
-
-  if (!(await isBlacklisted(member))) {
-    return reply(
-      interaction,
-      "You are not blacklisted. " +
-      "Only blacklisted members can open an appeal."
-    );
-  }
+  // Show the modal immediately.
+  // Blacklist eligibility is checked again on submission.
 
   return interaction.showModal(
     ticketForm("unblacklist")
@@ -5184,7 +5571,7 @@ async function handleUnblacklistButton(interaction) {
 }
 
 // ============================================================
-// CLAIM
+// CLAIM TICKET
 // ============================================================
 
 async function claim(
@@ -5194,6 +5581,7 @@ async function claim(
   force = false
 ) {
   const member = await getMember(context);
+
   const state = entry.state;
 
   if (force && !isOwner(member)) {
@@ -5217,45 +5605,53 @@ async function claim(
     );
   }
 
-  if (state.claimedBy && !force) {
-    if (state.claimedBy === member.id) {
-      return reply(
-        context,
-        "You already claimed this ticket."
-      );
-    }
-
-    return reply(
-      context,
-      `This ticket is already claimed by <@${state.claimedBy}>.`
-    );
-  }
-
-  if (force && state.claimedBy === member.id) {
+  if (
+    state.claimedBy === member.id
+  ) {
     return reply(
       context,
       "You already claimed this ticket."
     );
   }
 
-  const previousClaimer = state.claimedBy;
+  if (state.claimedBy && !force) {
+    return reply(
+      context,
+
+      `This ticket is already claimed by <@${state.claimedBy}>.`
+    );
+  }
+
+  const previous = state.claimedBy;
 
   state.claimedBy = member.id;
 
   try {
-    await applyPermissions(channel, state);
-    await saveState(channel, entry);
+    await applyPermissions(
+      channel,
+      state
+    );
+
+    await saveState(
+      channel,
+      entry
+    );
 
   } catch (error) {
-    state.claimedBy = previousClaimer;
+    state.claimedBy = previous;
 
-    await applyPermissions(channel, state)
-      .catch(console.error);
+    await applyPermissions(
+      channel,
+      state
+    ).catch(console.error);
 
     throw error;
   }
 
-  await updateControls(channel, state);
+  await updateControls(
+    channel,
+    state
+  );
 
   await channel.send({
     embeds: [
@@ -5263,38 +5659,37 @@ async function claim(
         "Ticket Claimed",
 
         `Claimed by <@${member.id}>.\n\n` +
-
         "This ticket is now assigned."
       )
     ],
 
     allowedMentions: NONE
-  }).catch(console.error);
+  });
 
-  void logTicket(
-    channel.guild,
-    { ...state },
+  logTicketAction(
+    state,
     "claimed",
     member.id
-  ).catch(console.error);
-
-  console.log(
-    `[TICKETS] ${channel.name} claimed by ${member.id}`
   );
 
-  if (context.kind === "prefix") return;
-
-  return reply(
-    context,
-
-    force
-      ? "Ticket force-claimed successfully."
-      : "Ticket claimed successfully."
-  );
+  if (context.kind !== "prefix") {
+    return reply(
+      context,
+      "Ticket claimed successfully."
+    );
+  }
 }
 
 // ============================================================
-// CLOSE TICKET
+// FAST CLOSE TICKET
+// ============================================================
+//
+// IMPORTANT FIX:
+// No transcript downloads.
+// No attachment uploads.
+// No archive generation.
+// No waiting for TikTok, vouches or other bot modules.
+//
 // ============================================================
 
 async function closeTicket(
@@ -5303,7 +5698,9 @@ async function closeTicket(
   entry,
   reason
 ) {
-  const member = await getMember(context);
+  const member =
+    await getMember(context);
+
   const state = entry.state;
 
   if (!canManage(member, state)) {
@@ -5314,118 +5711,120 @@ async function closeTicket(
   }
 
   if (state.status === "closed") {
+    // Repair missing closed buttons.
+
+    await ensureClosedControls(
+      channel,
+      entry
+    );
+
     return reply(
       context,
-      "This ticket is already closed. Use `,savelog` to save its transcript."
+
+      "This ticket is already closed. " +
+      "Use `,delete` to save the final archive and delete it."
     );
   }
 
-  const previousStatus = state.status;
-  const previousReason = state.closeReason;
+  const previous = {
+    status: state.status,
+    closeReason: state.closeReason
+  };
 
   state.status = "closed";
 
-  state.closeReason =
-    reason || "No further action required.";
+  state.closeReason = String(
+    reason || "No further action required."
+  ).slice(0, 500);
 
   try {
-    await applyPermissions(channel, state);
-    await saveState(channel, entry);
+    await applyPermissions(
+      channel,
+      state
+    );
+
+    await saveState(
+      channel,
+      entry
+    );
 
   } catch (error) {
-    state.status = previousStatus;
-    state.closeReason = previousReason;
+    state.status = previous.status;
+    state.closeReason = previous.closeReason;
 
-    await applyPermissions(channel, state)
-      .catch(console.error);
+    await applyPermissions(
+      channel,
+      state
+    ).catch(console.error);
 
     throw error;
   }
 
-  await updateControls(channel, state);
+  // Display closed buttons immediately.
+  // Renaming is performed afterward.
 
-  await channel.setName(
-    ticketName(
-      state.type,
-      state.number,
-      true
-    )
-  ).catch(console.error);
-
-  const closedMessage = await channel.send({
+  const closed = await channel.send({
     embeds: [
       whiteEmbed(
         "Ticket Closed",
 
         `Closed by <@${member.id}>.\n\n` +
 
-        `**Reason:** ${safe(state.closeReason, 450)}\n\n` +
+        `**Reason:** ${safe(state.closeReason, 500)}\n\n` +
 
-        "This ticket is now closed."
+        "The final transcript and attachments will be saved when this ticket is deleted."
       )
     ],
 
     components: closedControls(),
+
     allowedMentions: NONE
   });
 
-  state.closeControlMessageId = closedMessage.id;
+  state.closeControlMessageId =
+    closed.id;
 
-  await saveState(channel, entry);
-
-  const transcriptState = { ...state };
-
-  const transcriptJob = (async () => {
-    const logMessage = await logTicket(
-      channel.guild,
-      transcriptState,
-      "closed",
-      member.id,
-      channel
-    );
-
-    state.transcriptUrl = logMessage.url;
-
-    await saveState(channel, entry);
-
-    return logMessage;
-  })();
-
-  trackTranscriptJob(
-    channel.id,
-    transcriptJob
+  await saveState(
+    channel,
+    entry
   );
 
-  void transcriptJob.catch(async error => {
-    console.error(
-      "[TICKETS] Closed transcript:",
-      error
-    );
+  await updateControls(
+    channel,
+    state
+  );
 
-    await channel.send({
-      embeds: [
-        whiteEmbed(
-          "Transcript Not Saved",
+  if (context.kind !== "prefix") {
+    await reply(
+      context,
+      "Ticket closed successfully."
+    ).catch(() => {});
+  }
 
-          "The ticket was closed, but an archive operation failed.\n\n" +
+  // A channel-name rate limit will not block archiving.
+  // The per-ticket queue prevents simultaneous state changes.
 
-          `**Reason:** ${safe(error.message, 450)}\n\n` +
+  const expectedName = ticketName(
+    state.type,
+    state.number,
+    true
+  );
 
-          "Use `,savelog` to retry. The original ticket has been preserved."
-        )
-      ],
+  if (channel.name !== expectedName) {
+    await channel.setName(
+      expectedName
+    ).catch(error => {
+      console.warn(
+        "[TICKETS] Close rename:",
+        error.message
+      );
+    });
+  }
 
-      allowedMentions: NONE
-    }).catch(() => {});
-  });
-
-  console.log(`[TICKETS] Closed ${channel.name}`);
-
-  if (context.kind === "prefix") return;
-
-  return reply(
-    context,
-    "Ticket closed successfully. The transcript is being saved."
+  logTicketAction(
+    state,
+    "closed",
+    member.id
   );
 }
 
@@ -5438,7 +5837,9 @@ async function reopenTicket(
   channel,
   entry
 ) {
-  const member = await getMember(context);
+  const member =
+    await getMember(context);
+
   const state = entry.state;
 
   if (!canManage(member, state)) {
@@ -5455,48 +5856,226 @@ async function reopenTicket(
     );
   }
 
-  const pending = transcriptJobs.get(channel.id);
-
-  if (pending) {
-    await pending.catch(console.error);
-  }
-
-  const previousStatus = state.status;
-
   state.status = "open";
 
   try {
-    await applyPermissions(channel, state);
-    await saveState(channel, entry);
+    await applyPermissions(
+      channel,
+      state
+    );
+
+    await saveState(
+      channel,
+      entry
+    );
 
   } catch (error) {
-    state.status = previousStatus;
+    state.status = "closed";
 
-    await applyPermissions(channel, state)
-      .catch(console.error);
+    await applyPermissions(
+      channel,
+      state
+    ).catch(console.error);
 
     throw error;
   }
 
-  if (state.closeControlMessageId) {
-    await clearClosedControls(channel, state);
-  }
+  await clearClosedControls(
+    channel,
+    state
+  );
 
   state.closeControlMessageId = null;
 
-  await saveState(channel, entry);
+  await saveState(
+    channel,
+    entry
+  );
 
-  await updateControls(channel, state);
+  await updateControls(
+    channel,
+    state
+  );
+
+  await channel.send({
+    embeds: [
+      whiteEmbed(
+        "Ticket Reopened",
+
+        `Reopened by <@${member.id}>.`
+      )
+    ],
+
+    allowedMentions: NONE
+  });
+
+  if (context.kind !== "prefix") {
+    await reply(
+      context,
+      "Ticket reopened successfully."
+    ).catch(() => {});
+  }
 
   await channel.setName(
-    ticketName(state.type, state.number)
+    ticketName(
+      state.type,
+      state.number
+    )
   ).catch(console.error);
 
-  console.log(`[TICKETS] Reopened ${channel.name}`);
+  logTicketAction(
+    state,
+    "reopened",
+    member.id
+  );
+}
 
-  return reply(
+// ============================================================
+// SAVELOG
+// ============================================================
+//
+// Only closed tickets can be archived manually.
+// Repeated commands reuse already saved files.
+//
+// ============================================================
+
+async function saveLog(
+  context,
+  channel,
+  entry
+) {
+  const member =
+    await getMember(context);
+
+  const state = entry.state;
+
+  if (
+    !isOwner(member) &&
+    !isAdmin(member) &&
+    !canManage(member, state)
+  ) {
+    return reply(
+      context,
+      "You cannot save this ticket."
+    );
+  }
+
+  if (state.status !== "closed") {
+    return reply(
+      context,
+
+      "Close this ticket before saving its final archive."
+    );
+  }
+
+  const notice = await archiveNotice(
     context,
-    "Ticket reopened successfully."
+    channel,
+
+    "Saving the ticket archive.\n\n" +
+
+    "Already saved attachments will not be uploaded again."
+  );
+
+  try {
+    const archive =
+      await archiveTicket(
+        channel,
+        entry
+      );
+
+    await editArchiveNotice(
+      notice,
+
+      "Ticket Archive Saved",
+
+      `**Ticket:** #${numberText(state.number)}\n` +
+      `**Messages:** ${archive.messages}\n` +
+      `**Attachments:** ${archive.attachments}\n\n` +
+
+      `[View Ticket Archive](${archive.url})\n\n` +
+
+      "You can now use `,delete`."
+    );
+
+    if (context.kind !== "prefix") {
+      await reply(
+        context,
+
+        "Ticket archive saved successfully."
+      ).catch(() => {});
+    }
+
+  } catch (error) {
+    console.error(
+      "[SAVELOG]",
+      error
+    );
+
+    await editArchiveNotice(
+      notice,
+
+      "Archive Incomplete",
+
+      `**Reason:** ${safe(error.message, 700)}\n\n` +
+
+      "Successfully saved attachments have been retained.\n\n" +
+
+      "Use `,savelog` to retry the missing files."
+    );
+  }
+}
+
+// ============================================================
+// FREEZE TICKET FOR FINAL DELETION
+// ============================================================
+//
+// Prevent ordinary members and staff from adding messages
+// while the final archive is being generated.
+// Administrators and server owners can bypass overwrites,
+// so the message snapshot is checked again before deletion.
+//
+// ============================================================
+
+async function freezeTicket(channel, state) {
+  const overwrites =
+    await permissions(
+      channel.guild,
+      state
+    );
+
+  for (const overwrite of overwrites) {
+    if (
+      overwrite.id === channel.client.user.id
+    ) {
+      continue;
+    }
+
+    if (
+      overwrite.id ===
+      channel.guild.roles.everyone.id
+    ) {
+      continue;
+    }
+
+    overwrite.allow = (
+      overwrite.allow || []
+    ).filter(
+      permission =>
+        !WRITE_PERMISSIONS.includes(permission)
+    );
+
+    overwrite.deny = [
+      ...new Set([
+        ...(overwrite.deny || []),
+        ...WRITE_PERMISSIONS
+      ])
+    ];
+  }
+
+  await channel.permissionOverwrites.set(
+    overwrites,
+    "Freeze ticket during final archive"
   );
 }
 
@@ -5504,12 +6083,9 @@ async function reopenTicket(
 // DELETE TICKET
 // ============================================================
 //
-// Always finish archiving before deleting.
-//
-// A large combined archive is no longer a reason
-// to cancel deletion.
-//
-// Actual download/upload failures still prevent deletion.
+// Only archive once unless ticket content changes.
+// Existing attachment uploads are always reused.
+// The original ticket remains if archiving fails.
 //
 // ============================================================
 
@@ -5518,106 +6094,218 @@ async function deleteTicket(
   channel,
   entry
 ) {
-  const member = await getMember(context);
+  const member =
+    await getMember(context);
+
   const state = entry.state;
 
   if (!canDelete(member, state)) {
-    if (
+    return reply(
+      context,
+
       state.status !== "closed" &&
       canManage(member, state)
+
+        ? "Close this ticket first."
+
+        : "You cannot delete this ticket."
+    );
+  }
+
+  const notice = await archiveNotice(
+    context,
+    channel,
+
+    "Preparing the final ticket archive.\n\n" +
+
+    "Previously saved files will be reused."
+  );
+
+  let deleted = false;
+
+  try {
+    await freezeTicket(
+      channel,
+      state
+    );
+
+    let archive = null;
+
+    // If an administrator adds messages during archiving,
+    // update the transcript before deleting.
+
+    for (
+      let attempt = 1;
+      attempt <= 3;
+      attempt++
     ) {
-      return reply(
-        context,
-        "Close this ticket first."
+      archive = await archiveTicket(
+        channel,
+        entry
+      );
+
+      const latest = (
+        await allMessages(channel)
+      ).filter(
+        shouldArchiveMessage
+      );
+
+      const currentSnapshot =
+        snapshotHash(latest, state);
+
+      if (
+        currentSnapshot === archive.snapshot
+      ) {
+        break;
+      }
+
+      archive = null;
+    }
+
+    if (!archive) {
+      throw new Error(
+        "Ticket content changed during archiving. " +
+        "Please stop sending messages and retry."
       );
     }
 
-    return reply(
-      context,
-      "You cannot delete this ticket."
+    state.transcriptUrl = archive.url;
+
+    await saveState(
+      channel,
+      entry
     );
-  }
 
-  await reply(
-    context,
-    "Saving all ticket messages and attachments before deletion..."
-  );
+    const logs =
+      await textChannel(
+        channel.guild,
+        IDS.logs,
+        "Ticket logs"
+      );
 
-  const pending = transcriptJobs.get(channel.id);
-
-  if (pending) {
-    await pending.catch(console.error);
-  }
-
-  let logMessage;
-
-  try {
-    // Make a final archive of the ticket.
-    // Includes anything sent after the previous close.
-
-    logMessage = await logTicket(
+    await validateArchiveChannel(
       channel.guild,
-      { ...state },
-      "deleted",
-      member.id,
-      channel
+      logs
     );
 
-  } catch (error) {
-    console.error(
-      "[TICKETS] Transcript unavailable:",
-      error
+    if (
+      !(await verifyCompletedArchive(
+        channel.guild,
+        archive
+      ))
+    ) {
+      throw new Error(
+        "One or more archived files could not be verified."
+      );
+    }
+
+    // Final message check before deleting.
+
+    const finalMessages = (
+      await allMessages(channel)
+    ).filter(
+      shouldArchiveMessage
     );
 
-    return reply(
-      context,
+    if (
+      snapshotHash(
+        finalMessages,
+        state
+      ) !== archive.snapshot
+    ) {
+      throw new Error(
+        "New ticket messages were detected. Retry deletion."
+      );
+    }
 
-      "Deletion cancelled because an attachment or transcript " +
-      "could not be archived.\n\n" +
+    await editArchiveNotice(
+      notice,
 
-      `**Reason:** ${safe(error.message, 400)}\n\n` +
+      "Archive Complete",
 
-      "Use `,savelog` to retry."
-    );
-  }
-
-  state.transcriptUrl = logMessage.url;
-
-  try {
-    await saveState(channel, entry);
-
-  } catch (error) {
-    console.error(
-      "[TICKETS] Storage save failed:",
-      error
+      "All ticket messages and original attachments have been saved."
     );
 
-    return reply(
-      context,
-      "Deletion cancelled because metadata could not be saved."
-    );
-  }
-
-  try {
     await channel.delete(
-      `Ticket deleted by ${member.id}`
+      `Ticket deleted by ${member.id}; archive complete`
     );
+
+    deleted = true;
+
+    tickets.delete(channel.id);
+
+    console.log(
+      `[TICKETS] Deleted #${state.number} after successful archive.`
+    );
+
+    // Mark the archive root as finalized.
+
+    if (state.archiveRootId) {
+      const root =
+        await logs.messages.fetch(
+          state.archiveRootId
+        ).catch(() => null);
+
+      if (root) {
+        const payload =
+          archiveRootPayload(
+            state,
+            archive
+          );
+
+        payload.embeds[0].addFields({
+          name: "Ticket Status",
+          value: "Deleted • Archive preserved"
+        });
+
+        await root.edit(payload)
+          .catch(console.error);
+      }
+    }
+
+    // Archive the thread to keep the log channel organized.
+
+    if (state.archiveThreadId) {
+      const thread =
+        await channel.guild.channels.fetch(
+          state.archiveThreadId
+        ).catch(() => null);
+
+      if (thread?.isThread()) {
+        await thread.setArchived(true)
+          .catch(console.error);
+      }
+    }
 
   } catch (error) {
     console.error(
-      "[TICKETS] Channel deletion failed:",
+      "[DELETE TICKET]",
       error
     );
 
-    return reply(
-      context,
-      "The ticket channel could not be deleted."
-    );
+    if (!deleted) {
+      // Restore the closed-ticket permissions if archiving fails.
+
+      await applyPermissions(
+        channel,
+        state
+      ).catch(console.error);
+
+      await editArchiveNotice(
+        notice,
+
+        "Deletion Cancelled",
+
+        `**Reason:** ${safe(error.message, 700)}\n\n` +
+
+        "The original ticket has been preserved.\n\n" +
+
+        "Previously saved attachments will not be uploaded again.\n\n" +
+
+        "Use `,delete` or `,savelog` to retry."
+      );
+    }
   }
-
-  tickets.delete(channel.id);
-
-  console.log(`[TICKETS] Deleted ${channel.name}`);
 }
 
 // ============================================================
@@ -5625,7 +6313,11 @@ async function deleteTicket(
 // ============================================================
 
 async function panelCommand(interaction) {
-  if (!interaction.memberPermissions?.has(P.ManageGuild)) {
+  if (
+    !interaction.memberPermissions?.has(
+      P.ManageGuild
+    )
+  ) {
     return reply(
       interaction,
       "Manage Server permission is required."
@@ -5636,40 +6328,52 @@ async function panelCommand(interaction) {
     flags: EPHEMERAL
   });
 
-  const channel = await textChannel(
-    interaction.guild,
-    IDS.panel,
-    "Ticket panel"
-  );
+  const channel =
+    await textChannel(
+      interaction.guild,
+      IDS.panel,
+      "Ticket panel"
+    );
 
-  const messages = await channel.messages.fetch({
-    limit: 100
-  });
+  const messages =
+    await channel.messages.fetch({
+      limit: 100
+    });
 
   const existing = messages.find(
     message =>
       message.author.id === interaction.client.user.id &&
+
       message.components.some(
-        row => row.components.some(
-          component => SELECT_IDS.has(component.customId)
-        )
+        row =>
+          row.components.some(
+            component =>
+              SELECT_IDS.has(
+                component.customId
+              )
+          )
       )
   );
 
   if (existing) {
-    await existing.edit(panelPayload());
+    await existing.edit(
+      panelPayload()
+    );
   } else {
-    await channel.send(panelPayload());
+    await channel.send(
+      panelPayload()
+    );
   }
 
   return reply(
     interaction,
+
     `Ticket panel ${existing ? "updated" : "posted"}.`
   );
 }
 
 // ============================================================
-// SELECT MENU
+// TICKET SELECT MENU
 // ============================================================
 
 async function selectTicket(interaction) {
@@ -5688,55 +6392,32 @@ async function selectTicket(interaction) {
     );
   }
 
-  const member = await getMember(interaction);
-
-  if (await isBlacklisted(member)) {
-    return reply(
-      interaction,
-
-      "You are blacklisted and cannot create normal tickets. " +
-
-      "Please use the unblacklist appeal panel."
-    );
-  }
+  // Show forms immediately.
+  // Full permissions are checked upon submission.
 
   if (TYPES[type].questions?.length) {
-    return interaction.showModal(ticketForm(type));
+    return interaction.showModal(
+      ticketForm(type)
+    );
   }
 
   await interaction.deferReply({
     flags: EPHEMERAL
   });
 
-  try {
-    const result = await createTicket(
-      interaction,
-      type,
-      []
-    );
+  const result = await createTicket(
+    interaction,
+    type,
+    []
+  );
 
-    return reply(
-      interaction,
+  return reply(
+    interaction,
 
-      result.existing
-        ? `You already have an open ticket: ${result.channel}`
-        : `Your ${TYPES[type].label} ticket is ready: ${result.channel}`
-    );
-
-  } catch (error) {
-    console.error(
-      "[TICKETS] Select error:",
-      error
-    );
-
-    return reply(
-      interaction,
-
-      "Could not open ticket: " +
-
-      safe(error.message, 500)
-    );
-  }
+    result.existing
+      ? `You already have an open ticket: ${result.channel}`
+      : `Your ${TYPES[type].label} ticket is ready: ${result.channel}`
+  );
 }
 
 // ============================================================
@@ -5755,48 +6436,32 @@ async function submitForm(interaction) {
     );
   }
 
-  const answers = TYPES[type].questions.map(
-    (_, index) =>
-      interaction.fields.getTextInputValue(
-        `answer_${index}`
-      )
-  );
+  const answers =
+    TYPES[type].questions.map(
+      (_, index) =>
+        interaction.fields.getTextInputValue(
+          `answer_${index}`
+        )
+    );
 
   await interaction.deferReply({
     flags: EPHEMERAL
   });
 
-  try {
-    const result = await createTicket(
+  const result =
+    await createTicket(
       interaction,
       type,
       answers
     );
 
-    const label = TYPES[type].label;
+  return reply(
+    interaction,
 
-    return reply(
-      interaction,
-
-      result.existing
-        ? `You already have an open ${label} ticket: ${result.channel}`
-        : `Your ${label} ticket is ready: ${result.channel}`
-    );
-
-  } catch (error) {
-    console.error(
-      `[TICKETS] ${type} form error:`,
-      error
-    );
-
-    return reply(
-      interaction,
-
-      "Could not create ticket: " +
-
-      safe(error.message, 500)
-    );
-  }
+    result.existing
+      ? `You already have an open ticket: ${result.channel}`
+      : `Your ${TYPES[type].label} ticket is ready: ${result.channel}`
+  );
 }
 
 // ============================================================
@@ -5804,20 +6469,31 @@ async function submitForm(interaction) {
 // ============================================================
 
 function actionFor(customId) {
-  for (const [action, id] of Object.entries(BUTTONS)) {
+  for (
+    const [action, id] of
+    Object.entries(BUTTONS)
+  ) {
     if (customId === id) {
       return action;
     }
   }
 
-  if (customId.startsWith("chuppys_ticket:")) {
+  if (
+    customId.startsWith(
+      "chuppys_ticket:"
+    )
+  ) {
     const action = customId.slice(
       "chuppys_ticket:".length
     );
 
     if (
-      ["claim", "close", "reopen", "delete"]
-        .includes(action)
+      [
+        "claim",
+        "close",
+        "reopen",
+        "delete"
+      ].includes(action)
     ) {
       return action;
     }
@@ -5830,104 +6506,126 @@ function actionFor(customId) {
 // BUTTON HANDLER
 // ============================================================
 
-async function handleButton(interaction, action) {
-  const channel = interaction.channel;
+async function handleButton(
+  interaction,
+  action
+) {
+  const channel =
+    interaction.channel;
 
-  if (!channel || channel.type !== ChannelType.GuildText) {
+  if (
+    !channel ||
+    channel.type !== ChannelType.GuildText
+  ) {
     return reply(
       interaction,
       "This button must be used inside a ticket."
     );
   }
 
+  // FIX:
+  // Show the close modal immediately instead of waiting
+  // for storage initialization and member API requests.
+  // Authorization is checked on form submission.
+
   if (action === "close") {
-    const entry = await loadState(channel);
-
-    if (!entry) {
+    if (
+      !parseTicketName(channel.name) &&
+      !tickets.has(channel.id)
+    ) {
       return reply(
         interaction,
-        "Ticket data unavailable."
+        "This is not a recognized ticket."
       );
     }
 
-    const member = await getMember(interaction);
-
-    if (!canManage(member, entry.state)) {
-      return reply(
-        interaction,
-        "You cannot close this ticket."
-      );
-    }
-
-    if (entry.state.status === "closed") {
-      return reply(
-        interaction,
-        "This ticket is already closed."
-      );
-    }
-
-    return interaction.showModal(closeModal(channel.id));
-  }
-
-  await interaction.deferReply({
-    flags: EPHEMERAL
-  });
-
-  return queuedTicket(channel.id, async () => {
-    const entry = await loadState(channel);
-
-    if (!entry) {
-      return reply(
-        interaction,
-        "Ticket data unavailable."
-      );
-    }
-
-    if (action === "claim") {
-      return claim(interaction, channel, entry);
-    }
-
-    if (action === "reopen") {
-      return reopenTicket(interaction, channel, entry);
-    }
-
-    if (action === "delete") {
-      return deleteTicket(interaction, channel, entry);
-    }
-  });
-}
-
-// ============================================================
-// CLOSE MODAL HANDLER
-// ============================================================
-
-async function handleCloseForm(interaction) {
-  const channelId = interaction.customId.slice(
-    CLOSE_PREFIX.length
-  );
-
-  if (channelId !== interaction.channelId) {
-    return reply(
-      interaction,
-      "This form belongs to another ticket."
+    return interaction.showModal(
+      closeModal(channel.id)
     );
   }
-
-  const reason = interaction.fields
-    .getTextInputValue("close_reason")
-    .trim();
 
   await interaction.deferReply({
     flags: EPHEMERAL
   });
 
   return queuedTicket(
-    interaction.channel.id,
+    channel.id,
 
     async () => {
-      const entry = await loadState(
-        interaction.channel
-      );
+      const entry =
+        await loadState(channel);
+
+      if (!entry) {
+        return reply(
+          interaction,
+          "Ticket data unavailable."
+        );
+      }
+
+      switch (action) {
+        case "claim":
+          return claim(
+            interaction,
+            channel,
+            entry
+          );
+
+        case "reopen":
+          return reopenTicket(
+            interaction,
+            channel,
+            entry
+          );
+
+        case "delete":
+          return deleteTicket(
+            interaction,
+            channel,
+            entry
+          );
+      }
+    }
+  );
+}
+
+// ============================================================
+// CLOSE FORM HANDLER
+// ============================================================
+
+async function handleCloseForm(interaction) {
+  const channelId =
+    interaction.customId.slice(
+      CLOSE_PREFIX.length
+    );
+
+  if (
+    channelId !== interaction.channelId
+  ) {
+    return reply(
+      interaction,
+      "This form belongs to another ticket."
+    );
+  }
+
+  const reason =
+    interaction.fields
+      .getTextInputValue(
+        "close_reason"
+      )
+      .trim();
+
+  await interaction.deferReply({
+    flags: EPHEMERAL
+  });
+
+  return queuedTicket(
+    interaction.channelId,
+
+    async () => {
+      const entry =
+        await loadState(
+          interaction.channel
+        );
 
       if (!entry) {
         return reply(
@@ -5959,31 +6657,32 @@ async function handlePrefix(message) {
     return;
   }
 
-  const raw = message.content.slice(
-    PREFIX.length
-  ).trim();
+  const raw = message.content
+    .slice(PREFIX.length)
+    .trim();
 
-  const [commandName] = raw.split(/\s+/, 1);
+  const commandName =
+    raw.split(/\s+/, 1)[0] || "";
 
-  const name = String(
-    commandName || ""
-  ).toLowerCase();
+  const name =
+    commandName.toLowerCase();
 
   if (!PREFIX_COMMANDS.has(name)) {
     return;
   }
 
-  if (message.channel.type !== ChannelType.GuildText) {
+  if (
+    message.channel.type !== ChannelType.GuildText
+  ) {
     return;
   }
-
-  // Recovery works directly in ticket logs.
 
   if (name === "recoverlogs") {
     return recoverLogs(message);
   }
 
-  const context = messageContext(message);
+  const context =
+    messageContext(message);
 
   const reason = raw.slice(
     commandName.length
@@ -5993,7 +6692,10 @@ async function handlePrefix(message) {
     message.channel.id,
 
     async () => {
-      const entry = await loadState(message.channel);
+      const entry =
+        await loadState(
+          message.channel
+        );
 
       if (!entry) {
         return reply(
@@ -6052,7 +6754,7 @@ async function handlePrefix(message) {
 }
 
 // ============================================================
-// SINGLE HANDLER INSTALLATION
+// INSTALL TICKET MODULE
 // ============================================================
 
 function setupTickets(client) {
@@ -6072,18 +6774,24 @@ function setupTickets(client) {
   }
 
   client[INSTALL_KEY] = true;
+
   client.__chuppysTicketsInstalled = true;
 
   const seenMessages = new Set();
+
   const seenInteractions = new Set();
 
   function firstTime(set, id) {
-    if (set.has(id)) return false;
+    if (set.has(id)) {
+      return false;
+    }
 
     set.add(id);
 
     if (set.size > 5000) {
-      set.delete(set.values().next().value);
+      set.delete(
+        set.values().next().value
+      );
     }
 
     return true;
@@ -6107,164 +6815,108 @@ function setupTickets(client) {
         );
       }
 
-      const guild = await client.guilds.fetch(
-        process.env.DISCORD_GUILD_ID
-      );
-
-      await guild.roles.fetch();
+      const guild =
+        await client.guilds.fetch(
+          process.env.DISCORD_GUILD_ID
+        );
 
       await init(guild);
 
-      const verifyCategory =
-        await ensureVerificationCategory(guild);
-
-      const appealCategory =
-        await ensureUnblacklistCategory(guild);
-
       console.log(
-        `[VERIFY] Using category: ${verifyCategory.name} (${verifyCategory.id})`
+        "[TICKETS] Ticket data initialized."
       );
 
       console.log(
-        `[UNBLACKLIST] Using category: ${appealCategory.name} (${appealCategory.id})`
+        `[TICKETS] Next ticket: ${globalCounter + 1}`
       );
 
-      await syncExistingTickets(guild);
+      // Verify categories without preventing other
+      // ticket commands from running.
+
+      for (const type of [
+        "verification",
+        "unblacklist"
+      ]) {
+        try {
+          const target =
+            await category(
+              guild,
+              type
+            );
+
+          console.log(
+            `[TICKETS] ${type}: ${target.name}`
+          );
+
+        } catch (error) {
+          console.error(
+            `[TICKETS] ${type} category:`,
+            error.message
+          );
+        }
+      }
+
+      // Restore existing tickets in the background.
+      // No attachment downloads take place here.
+
+      void syncExistingTickets(guild)
+        .catch(error => {
+          console.error(
+            "[TICKETS] Restore error:",
+            error
+          );
+        });
 
       console.log(
-        "[TICKETS] Chuppys ticket system ready."
-      );
-
-      console.log(
-        `[TICKETS] Next number: ${globalCounter + 1}`
-      );
-
-      console.log(
-        `[TICKETS] Seller role: ${IDS.seller}`
-      );
-
-      console.log(
-        `[TICKETS] Support role: ${IDS.support}`
-      );
-
-      console.log(
-        `[TICKETS] Owner role: ${IDS.owner}`
-      );
-
-      console.log(
-        `[TICKETS] Admin role: ${IDS.admin}`
-      );
-
-      console.log(
-        `[TICKETS] Mod role: ${IDS.mod}`
-      );
-
-      console.log(
-        `[TICKETS] Listed sellers: ${SELLER_USER_IDS.size}`
-      );
-
-      console.log(
-        `[TICKETS] Button emoji: ${BUTTON_EMOJI}`
-      );
-
-      console.log(
-        "[TICKETS] All seven ticket categories enabled."
-      );
-
-      console.log(
-        "[TICKETS] Purchase / Cash Out claim privacy enabled."
+        "[TICKETS] All seven categories enabled."
       );
 
       console.log(
-        "[VERIFY] Verification ticket creation owned by tickets.js."
+        "[TICKETS] Fast closing enabled."
       );
 
       console.log(
-        `[VERIFY] Verification button: ${VERIFY_TICKET_BUTTON_ID}`
+        "[TICKETS] Closed tickets remain writable by authorized staff."
       );
 
       console.log(
-        "[VERIFY] Existing verification category reused."
+        "[TICKETS] Archive on deletion enabled."
       );
 
       console.log(
-        "[VERIFY] Verification uses global ticket numbers."
+        "[ARCHIVE] No automatic attachment archive on close."
       );
 
       console.log(
-        "[VERIFY] No automatic verification roles."
+        "[ARCHIVE] One organized thread per ticket."
       );
 
       console.log(
-        "[VERIFY] Verification privacy enabled."
+        "[ARCHIVE] Original attachment deduplication enabled."
       );
 
       console.log(
-        "[UNBLACKLIST] Appeals enabled."
+        "[ARCHIVE] Previously saved attachment reuse enabled."
       );
 
       console.log(
-        "[UNBLACKLIST] Owner/Admin/Mod-only staff access."
+        "[ARCHIVE] Partial upload resume enabled."
       );
 
       console.log(
-        "[TICKETS] Blacklist restrictions enabled."
+        "[ARCHIVE] Five download attempts enabled."
       );
 
       console.log(
-        "[TICKETS] Global numbering preserved."
+        "[ARCHIVE] Original file validation enabled."
       );
 
       console.log(
-        "[TICKETS] Private V3 metadata preserved."
+        "[ARCHIVE] Multipart files enabled."
       );
 
       console.log(
-        "[TICKETS] Legacy recovery enabled."
-      );
-
-      console.log(
-        "[TICKETS] Embed-only storage enabled."
-      );
-
-      console.log(
-        `[TICKETS] Ticket logs: ${IDS.logs}`
-      );
-
-      console.log(
-        `[TICKETS] Data storage: ${IDS.data}`
-      );
-
-      console.log(
-        "[TICKETS] No separate transcript channel required."
-      );
-
-      console.log(
-        "[ARCHIVE] No fixed total transcript size limit."
-      );
-
-      console.log(
-        "[ARCHIVE] Multipart HTML transcripts enabled."
-      );
-
-      console.log(
-        "[ARCHIVE] Original attachment preservation enabled."
-      );
-
-      console.log(
-        "[ARCHIVE] Large attachment splitting enabled."
-      );
-
-      console.log(
-        "[ARCHIVE] Original-quality image uploads enabled."
-      );
-
-      console.log(
-        "[ARCHIVE] Permanent embedded images enabled."
-      );
-
-      console.log(
-        "[ARCHIVE] Archive index enabled."
+        "[ARCHIVE] No fixed combined archive size limit."
       );
 
       console.log(
@@ -6272,47 +6924,23 @@ function setupTickets(client) {
       );
 
       console.log(
-        "[RECOVERY] ,recoverlogs"
+        "[RECOVERY] Historical recovery enabled."
       );
 
       console.log(
-        "[RECOVERY] ,recoverlogs 693"
+        "[VERIFY] Manual verification preserved."
       );
 
       console.log(
-        "[RECOVERY] ,recoverlogs 779"
+        `[TICKETS] Logs: ${IDS.logs}`
       );
 
       console.log(
-        "[RECOVERY] ,recoverlogs 11/18/26"
+        `[TICKETS] Data: ${IDS.data}`
       );
 
       console.log(
-        "[RECOVERY] ,recoverlogs 2026-11-18"
-      );
-
-      console.log(
-        "[RECOVERY] Owner/Admin only."
-      );
-
-      console.log(
-        "[RECOVERY] Existing ticket channel recovery enabled."
-      );
-
-      console.log(
-        "[RECOVERY] Old embedded image extraction enabled."
-      );
-
-      console.log(
-        "[TICKETS] ,savelog enabled."
-      );
-
-      console.log(
-        "[TICKETS] Claim / Close / Reopen / Delete enabled."
-      );
-
-      console.log(
-        "[TICKETS] No full-server member fetches."
+        "[TICKETS] Chuppys ticket system ready."
       );
 
     } catch (error) {
@@ -6331,11 +6959,11 @@ function setupTickets(client) {
   );
 
   if (client.isReady()) {
-    void onReady().catch(console.error);
+    void onReady();
   }
 
   // ==========================================================
-  // PREFIX COMMAND LISTENER
+  // PREFIX LISTENER
   // ==========================================================
 
   client.on(
@@ -6350,22 +6978,29 @@ function setupTickets(client) {
         return;
       }
 
-      const commandName = message.content
+      const name = message.content
         .slice(PREFIX.length)
         .trim()
         .split(/\s+/, 1)[0]
         ?.toLowerCase();
 
-      if (!PREFIX_COMMANDS.has(commandName)) {
+      if (!PREFIX_COMMANDS.has(name)) {
         return;
       }
 
-      if (!firstTime(seenMessages, message.id)) {
+      if (
+        !firstTime(
+          seenMessages,
+          message.id
+        )
+      ) {
         return;
       }
 
       try {
-        await handlePrefix(message);
+        await handlePrefix(
+          message
+        );
 
       } catch (error) {
         console.error(
@@ -6375,9 +7010,10 @@ function setupTickets(client) {
 
         await message.reply({
           content:
+
             "Ticket error: " +
 
-            safe(error.message),
+            safe(error.message, 900),
 
           allowedMentions: {
             parse: [],
@@ -6398,34 +7034,55 @@ function setupTickets(client) {
     async interaction => {
       const isPanel =
         interaction.isChatInputCommand() &&
-        interaction.commandName === "ticketpanel";
+
+        interaction.commandName ===
+          "ticketpanel";
 
       const isSelect =
         interaction.isStringSelectMenu() &&
-        SELECT_IDS.has(interaction.customId);
+
+        SELECT_IDS.has(
+          interaction.customId
+        );
 
       const isForm =
         interaction.isModalSubmit() &&
-        interaction.customId.startsWith(FORM_PREFIX);
+
+        interaction.customId.startsWith(
+          FORM_PREFIX
+        );
 
       const isClose =
         interaction.isModalSubmit() &&
-        interaction.customId.startsWith(CLOSE_PREFIX);
+
+        interaction.customId.startsWith(
+          CLOSE_PREFIX
+        );
+
+      // The current verification button is owned by tickets.js.
+      // The legacy secure button remains handled by index.js
+      // to prevent duplicate interaction responses.
 
       const isVerification =
         interaction.isButton() &&
-        (
-          interaction.customId === VERIFY_TICKET_BUTTON_ID ||
-          interaction.customId === LEGACY_SECURE_VERIFY_BUTTON_ID
-        );
+
+        interaction.customId ===
+          VERIFY_TICKET_BUTTON_ID;
 
       const isUnblacklist =
         interaction.isButton() &&
-        interaction.customId === UNBLACKLIST_BUTTON_ID;
 
-      const action = interaction.isButton()
-        ? actionFor(interaction.customId)
-        : null;
+        interaction.customId ===
+          UNBLACKLIST_BUTTON_ID;
+
+      const action =
+        interaction.isButton()
+
+          ? actionFor(
+              interaction.customId
+            )
+
+          : null;
 
       if (
         !isPanel &&
@@ -6440,7 +7097,10 @@ function setupTickets(client) {
       }
 
       if (
-        !firstTime(seenInteractions, interaction.id)
+        !firstTime(
+          seenInteractions,
+          interaction.id
+        )
       ) {
         return;
       }
@@ -6449,6 +7109,7 @@ function setupTickets(client) {
         if (!interaction.inGuild()) {
           return reply(
             interaction,
+
             "Tickets only work inside the server."
           );
         }
@@ -6466,19 +7127,27 @@ function setupTickets(client) {
         }
 
         if (isPanel) {
-          return await panelCommand(interaction);
+          return await panelCommand(
+            interaction
+          );
         }
 
         if (isSelect) {
-          return await selectTicket(interaction);
+          return await selectTicket(
+            interaction
+          );
         }
 
         if (isForm) {
-          return await submitForm(interaction);
+          return await submitForm(
+            interaction
+          );
         }
 
         if (isClose) {
-          return await handleCloseForm(interaction);
+          return await handleCloseForm(
+            interaction
+          );
         }
 
         if (action) {
@@ -6499,7 +7168,7 @@ function setupTickets(client) {
 
           "Ticket error: " +
 
-          safe(error.message)
+          safe(error.message, 900)
         ).catch(() => {});
       }
     }
@@ -6510,43 +7179,19 @@ function setupTickets(client) {
   );
 
   console.log(
-    "[TICKETS] All buttons use uppyty."
+    "[TICKETS] Verification button connected."
   );
 
   console.log(
-    "[VERIFY] Verification button connected."
+    "[TICKETS] Unblacklist button connected."
   );
 
   console.log(
-    "[UNBLACKLIST] Appeal button connected."
+    "[TICKETS] Existing metadata supported."
   );
 
   console.log(
-    "[TICKETS] Storage is embed-only."
-  );
-
-  console.log(
-    "[ARCHIVE] Multipart transcript system installed."
-  );
-
-  console.log(
-    "[ARCHIVE] Original attachment saving installed."
-  );
-
-  console.log(
-    "[ARCHIVE] No fixed combined transcript limit."
-  );
-
-  console.log(
-    "[RECOVERY] Date and ticket number filters installed."
-  );
-
-  console.log(
-    "[RECOVERY] Recovered images uploaded directly to ticket logs."
-  );
-
-  console.log(
-    "[TICKETS] Manual save command installed."
+    "[TICKETS] Organized archive system installed."
   );
 }
 
