@@ -192,12 +192,6 @@ const SELLERS = [
   },
 
   {
-    id: "1192248188409749684",
-    name: "﹕𐔌・angel 〃・꒱",
-    personal: false
-  },
-
-  {
     id: "1079241163455873074",
     name: "﹕𐔌・felony 〃・꒱",
     personal: false
