@@ -3157,7 +3157,7 @@ const bot = fresh.permissionsFor(
    guild.client.user.id
 );
 
-if (!bot?.has([
+const requiredArchivePermissions = [
   P.ViewChannel,
   P.SendMessages,
   P.ReadMessageHistory,
@@ -3166,11 +3166,11 @@ if (!bot?.has([
   P.CreatePublicThreads,
   P.SendMessagesInThreads,
   P.ManageThreads
-])) {
-  throw new Error(
-             "Bot is missing required archive permissions."
-        );
-    }
+];
+if (!bot?.has(requiredArchivePermissions)) {
+  const missing = Object.entries(P).filter(([name, bit]) => requiredArchivePermissions.includes(bit) && !bot?.has(bit)).map(([name]) => name);
+  throw new Error(`Bot is missing archive permissions: ${missing.join(", ")}`);
+}
 
     return fresh;
 }
@@ -4507,6 +4507,7 @@ function shouldArchiveMessage(message) {
       message.author.id ===
       message.client.user.id
     ){
+      if (/^(?:Finalizing the ticket archive\.|Deletion postponed; original ticket retained\.|Deletion was postponed to protect the ticket archive\.|The ticket archive has been queued\.)/.test(message.content || "")) return false;
       if (
          footerText(message).includes(
            ARCHIVE_STATUS_MARKER
@@ -4671,13 +4672,15 @@ async function fetchArchiveReference(
 
 async function verifyCompletedArchive(
  guild,
- archive
+ archive,
+ strict = false
 ){
  if (
    !Array.isArray(archive.transcriptUrls) ||
    !archive.transcriptUrls.length ||
    !Array.isArray(archive.files)
  ){
+   if (strict) throw new Error("Archive manifest is incomplete.");
    return false;
  }
 
@@ -4705,7 +4708,7 @@ async function verifyCompletedArchive(
        !message.attachments.first()
           ?.name?.endsWith(".html")
      ){
-       return false;
+       throw new Error(`Saved transcript is not an HTML attachment: ${url}`);
      }
  }
 
@@ -4714,7 +4717,7 @@ async function verifyCompletedArchive(
     !Array.isArray(file.urls) ||
     !file.urls.length
   ){
-    return false;
+    throw new Error(`No saved references for attachment ${file.name || file.id}`);
   }
 
      let size = 0;
@@ -4739,12 +4742,12 @@ async function verifyCompletedArchive(
            file.checksum &&
            marker[2] !== file.checksum
          ){
-           return false;
+           throw new Error(`Checksum marker mismatch for ${file.name || file.id}`);
          }
      }
 
      if (size !== file.size) {
-       return false;
+       throw new Error(`Saved size mismatch for ${file.name || file.id}: expected ${file.size}, found ${size}`);
      }
  }
 
@@ -4755,6 +4758,7 @@ async function verifyCompletedArchive(
      "[ARCHIVE VERIFY]",
      error.message
   );
+        if (strict) throw error;
         return false;
     }
 }
@@ -5232,7 +5236,8 @@ const archive =
 if (
   !(await verifyCompletedArchive(
      channel.guild,
-     archive
+     archive,
+     true
   ))
 ){
   throw new Error(
@@ -5992,6 +5997,8 @@ async function deleteTicket(
  let archive = null;
  let logs = null;
  let archiveVerified = false;
+ let stage = "Freeze ticket permissions";
+ console.log(`[TICKETS] Delete requested for #${state.number}`);
 
  try {
 await freezeTicket(
@@ -5999,6 +6006,7 @@ await freezeTicket(
    state
 );
 
+stage = "Save or reuse ticket archive";
 archive = null;
 
 for (
@@ -6036,12 +6044,14 @@ if (!archive) {
   );
 }
 
+stage = "Save archive metadata";
 await commitArchive(
    channel,
    entry,
    archive
 );
 
+stage = "Check private log channel permissions";
 logs =
   await textChannel(
      channel.guild,
@@ -6054,10 +6064,12 @@ logs =
      logs
   );
 
+stage = "Verify saved transcript and attachments";
 if (
   !(await verifyCompletedArchive(
      channel.guild,
-     archive
+     archive,
+     true
   ))
 ){
   throw new Error(
@@ -6065,6 +6077,7 @@ if (
   );
 }
 
+stage = "Check for new ticket messages";
 const finalMessages = (
    await allMessages(channel)
 ).filter(
@@ -6084,6 +6097,7 @@ if (
 
 // Only delete after the final archive is verified.
 
+stage = "Delete Discord channel";
 archiveVerified = true;
 try {
  await channel.delete(`Ticket deleted by ${member.id}; archive verified`);
@@ -6150,6 +6164,7 @@ await saveState(
  );
 
 } catch (error) {
+  console.error(`[TICKETS] Delete #${state.number} failed at ${stage}:`, error);
   if (!deleted && Number(error.code) === 10003) {
     // Confirm the missing channel is the ticket, not the archive.
     const missing = await channel.guild.channels.fetch(channel.id, {force:true}).then(c => !c, e => Number(e.code) === 10003);
@@ -6172,17 +6187,11 @@ await saveState(
       state
     ).catch(console.error);
 
-     await privateReply(
-      context,
-       "Deletion was postponed to protect the ticket archive. The original ticket has been retained."
-    );
-
-            await reportError(
-               channel.guild,
-               "Ticket deletion postponed",
-               error,
-               state
-            );
+     // Report immediately, independent of the interaction token or log permissions.
+     void reportError(channel.guild, `Ticket deletion postponed (${stage})`, error, state);
+     await privateReply(context,
+       `Deletion postponed; original ticket retained.\n**Failed step:** ${stage}\n**Error:** ${safe(error?.message || error, 700)}${error?.code ? ` (code ${safe(error.code, 50)})` : ""}`
+     ).catch(replyError => console.error("[DELETE REPLY]", replyError));
         }
 
     } finally {
