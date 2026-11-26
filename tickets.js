@@ -757,10 +757,8 @@ function canManage(member, state) {
 }
 
 function canDelete(member, state) {
-  return (
-     state.status === "closed" &&
-     canManage(member, state)
-  );
+  return Boolean(member && state.status === "closed" &&
+    (isMod(member) || canManage(member, state)));
 }
 
 // ============================================================
@@ -3118,7 +3116,8 @@ async function validateArchiveChannel(
 
 const allowedRoles = new Set([
   IDS.owner,
-  IDS.admin
+  IDS.admin,
+  IDS.mod
 ]);
 
 const allowedMembers = new Set([
