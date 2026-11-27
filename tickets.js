@@ -2679,12 +2679,7 @@ function panelPayload() {
             "Welcome to Chuppys!\n\n" +
 
             "Select the category you need below.\n\n" +
-
-            "**Purchase** — Purchase assistance\n" +
-            "**Cash Out** — Cashout assistance\n" +
-            "**Giveaway** — Giveaway claims\n" +
-              "**Partnership** — Partnerships\n" +
-              "**Support** — General support"
+        
           )
      ],
 
@@ -2779,10 +2774,6 @@ function closeModal(channelId) {
 function verificationWelcomeDescription(userId) {
  return (
   `Welcome <@${userId}>!\n\n` +
-
-         "**1.** State who invited you.\n" +
-         "**2.** Provide screenshot proof.\n" +
-         "**3.** Complete your server roles.\n\n" +
 
          "Once completed, ping staff for assistance.\n\n" +
 
