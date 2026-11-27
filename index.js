@@ -395,8 +395,8 @@ const ROLE_MENU_CONFIG = {
 
   pronouns: {
     customId: ROLE_MENU_IDS.pronouns,
-    title: "• pronouns // •",
-    placeholder: "♡ choose your pronouns",
+    title: "ᆞ› pronouns ꒰ ꒱",
+    placeholder: "choose your pronouns",
     roles: PRONOUN_ROLE_IDS,
 
     options: [
