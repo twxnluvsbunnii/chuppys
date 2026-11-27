@@ -2673,14 +2673,12 @@ function panelPayload() {
 
     return {
      embeds: [
-       whiteEmbed(
-        `${EMOJI} Chuppys Tickets`,
-
-            "Welcome to Chuppys!\n\n" +
-
-            "Select the category you need below.\n\n" +
-        
-          )
+       new EmbedBuilder()
+         .setColor(WHITE)
+         .setDescription(
+           "Welcome to .gg/chuppys tickets\n\n" +
+           "Select the category that best suits what you would like to do today"
+         )
      ],
 
      components: [
@@ -2772,15 +2770,7 @@ function closeModal(channelId) {
 }
 
 function verificationWelcomeDescription(userId) {
- return (
-  `Welcome <@${userId}>!\n\n` +
-
-         "Once completed, ping staff for assistance.\n\n" +
-
-         "Verification is approved manually by staff.\n\n" +
-
-         "Never share passwords, account tokens or login codes."
-    );
+  return `Welcome <@${userId}>!`;
 }
 
 // ============================================================
