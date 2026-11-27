@@ -30,6 +30,8 @@
 
 const http = require("http");
 const { createHash } = require("node:crypto");
+const path = require("node:path");
+const fs = require("node:fs");
 
 const {
   Client,
@@ -215,6 +217,8 @@ const AUTO_ROUTE_VOUCHES =
 
 const VOUCH_ORIGIN_MARKER =
   "CHUPPYS_VOUCH_ORIGIN";
+
+const NAT_CONVERTER_ID = "727673410737668107";
 
 const PERSONAL_SELLER_IDS = [
   "1530733554869473320",
@@ -662,11 +666,11 @@ const billResponseLocks = new Set();
 
 const CHUPPY_COMMAND = new SlashCommandBuilder()
   .setName("chuppy")
-  .setDescription("Chuppys purchase commands.")
+  .setDescription("Chuppys transaction commands.")
   .addSubcommand(subcommand =>
     subcommand
       .setName("bill")
-      .setDescription("Create a purchase bill for a customer to confirm.")
+      .setDescription("Create a purchase or cash-out bill for a customer to confirm.")
       .addUserOption(option =>
         option.setName("customer")
           .setDescription("Select the customer who must confirm the bill.")
@@ -681,7 +685,7 @@ const CHUPPY_COMMAND = new SlashCommandBuilder()
       )
       .addStringOption(option =>
         option.setName("items")
-          .setDescription("Items and quantities the customer is buying.")
+          .setDescription("Items and quantities for the transaction.")
           .setMaxLength(1000)
           .setRequired(true)
       )
@@ -698,6 +702,12 @@ const CHUPPY_COMMAND = new SlashCommandBuilder()
           .setDescription("Enter the customer's Roblox username.")
           .setMaxLength(20)
           .setRequired(true)
+      )
+      .addStringOption(option =>
+        option.setName("transaction")
+          .setDescription("Purchase or Cash-out (defaults to ticket type or Purchase).")
+          .setRequired(false)
+          .addChoices({ name: "Purchase", value: "purchase" }, { name: "Cash-out", value: "cashout" })
       )
   );
 
@@ -762,7 +772,80 @@ const client = new Client({
 // ============================================================
 
 require("./vouch")(client);
+// Keep the existing transaction module and its storage unchanged.
+// Adapt only its message listeners so existing history and rewards are reused.
+const transactionListenersBefore = new Set(client.listeners(Events.MessageCreate));
 require("./transactions")(client);
+const transactionListeners = client.listeners(Events.MessageCreate)
+  .filter(listener => !transactionListenersBefore.has(listener));
+const transactionAddJobs = new Set();
+if (!transactionListeners.length) {
+  console.warn("[TRANSACTIONS] No synchronous message listener found; ,add adapter unavailable.");
+} else {
+  for (const listener of transactionListeners) {
+    client.removeListener(Events.MessageCreate, listener);
+  }
+  client.on(Events.MessageCreate, async message => {
+    const raw = message.content?.trim() || "";
+    if (!message.guild || message.guild.id !== GUILD_ID || message.author.bot) {
+      for (const listener of transactionListeners) await listener.call(client, message);
+      return;
+    }
+    try {
+      if (/^,(?:addp|addc)(?:\s|$)/i.test(raw)) {
+        if (isVerificationStaff(message.member) || canManageServer(message.member)) {
+          await message.reply({ content: "Use `,add @user amount` instead.", allowedMentions: NONE });
+        }
+        return;
+      }
+      if (!/^,add(?:\s|$)/i.test(raw)) {
+        for (const listener of transactionListeners) await listener.call(client, message);
+        return;
+      }
+      if (!rememberEvent(transactionAddJobs, message.id)) return;
+      const match = raw.match(/^,add\s+<@!?(\d{17,20})>\s+\$?(\d+(?:\.\d{1,2})?)\s*(?:(purchase|cash[ -]?out))?$/i);
+      if (!match || Number(match[2]) <= 0 || !Number.isFinite(Number(match[2]))) {
+        return await message.reply({ content: "Use `,add @user amount`.", allowedMentions: NONE });
+      }
+      const type = await resolveAddTransactionType(message, match[1], match[3]);
+      if (!type) {
+        return await message.reply({ content: "I couldn't identify the transaction type. Use `,add @user amount purchase` or `,add @user amount cashout` in this channel.", allowedMentions: NONE });
+      }
+      // Give the legacy transaction handler the command it already understands.
+      // The original Discord message, user, channel, ID and permissions stay intact.
+      const legacy = new Proxy(message, {
+        get(target, key) {
+          if (key === "content") return `,${type === "cashout" ? "addc" : "addp"} <@${match[1]}> ${match[2]}`;
+          const value = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        }
+      });
+      for (const listener of transactionListeners) await listener.call(client, legacy);
+    } catch (error) {
+      console.error("[TRANSACTIONS ADD]", error);
+    }
+  });
+}
+
+async function resolveAddTransactionType(message, customerId, explicit) {
+  if (explicit) return /^cash/i.test(explicit) ? "cashout" : "purchase";
+  const name = String(message.channel.name || "");
+  if (/^cash[ _-]?out(?:[ _-]|$)/i.test(name)) return "cashout";
+  if (/^purchase(?:[ _-]|$)/i.test(name)) return "purchase";
+  // A confirmed bill for this customer can identify the type in other channels.
+  const recent = await message.channel.messages.fetch({ limit: 100 }).catch(() => null);
+  if (!recent) return null;
+  for (const entry of recent.values()) {
+    if (entry.author.id !== client.user.id) continue;
+    const bill = entry.embeds.find(embed => embed.title === "ᆞ› chuppy bill ꒰ ꒱" &&
+      embed.fields.some(field => field.name === "Customer" && field.value === `<@${customerId}>`));
+    if (!bill) continue;
+    if (!bill.fields.some(field => field.name === "Status" && field.value.startsWith("Confirmed by"))) return null;
+    const type = bill.fields.find(field => field.name === "Transaction")?.value;
+    return type === "Cash-out" ? "cashout" : "purchase";
+  }
+  return null;
+}
 
 const ticketModule = require("./tickets");
 
@@ -3637,6 +3720,9 @@ function makeVouchRecord(message) {
     forwarded:
       isForward(message),
 
+    converterId: getEmbeds(message).map(embed => embed.description || "")
+      .join("\n").match(/^\*\*converter:\*\*\s*<@!?(\d{17,20})>/im)?.[1] || null,
+
     created:
       message.createdTimestamp
   };
@@ -4038,7 +4124,7 @@ async function recountAllVouches() {
         ...personalMessages,
         ...inviteMessages,
         ...giveawayMessages,
-        ...converterMessages
+        ...converterMessages.filter(record => record.converterId !== NAT_CONVERTER_ID)
       ]);
 
     const serverTotal =
@@ -4836,7 +4922,9 @@ function makeHelpEmbed() {
           "`/help` — Command menu\n" +
           "`/question` — Ask a question\n" +
           "`/request` — Request stock\n" +
-          "`/chuppy bill` — Create a customer purchase bill (staff)\n" +
+          "`/chuppy bill` — Create a customer transaction bill (staff)\n" +
+          "`,add @user amount` — Record a completed transaction (authorized staff)\n" +
+          "`,boom` — Send the GIF\n" +
           "`/vouch` — Submit a vouch\n" +
           "`,afk [reason]` — Set AFK\n" +
           "`,pay` — Payment methods\n" +
@@ -5814,6 +5902,8 @@ async function handleChuppyBill(interaction) {
     return interaction.reply(ephemeral("Only authorized staff can create bills."));
   }
 
+  const transaction = interaction.options.getString("transaction") ||
+    (/^cash[ _-]?out(?:[ _-]|$)/i.test(interaction.channel?.name || "") ? "cashout" : "purchase");
   const customer = interaction.options.getUser("customer", true);
   const total = interaction.options.getNumber("total", true);
   const items = interaction.options.getString("items", true).trim();
@@ -5846,13 +5936,14 @@ async function handleChuppyBill(interaction) {
 
   const embed = whiteEmbed(
     "ᆞ› chuppy bill ꒰ ꒱",
-    "Please review your purchase information below.\n\n" +
+    "Please review your transaction information below.\n\n" +
     "**Is all this information correct?**\nIf so, press **Yes**. Otherwise, press **No**."
   )
     .addFields(
       { name: "Customer", value: `<@${customer.id}>` },
       { name: "Roblox Username", value: `\`${roblox}\`` },
-      { name: "Items Being Purchased", value: safeText(items, 1000) },
+      { name: "Transaction", value: transaction === "cashout" ? "Cash-out" : "Purchase" },
+      { name: "Items", value: safeText(items, 1000) },
       { name: "Total", value: price, inline: true },
       { name: "Payment Method", value: payment, inline: true },
       { name: "Status", value: "Awaiting customer confirmation" }
@@ -5915,7 +6006,7 @@ async function handleBillResponse(interaction) {
         value: confirmed ? `Confirmed by <@${customerId}>` : `Correction requested by <@${customerId}>`
       } : field))
       .setDescription(confirmed
-        ? "**All purchase information has been confirmed.**\nPayment has not been verified."
+        ? "**All transaction information has been confirmed.**\nPayment has not been verified. Staff can record the completed transaction with `,add @user amount`."
         : "**The customer says some information is incorrect.**\nPlease let staff know what needs to be changed. A new bill must be issued.");
 
     await message.edit({
@@ -6530,6 +6621,43 @@ client.on(
 // MESSAGE COMMANDS
 // ============================================================
 
+const BOOM_GIF_PATH = path.join(__dirname, "boom.gif");
+const BOOM_EMOJI = "<:zvpocong:1575966918114803904>";
+const BOOM_PING_NAMES = Object.freeze({
+  "1530733554869473320": "minitwxn",
+  "1490962480963260466": "twxn"
+});
+const boomCooldowns = new Map();
+
+async function sendBoom(message, names = []) {
+  const embed = new EmbedBuilder().setColor(WHITE);
+  if (names.length) embed.setDescription(names.map(name => `-# ${name} will be right with you ! ${BOOM_EMOJI}`).join("\n"));
+  if (fs.existsSync(BOOM_GIF_PATH)) {
+    embed.setImage("attachment://boom.gif");
+    return message.channel.send({ embeds: [embed], files: [{ attachment: BOOM_GIF_PATH, name: "boom.gif" }], allowedMentions: NONE });
+  }
+  console.warn("[BOOM] Missing boom.gif beside index.js");
+  if (names.length) return message.channel.send({ embeds: [embed], allowedMentions: NONE });
+  return message.reply({ content: "boom.gif is missing from the bot folder.", allowedMentions: NONE });
+}
+
+async function handleBoom(message, raw) {
+  if (message.guild.id !== GUILD_ID) return false;
+  const manual = /^,boom$/i.test(raw);
+  if (!manual && /^[,!/]/.test(raw)) return false;
+  const ids = Object.keys(BOOM_PING_NAMES).filter(id =>
+    id !== message.author.id && message.mentions.users.has(id) && new RegExp(`<@!?${id}>`).test(raw));
+  if (!manual && !ids.length) return false;
+  const key = `${message.channel.id}:${manual ? "manual" : "ping"}`;
+  const now = Date.now();
+  if (now - (boomCooldowns.get(key) || 0) < 10000) return manual;
+  boomCooldowns.set(key, now);
+  const timer = setTimeout(() => { if (boomCooldowns.get(key) === now) boomCooldowns.delete(key); }, 10000);
+  timer.unref?.();
+  await sendBoom(message, manual ? [] : ids.map(id => BOOM_PING_NAMES[id]));
+  return manual;
+}
+
 client.on(
   Events.MessageCreate,
 
@@ -6577,6 +6705,7 @@ client.on(
         });
 
     try {
+      if (await handleBoom(message, raw)) return;
 
       // ,welcome
 
