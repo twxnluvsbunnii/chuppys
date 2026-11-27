@@ -6629,16 +6629,29 @@ const BOOM_PING_NAMES = Object.freeze({
 });
 const boomCooldowns = new Map();
 
+// Use the deployed attachment when available; otherwise use the GitHub GIF.
+const BOOM_GIF_URL = "https://raw.githubusercontent.com/twxnluvsbunnii/chuppys/main/boom.gif";
+
 async function sendBoom(message, names = []) {
   const embed = new EmbedBuilder().setColor(WHITE);
-  if (names.length) embed.setDescription(names.map(name => `-# ${name} will be right with you ! ${BOOM_EMOJI}`).join("\n"));
+  if (names.length) {
+    embed.setDescription(names.map(name =>
+      `-# ${name} will be right with you ! ${BOOM_EMOJI}`
+    ).join("\n"));
+  }
+
   if (fs.existsSync(BOOM_GIF_PATH)) {
     embed.setImage("attachment://boom.gif");
-    return message.channel.send({ embeds: [embed], files: [{ attachment: BOOM_GIF_PATH, name: "boom.gif" }], allowedMentions: NONE });
+    return message.channel.send({
+      embeds: [embed],
+      files: [{ attachment: BOOM_GIF_PATH, name: "boom.gif" }],
+      allowedMentions: NONE
+    });
   }
-  console.warn("[BOOM] Missing boom.gif beside index.js");
-  if (names.length) return message.channel.send({ embeds: [embed], allowedMentions: NONE });
-  return message.reply({ content: "boom.gif is missing from the bot folder.", allowedMentions: NONE });
+
+  // Never send a missing-file warning to Discord.
+  embed.setImage(BOOM_GIF_URL);
+  return message.channel.send({ embeds: [embed], allowedMentions: NONE });
 }
 
 async function handleBoom(message, raw) {
