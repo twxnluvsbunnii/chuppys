@@ -198,44 +198,8 @@ const SELLERS = [
   },
 
   {
-    id: "1032693136163622993",
-    name: "﹕𐔌・cusi 〃・꒱",
-    personal: false
-  },
-
-  {
-    id: "1320199904219496530",
-    name: "﹕𐔌・dav 〃・꒱",
-    personal: false
-  },
-
-  {
-    id: "952566845939023892",
-    name: "﹕𐔌・momo 〃・꒱",
-    personal: false
-  },
-
-  {
     id: "1473335012769267807",
     name: "﹕𐔌・kitako 〃・꒱",
-    personal: false
-  },
-
-  {
-    id: "1472856287527309313",
-    name: "﹕𐔌・mira 〃・꒱",
-    personal: false
-  },
-
-  {
-    id: "1269188505935024141",
-    name: "﹕𐔌・maya 〃・꒱",
-    personal: false
-  },
-
-  {
-    id: "1328450205774909441",
-    name: "﹕𐔌・alex 〃・꒱",
     personal: false
   },
 
