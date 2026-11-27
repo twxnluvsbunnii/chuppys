@@ -4840,7 +4840,8 @@ function makeHelpEmbed() {
 
         value:
           "`,boosterperks` — Booster perks embed\n" +
-          "`,boostperks` — Booster perks embed"
+          "`,boostperks` — Booster perks embed\n" +
+          "`,testboost` — Preview boost announcement (Manage Server)"
       },
 
       {
@@ -6445,6 +6446,18 @@ client.on(
         );
       }
 
+      // Test the actual booster announcement without assigning roles.
+      if (cmd === ",testboost") {
+        if (!canManageServer(message.member)) {
+          return reply("You need Manage Server permission.");
+        }
+        if (message.guild.id !== GUILD_ID) return;
+        await sendBoostThankYou(message.guild, message.author.id);
+        await deleteCommandMessage(message);
+        console.log(`[BOOST TEST] Sent for ${message.author.id}`);
+        return;
+      }
+
       // Booster perks.
 
       if (BOOSTER_PERKS_COMMANDS.includes(cmd)) {
@@ -7209,6 +7222,23 @@ client.on(
 
 const processedBoostMessages = new Set();
 
+async function sendBoostThankYou(guild, userId) {
+  const channel = await guild.channels.fetch(BOOST_ANNOUNCEMENT_CHANNEL_ID);
+  if (!channel?.send) throw new Error("Boost announcement channel unavailable.");
+
+  const embed = whiteEmbed(
+    "Thank you for boosting .gg/chuppys!",
+    `Thank you <@${userId}> for supporting our server!\n\n` +
+    `Visit <#${BOOSTER_PERKS_CHANNEL_ID}> to see what perks you have gained!`
+  ).setThumbnail(BOOSTER_THUMBNAIL_URL);
+
+  return channel.send({
+    content: `<@${userId}>`,
+    embeds: [embed],
+    allowedMentions: { parse: [], users: [userId] }
+  });
+}
+
 client.on(Events.MessageCreate, async message => {
   if (!message.guild || message.guild.id !== GUILD_ID) return;
 
@@ -7218,21 +7248,7 @@ client.on(Events.MessageCreate, async message => {
   if (!rememberEvent(processedBoostMessages, message.id)) return;
 
   try {
-    const channel = await message.guild.channels.fetch(BOOST_ANNOUNCEMENT_CHANNEL_ID);
-    if (!channel?.send) throw new Error("Boost announcement channel unavailable.");
-
-    const embed = whiteEmbed(
-      "Thank you for boosting .gg/chuppys!",
-      `Thank you <@${message.author.id}> for supporting our server!\n\n` +
-      `Visit <#${BOOSTER_PERKS_CHANNEL_ID}> to see what perks you have gained!`
-    ).setThumbnail(BOOSTER_THUMBNAIL_URL);
-
-    await channel.send({
-      content: `<@${message.author.id}>`,
-      embeds: [embed],
-      allowedMentions: { parse: [], users: [message.author.id] }
-    });
-
+    await sendBoostThankYou(message.guild, message.author.id);
     console.log(`[BOOST] Thank-you sent for ${message.author.id}`);
   } catch (error) {
     console.error("[BOOST] Announcement failed:", error);
