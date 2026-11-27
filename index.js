@@ -351,7 +351,7 @@ const ROLE_MENU_CONFIG = {
   pings: {
     customId: ROLE_MENU_IDS.pings,
     title: "ᆞ› pings ꒰ ꒱",
-    placeholder: "choose your roles",
+    placeholder: "please choose your roles",
     roles: PING_ROLE_IDS,
 
     options: [
@@ -378,7 +378,7 @@ const ROLE_MENU_CONFIG = {
   age: {
     customId: ROLE_MENU_IDS.age,
     title: "ᆞ› age ꒰ ꒱",
-    placeholder: "choose your roles",
+    placeholder: "please choose your roles",
     roles: AGE_ROLE_IDS,
 
     options: [
@@ -396,7 +396,7 @@ const ROLE_MENU_CONFIG = {
   pronouns: {
     customId: ROLE_MENU_IDS.pronouns,
     title: "ᆞ› pronouns ꒰ ꒱",
-    placeholder: "choose your pronouns",
+    placeholder: "please choose your pronouns",
     roles: PRONOUN_ROLE_IDS,
 
     options: [
@@ -414,7 +414,7 @@ const ROLE_MENU_CONFIG = {
   zone: {
     customId: ROLE_MENU_IDS.zone,
     title: "ᆞ› time zones ꒰ ꒱",
-    placeholder: "choose your time zone",
+    placeholder: "please choose your time zone",
     roles: TIMEZONE_ROLE_IDS,
     maxValues: 1,
 
