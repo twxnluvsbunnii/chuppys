@@ -652,6 +652,55 @@ const REQUEST_COMMAND = new SlashCommandBuilder()
       .setMaxLength(1000)
   );
 
+// ============================================================
+// CHUPPY BILL COMMAND
+// ============================================================
+
+const BILL_EMOJI_ID = "1559954991429587024";
+const BILL_BUTTON_PREFIX = "chuppys_bill:";
+const billResponseLocks = new Set();
+
+const CHUPPY_COMMAND = new SlashCommandBuilder()
+  .setName("chuppy")
+  .setDescription("Chuppys purchase commands.")
+  .addSubcommand(subcommand =>
+    subcommand
+      .setName("bill")
+      .setDescription("Create a purchase bill for a customer to confirm.")
+      .addUserOption(option =>
+        option.setName("customer")
+          .setDescription("Select the customer who must confirm the bill.")
+          .setRequired(true)
+      )
+      .addNumberOption(option =>
+        option.setName("total")
+          .setDescription("Total price in USD, for example 25.50.")
+          .setMinValue(0.01)
+          .setMaxValue(1000000)
+          .setRequired(true)
+      )
+      .addStringOption(option =>
+        option.setName("items")
+          .setDescription("Items and quantities the customer is buying.")
+          .setMaxLength(1000)
+          .setRequired(true)
+      )
+      .addStringOption(option =>
+        option.setName("payment")
+          .setDescription("Choose the payment method.")
+          .setRequired(true)
+          .addChoices(...[
+            "Apple Pay", "Venmo", "Cash App", "Chime", "PayPal", "Zelle"
+          ].map(name => ({ name, value: name })))
+      )
+      .addStringOption(option =>
+        option.setName("roblox")
+          .setDescription("Enter the customer's Roblox username.")
+          .setMaxLength(20)
+          .setRequired(true)
+      )
+  );
+
 const HELP_COMMAND = new SlashCommandBuilder()
   .setName("help")
   .setDescription("View Chuppys bot commands.");
@@ -2814,6 +2863,7 @@ async function registerQuestionCommand() {
       QUESTION_COMMAND,
       REQUEST_COMMAND,
       HELP_COMMAND,
+      CHUPPY_COMMAND,
       ticketModule.command
     ];
 
@@ -4786,6 +4836,7 @@ function makeHelpEmbed() {
           "`/help` — Command menu\n" +
           "`/question` — Ask a question\n" +
           "`/request` — Request stock\n" +
+          "`/chuppy bill` — Create a customer purchase bill (staff)\n" +
           "`/vouch` — Submit a vouch\n" +
           "`,afk [reason]` — Set AFK\n" +
           "`,pay` — Payment methods\n" +
@@ -5737,6 +5788,159 @@ client.once(
 );
 
 // ============================================================
+// PURCHASE BILL EMBEDS AND CUSTOMER CONFIRMATION
+// ============================================================
+
+function makeBillButtons(customerId, disabled = false) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`${BILL_BUTTON_PREFIX}yes:${customerId}`)
+      .setLabel("Yes")
+      .setEmoji({ id: BILL_EMOJI_ID })
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(disabled),
+    new ButtonBuilder()
+      .setCustomId(`${BILL_BUTTON_PREFIX}no:${customerId}`)
+      .setLabel("No")
+      .setEmoji({ id: BILL_EMOJI_ID })
+      .setStyle(ButtonStyle.Danger)
+      .setDisabled(disabled)
+  );
+}
+
+async function handleChuppyBill(interaction) {
+  if (!interaction.inGuild() || interaction.guildId !== GUILD_ID) {
+    return interaction.reply(ephemeral("This command only works in Chuppys."));
+  }
+
+  if (!isVerificationStaff(interaction.member) &&
+      !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+    return interaction.reply(ephemeral("Only authorized staff can create bills."));
+  }
+
+  const customer = interaction.options.getUser("customer", true);
+  const total = interaction.options.getNumber("total", true);
+  const items = interaction.options.getString("items", true).trim();
+  const payment = interaction.options.getString("payment", true);
+  const roblox = interaction.options.getString("roblox", true).trim();
+
+  if (customer.bot || customer.id === interaction.user.id) {
+    return interaction.reply(ephemeral("Select a real customer other than yourself."));
+  }
+
+  if (!items || !/^[A-Za-z0-9_]{1,20}$/.test(roblox)) {
+    return interaction.reply(ephemeral("Enter the items and a valid Roblox username."));
+  }
+
+  if (!Number.isFinite(total) || total < 0.01 || total > 1000000 ||
+      Math.abs(total * 100 - Math.round(total * 100)) > 0.000001) {
+    return interaction.reply(ephemeral("Enter a positive USD total with no more than two decimal places."));
+  }
+
+  await interaction.deferReply({ flags: EPHEMERAL });
+
+  const member = await interaction.guild.members.fetch(customer.id).catch(() => null);
+  if (!member || !interaction.channel?.permissionsFor(member)?.has(PermissionFlagsBits.ViewChannel)) {
+    return interaction.editReply("The selected customer must be able to see this channel.");
+  }
+
+  const price = new Intl.NumberFormat("en-US", {
+    style: "currency", currency: "USD"
+  }).format(total);
+
+  const embed = whiteEmbed(
+    "ᆞ› chuppy bill ꒰ ꒱",
+    "Please review your purchase information below.\n\n" +
+    "**Is all this information correct?**\nIf so, press **Yes**. Otherwise, press **No**."
+  )
+    .addFields(
+      { name: "Customer", value: `<@${customer.id}>` },
+      { name: "Roblox Username", value: `\`${roblox}\`` },
+      { name: "Items Being Purchased", value: safeText(items, 1000) },
+      { name: "Total", value: price, inline: true },
+      { name: "Payment Method", value: payment, inline: true },
+      { name: "Status", value: "Awaiting customer confirmation" }
+    )
+    .setThumbnail(`https://cdn.discordapp.com/emojis/${BILL_EMOJI_ID}.png?size=128&quality=lossless`)
+    .setTimestamp();
+
+  await interaction.channel.send({
+    content: `<@${customer.id}>`,
+    embeds: [embed],
+    components: [makeBillButtons(customer.id)],
+    allowedMentions: { parse: [], users: [customer.id], repliedUser: false }
+  });
+
+  return interaction.editReply("Your bill was sent to the customer.");
+}
+
+async function handleBillResponse(interaction) {
+  const match = interaction.customId.match(/^chuppys_bill:(yes|no):(\d{17,20})$/);
+
+  if (!match || !interaction.inGuild() || interaction.guildId !== GUILD_ID ||
+      interaction.message.author.id !== client.user.id) {
+    return interaction.reply(ephemeral("Invalid bill."));
+  }
+
+  const [, answer, customerId] = match;
+
+  if (interaction.user.id !== customerId) {
+    return interaction.reply(ephemeral("Only the selected customer can answer this bill."));
+  }
+
+  const key = interaction.message.id;
+  if (!lock(billResponseLocks, key)) {
+    return interaction.reply(ephemeral("This bill is already being processed."));
+  }
+
+  try {
+    await interaction.deferUpdate();
+
+    // Fetch the current message so completed bills remain locked after a restart.
+    const message = await interaction.channel.messages.fetch({
+      message: key, force: true, cache: false
+    });
+    const original = message.embeds[0];
+    const pending = original?.fields?.some(field =>
+      field.name === "Status" && field.value === "Awaiting customer confirmation"
+    );
+    const activeButton = message.components.some(row => row.components.some(component =>
+      component.customId === interaction.customId && !component.disabled
+    ));
+
+    if (!pending || !activeButton) {
+      return interaction.followUp(ephemeral("This bill has already been answered."));
+    }
+
+    const confirmed = answer === "yes";
+    const embed = new EmbedBuilder(original.toJSON())
+      .setFields(original.fields.map(field => field.name === "Status" ? {
+        name: "Status",
+        value: confirmed ? `Confirmed by <@${customerId}>` : `Correction requested by <@${customerId}>`
+      } : field))
+      .setDescription(confirmed
+        ? "**All purchase information has been confirmed.**\nPayment has not been verified."
+        : "**The customer says some information is incorrect.**\nPlease let staff know what needs to be changed. A new bill must be issued.");
+
+    await message.edit({
+      embeds: [embed],
+      components: [makeBillButtons(customerId, true)],
+      allowedMentions: NONE
+    });
+
+  } catch (error) {
+    console.error("[BILL RESPONSE]", error);
+    if (interaction.deferred || interaction.replied) {
+      await interaction.followUp(ephemeral("Could not update the bill. Please contact staff or try again.")).catch(console.error);
+    } else {
+      await interaction.reply(ephemeral("Could not update the bill. Please try again.")).catch(console.error);
+    }
+  } finally {
+    billResponseLocks.delete(key);
+  }
+}
+
+// ============================================================
 // INTERACTION HANDLER
 // ============================================================
 
@@ -5814,6 +6018,17 @@ client.on(
     }
 
     try {
+
+      // Purchase bill command and buttons.
+      if (interaction.isChatInputCommand() && interaction.commandName === "chuppy") {
+        if (interaction.options.getSubcommand() === "bill") {
+          return await handleChuppyBill(interaction);
+        }
+      }
+
+      if (interaction.isButton() && interaction.customId.startsWith(BILL_BUTTON_PREFIX)) {
+        return await handleBillResponse(interaction);
+      }
 
       // Old automatic verification button.
 
