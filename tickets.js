@@ -2682,6 +2682,7 @@ function panelPayload() {
          .setThumbnail(
            "https://cdn.discordapp.com/emojis/1561103471325745242.png"
          )
+         .setFooter({ text: ".gg/chuppys tickets" })
      ],
 
      components: [
