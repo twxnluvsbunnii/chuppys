@@ -385,45 +385,45 @@ const ROLE_MENU_IDS = {
 const ROLE_MENU_CONFIG = {
   pings: {
     customId: ROLE_MENU_IDS.pings,
-    title: "• pings // •",
-    placeholder: "♡ choose your roles",
+    title: "ᆞ› pings ꒰ ꒱",
+    placeholder: "choose your roles",
     roles: PING_ROLE_IDS,
 
     options: [
-      ["Welcome Ping", PING_ROLES.welcome],
-      ["Announcement Ping", PING_ROLES.announcement],
-      ["Services Ping", PING_ROLES.streaming],
-      ["Giveaway Ping", PING_ROLES.giveaway],
-      ["Stock Ping", PING_ROLES.stock],
-      ["Cash Out", PING_ROLES.cashout],
-      ["Flash Sale Ping", PING_ROLES.flashsale],
-      ["Partnership Ping", PING_ROLES.partnership],
-      ["Adopt Me Ping", PING_ROLES.adoptme],
-      ["Robux Ping", PING_ROLES.robux],
-      ["MM2 Ping", PING_ROLES.mm2]
+      ["ᆞ› welc ping ꒰ ꒱", PING_ROLES.welcome],
+      ["ᆞ› annc ping ꒰ ꒱", PING_ROLES.announcement],
+      ["ᆞ› services ping ꒰ ꒱", PING_ROLES.streaming],
+      ["ᆞ› giveaway ping ꒰ ꒱", PING_ROLES.giveaway],
+      ["ᆞ› baddies ping ꒰ ꒱", PING_ROLES.stock],
+      ["ᆞ› cashout ping ꒰ ꒱", PING_ROLES.cashout],
+      ["ᆞ› flash sale ping ꒰ ꒱", PING_ROLES.flashsale],
+      ["ᆞ› partnership ping ꒰ ꒱", PING_ROLES.partnership],
+      ["ᆞ› adopt me ping ꒰ ꒱", PING_ROLES.adoptme],
+      ["ᆞ› robux ping ꒰ ꒱", PING_ROLES.robux],
+      ["ᆞ› mm2 ping ꒰ ꒱", PING_ROLES.mm2]
     ],
 
     thumbnail:
       "https://cdn.discordapp.com/emojis/1561034658311966761.png?size=128&quality=lossless",
 
     success:
-      "﹕𐔌・your roles have been updated〃・꒱ 🤍"
+      "ᆞ› your ping roles have been updated ꒰ ꒱"
   },
 
   age: {
     customId: ROLE_MENU_IDS.age,
-    title: "• age // •",
-    placeholder: "♡ choose your roles",
+    title: "ᆞ› age ꒰ ꒱",
+    placeholder: "choose your roles",
     roles: AGE_ROLE_IDS,
 
     options: [
-      ["﹕𐔌・- 18 〃・꒱", AGE_ROLES.under18],
-      ["﹕𐔌・18 - 20 〃・꒱", AGE_ROLES.age18to20],
-      ["﹕𐔌・21 + 〃・꒱", AGE_ROLES.age21plus]
+      ["ᆞ› - 18 ꒰ ꒱", AGE_ROLES.under18],
+      ["ᆞ› 18 - 20 ꒰ ꒱", AGE_ROLES.age18to20],
+      ["ᆞ› 21 + ꒰ ꒱", AGE_ROLES.age21plus]
     ],
 
     success:
-      "﹕𐔌・your age roles have been updated〃・꒱ 🤍"
+      "ᆞ› your age role have been updated ꒰ ꒱"
   },
 
   pronouns: {
@@ -433,13 +433,13 @@ const ROLE_MENU_CONFIG = {
     roles: PRONOUN_ROLE_IDS,
 
     options: [
-      ["﹕𐔌・she / her〃・꒱", PRONOUN_ROLES.sheher],
-      ["﹕𐔌・he / him〃・꒱", PRONOUN_ROLES.hehim],
-      ["﹕𐔌・they / them〃・꒱", PRONOUN_ROLES.theythem]
+      ["ᆞ› she her ꒰ ꒱", PRONOUN_ROLES.sheher],
+      ["ᆞ› he him ꒰ ꒱", PRONOUN_ROLES.hehim],
+      ["ᆞ› they them ꒰ ꒱", PRONOUN_ROLES.theythem]
     ],
 
     success:
-      "﹕𐔌・your pronouns have been updated〃・꒱ 🤍"
+      "ᆞ› your pronoun role has been updated ꒰ ꒱"
   }
 };
 
