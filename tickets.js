@@ -2677,7 +2677,8 @@ function panelPayload() {
          .setColor(WHITE)
          .setDescription(
            "Welcome to .gg/chuppys tickets\n\n" +
-           "Select the category that best suits what you would like to do today"
+           "Select the category that best suits what you would like to do today\n\n" +
+           ".gg/chuppys tickets"
          )
          .setThumbnail(
            "https://cdn.discordapp.com/emojis/1561103471325745242.png"
@@ -8152,3 +8153,4 @@ module.exports.openVerificationTicket =
 // ============================================================
 // END OF CHUPPYS TICKETS.JS
 // ============================================================
+ 
