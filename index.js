@@ -1,4 +1,3 @@
-
 "use strict";
 
 // ============================================================
@@ -12,32 +11,15 @@
 // - tickets.js
 // - tiktok.js
 //
-// TIKTOK:
-// - Automatic live detection
-// - minitwxn
-// - twxn (@a04120326)
-// - Automatic live announcement embeds
-// - Separate TikTok error handling
-// - No additional Discord client
-//
-// EXISTING SYSTEMS:
-// - Manual verification
-// - Fast ,welcome command
-// - Vouches and automatic counters
-// - Transactions
-// - Tickets
-// - Blacklist and appeals
-// - Self roles
-// - Payment methods
-// - Questions and requests
-// - Service commands
-// - AFK
-// - Welcome and goodbye
+// NEW:
+// - Scammer Ping added to ,roles and ,pings
+// - ,zone / ,timezone
+// - EST, CST, MST, PST self roles
+// - Mochaa thumbnails on all four role panels
+// - ,boosterperks / ,boostperks
 //
 // Run only one instance on Render.
 //
-// ============================================================
-// IMPORTS
 // ============================================================
 
 const http = require("http");
@@ -110,88 +92,54 @@ const BOOSTIES_CHANNEL_ID = "1555769708928831489";
 const SELLERS_CHANNEL_ID = "1551713598181605496";
 const STAFF_CHANNEL_ID = "1561013244905132122";
 
-const ROBUX_CASHOUT_CHANNEL_ID =
-  "1552385740405473513";
+const ROBUX_CASHOUT_CHANNEL_ID = "1552385740405473513";
 
 const ROBUX_CASHOUT_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1561094713153429746.png";
 
-const REQUEST_CHANNEL_ID =
-  "1569732416388726834";
+const REQUEST_CHANNEL_ID = "1569732416388726834";
 
 const REQUEST_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1561388594625511514.png?size=128&quality=lossless";
 
-const VERIFY_CHANNEL_ID =
-  "1528716328985301052";
+const VERIFY_CHANNEL_ID = "1528716328985301052";
+const ROLES_CHANNEL_ID = "1530808091380285592";
 
-const ROLES_CHANNEL_ID =
-  "1530808091380285592";
-
-const RANKED_ROLES_CHANNEL_ID =
-  "1567178497917718568";
+const RANKED_ROLES_CHANNEL_ID = "1567178497917718568";
 
 const RANKED_ROLES_THUMBNAIL_URL =
   "https://cdn.discordapp.com/emojis/1568404337154068618.png?size=128&quality=lossless";
 
-const QUESTION_CHANNEL_ID =
-  "1566490648549527602";
+const QUESTION_CHANNEL_ID = "1566490648549527602";
+const QUESTION_TICKET_CHANNEL_ID = "1530811385678790716";
 
-const QUESTION_TICKET_CHANNEL_ID =
-  "1530811385678790716";
+const TICKET_SUPPORT_ROLE_ID = "1563003884656398406";
 
-const TICKET_SUPPORT_ROLE_ID =
-  "1563003884656398406";
+const RULES_CHANNEL_ID = "1551275482857865336";
+const QUICK_VOUCH_CHANNEL_ID = "1552903786077360269";
+const PARTNER_AD_CHANNEL_ID = "1552387259276329110";
 
-const RULES_CHANNEL_ID =
-  "1551275482857865336";
-
-const QUICK_VOUCH_CHANNEL_ID =
-  "1552903786077360269";
-
-const PARTNER_AD_CHANNEL_ID =
-  "1552387259276329110";
-
-const INVITE_CHANNEL_ID =
-  "1560249120667734016";
-
-const INVITE_BOT_ID =
-  "499595256270946326";
+const INVITE_CHANNEL_ID = "1560249120667734016";
+const INVITE_BOT_ID = "499595256270946326";
 
 // ============================================================
 // VOUCH TUTORIAL CHANNELS
 // ============================================================
 
-const VOUCH_TUTORIAL_CHANNEL_ID =
-  "1562958688896028802";
-
-const INVITE_VOUCH_TUTORIAL_CHANNEL_ID =
-  "1572990426351407287";
-
-const GIVEAWAY_VOUCH_TUTORIAL_CHANNEL_ID =
-  "1572990469506596934";
-
-const CONVERTER_VOUCH_TUTORIAL_CHANNEL_ID =
-  "1573509380366925844";
+const VOUCH_TUTORIAL_CHANNEL_ID = "1562958688896028802";
+const INVITE_VOUCH_TUTORIAL_CHANNEL_ID = "1572990426351407287";
+const GIVEAWAY_VOUCH_TUTORIAL_CHANNEL_ID = "1572990469506596934";
+const CONVERTER_VOUCH_TUTORIAL_CHANNEL_ID = "1573509380366925844";
 
 // ============================================================
 // VOUCH SOURCE CHANNELS
 // ============================================================
 
-const PERSONAL_VOUCH_CHANNEL_ID =
-  "1562227276051910676";
-
-const VOUCH_CHANNEL_ID =
-  "1530811494168657980";
-
-const GIVEAWAY_VOUCH_CHANNEL_ID =
-  "1572974320781885450";
-
-const INVITE_VOUCH_CHANNEL_ID =
-  "1572972324930724041";
-
-const CONVERTER_VOUCH_CHANNEL_ID =
-  "1573189115162402857";
+const PERSONAL_VOUCH_CHANNEL_ID = "1562227276051910676";
+const VOUCH_CHANNEL_ID = "1530811494168657980";
+const GIVEAWAY_VOUCH_CHANNEL_ID = "1572974320781885450";
+const INVITE_VOUCH_CHANNEL_ID = "1572972324930724041";
+const CONVERTER_VOUCH_CHANNEL_ID = "1573189115162402857";
 
 const VOUCH_SOURCE_CHANNEL_IDS = [
   PERSONAL_VOUCH_CHANNEL_ID,
@@ -205,14 +153,9 @@ const VOUCH_SOURCE_CHANNEL_IDS = [
 // VOUCH COUNTERS
 // ============================================================
 
-const COUNT_CATEGORY_ID =
-  "1566512371521036329";
-
-const CHUPPY_COUNT_CHANNEL_ID =
-  "1553242286412922960";
-
-const SERVER_COUNT_CHANNEL_ID =
-  "1562266346891247688";
+const COUNT_CATEGORY_ID = "1566512371521036329";
+const CHUPPY_COUNT_CHANNEL_ID = "1553242286412922960";
+const SERVER_COUNT_CHANNEL_ID = "1562266346891247688";
 
 const INVITE_COUNT_CHANNEL_ID =
   process.env.INVITE_COUNT_CHANNEL_ID || "";
@@ -253,14 +196,9 @@ const PERSONAL_SELLER_IDS = [
 // STAFF ROLES
 // ============================================================
 
-const OWNER_ROLE_ID =
-  "1530988662970650865";
-
-const ADMIN_ROLE_ID =
-  "1531800870444994641";
-
-const MOD_ROLE_ID =
-  "1531800784700706887";
+const OWNER_ROLE_ID = "1530988662970650865";
+const ADMIN_ROLE_ID = "1531800870444994641";
+const MOD_ROLE_ID = "1531800784700706887";
 
 const VERIFICATION_STAFF_ROLE_IDS = [
   OWNER_ROLE_ID,
@@ -309,29 +247,35 @@ const VERIFY_THUMBNAIL_URL =
 const VERIFY_BUTTON_EMOJI_ID =
   "1561103471325745242";
 
-const CHUPPYS_ROLE_ID =
-  "1550230619127021568";
+const CHUPPYS_ROLE_ID = "1550230619127021568";
+const CLIENT_ROLE_ID = "1550373434301878282";
 
-const CLIENT_ROLE_ID =
-  "1550373434301878282";
-
-const CLIENT_BUTTON_ID =
-  "chuppys_client";
-
-const CLIENT_EMOJI_ID =
-  "1569091548468219985";
+const CLIENT_BUTTON_ID = "chuppys_client";
+const CLIENT_EMOJI_ID = "1569091548468219985";
 
 const CLIENT_EMOJI =
   "<:unis:1569091548468219985>";
 
-const WELCOME_ROLE_ID =
-  "1531039846871728248";
+const WELCOME_ROLE_ID = "1531039846871728248";
 
 const VERIFICATION_TICKET_CATEGORY_ID =
   process.env.VERIFICATION_TICKET_CATEGORY_ID || "";
 
 const VERIFICATION_WELCOME_TITLE =
   "Welcome to Chuppy's";
+
+// ============================================================
+// MOCHAA EMOJI
+// ============================================================
+
+const MOCHAA_EMOJI =
+  "<:mochaa:1569091548468219985>";
+
+const MOCHAA_EMOJI_ID =
+  "1569091548468219985";
+
+const MOCHAA_THUMBNAIL_URL =
+  "https://cdn.discordapp.com/emojis/1569091548468219985.png?size=128&quality=lossless";
 
 // ============================================================
 // PING ROLES
@@ -348,11 +292,15 @@ const PING_ROLES = Object.freeze({
   partnership: "1568240267344093254",
   adoptme: "1568240367076122634",
   robux: "1568283533879939123",
-  mm2: "1568240484206514248"
+  mm2: "1568240484206514248",
+  scammer: "1569731217799127210"
 });
 
-const PING_ROLE_IDS =
-  Object.values(PING_ROLES);
+const PING_ROLE_IDS = Object.values(PING_ROLES);
+
+// ============================================================
+// AGE ROLES
+// ============================================================
 
 const AGE_ROLES = Object.freeze({
   under18: "1531084465126772877",
@@ -360,8 +308,11 @@ const AGE_ROLES = Object.freeze({
   age21plus: "1531084611399188640"
 });
 
-const AGE_ROLE_IDS =
-  Object.values(AGE_ROLES);
+const AGE_ROLE_IDS = Object.values(AGE_ROLES);
+
+// ============================================================
+// PRONOUN ROLES
+// ============================================================
 
 const PRONOUN_ROLES = Object.freeze({
   sheher: "1531084942241697854",
@@ -369,8 +320,21 @@ const PRONOUN_ROLES = Object.freeze({
   theythem: "1531101006451048448"
 });
 
-const PRONOUN_ROLE_IDS =
-  Object.values(PRONOUN_ROLES);
+const PRONOUN_ROLE_IDS = Object.values(PRONOUN_ROLES);
+
+// ============================================================
+// TIME ZONE ROLES
+// ============================================================
+
+const TIMEZONE_ROLES = Object.freeze({
+  est: "1575765543879839826",
+  cst: "1575842944370610176",
+  mst: "1575843011890258050",
+  pst: "1575843076289732618"
+});
+
+const TIMEZONE_ROLE_IDS =
+  Object.values(TIMEZONE_ROLES);
 
 // ============================================================
 // SELF ROLE MENUS
@@ -379,7 +343,8 @@ const PRONOUN_ROLE_IDS =
 const ROLE_MENU_IDS = {
   pings: "chuppys_self_roles",
   age: "chuppys_second_roles",
-  pronouns: "chuppys_pronoun_roles"
+  pronouns: "chuppys_pronoun_roles",
+  zone: "chuppys_timezone_roles"
 };
 
 const ROLE_MENU_CONFIG = {
@@ -400,11 +365,11 @@ const ROLE_MENU_CONFIG = {
       ["ᆞ› partnership ping ꒰ ꒱", PING_ROLES.partnership],
       ["ᆞ› adopt me ping ꒰ ꒱", PING_ROLES.adoptme],
       ["ᆞ› robux ping ꒰ ꒱", PING_ROLES.robux],
-      ["ᆞ› mm2 ping ꒰ ꒱", PING_ROLES.mm2]
+      ["ᆞ› mm2 ping ꒰ ꒱", PING_ROLES.mm2],
+      ["ᆞ› scammer ping ꒰ ꒱", PING_ROLES.scammer]
     ],
 
-    thumbnail:
-      "https://cdn.discordapp.com/emojis/1561034658311966761.png?size=128&quality=lossless",
+    thumbnail: MOCHAA_THUMBNAIL_URL,
 
     success:
       "ᆞ› your ping roles have been updated ꒰ ꒱"
@@ -422,8 +387,10 @@ const ROLE_MENU_CONFIG = {
       ["ᆞ› 21 + ꒰ ꒱", AGE_ROLES.age21plus]
     ],
 
+    thumbnail: MOCHAA_THUMBNAIL_URL,
+
     success:
-      "ᆞ› your age role have been updated ꒰ ꒱"
+      "ᆞ› your age role has been updated ꒰ ꒱"
   },
 
   pronouns: {
@@ -438,8 +405,30 @@ const ROLE_MENU_CONFIG = {
       ["ᆞ› they them ꒰ ꒱", PRONOUN_ROLES.theythem]
     ],
 
+    thumbnail: MOCHAA_THUMBNAIL_URL,
+
     success:
-      "ᆞ› your pronoun role has been updated ꒰ ꒱"
+      "ᆞ› your pronoun roles have been updated ꒰ ꒱"
+  },
+
+  zone: {
+    customId: ROLE_MENU_IDS.zone,
+    title: "ᆞ› time zones ꒰ ꒱",
+    placeholder: "choose your time zone",
+    roles: TIMEZONE_ROLE_IDS,
+    maxValues: 1,
+
+    options: [
+      ["ᆞ› est ꒰ ꒱", TIMEZONE_ROLES.est],
+      ["ᆞ› cst ꒰ ꒱", TIMEZONE_ROLES.cst],
+      ["ᆞ› mst ꒰ ꒱", TIMEZONE_ROLES.mst],
+      ["ᆞ› pst ꒰ ꒱", TIMEZONE_ROLES.pst]
+    ],
+
+    thumbnail: MOCHAA_THUMBNAIL_URL,
+
+    success:
+      "ᆞ› your time zone role has been updated ꒰ ꒱"
   }
 };
 
@@ -448,8 +437,39 @@ const ROLE_COMMANDS = {
   ",pings": "pings",
   ",age": "age",
   ",pronouns": "pronouns",
-  ",pronoun": "pronouns"
+  ",pronoun": "pronouns",
+  ",zone": "zone",
+  ",timezone": "zone",
+  ",timezones": "zone"
 };
+
+// ============================================================
+// BOOSTER PERKS
+// ============================================================
+
+const BOOSTER_PERKS_TITLE =
+  "ᆞ› booster perks ꒰ ꒱";
+
+const BOOSTER_PERKS_COMMANDS = [
+  ",boosterperks",
+  ",boostperks",
+  ",booster",
+  "!boosterperks",
+  "!boostperks"
+];
+
+const BOOSTER_PERKS_TEXT =
+  "Thank you for boosting **.gg/chuppys**! ♡\n\n" +
+
+  `${MOCHAA_EMOJI} Picture permissions\n\n` +
+  `${MOCHAA_EMOJI} Exclusive discounts\n\n` +
+  `${MOCHAA_EMOJI} Booster color role\n\n` +
+  `${MOCHAA_EMOJI} Booster role icon\n\n` +
+  `${MOCHAA_EMOJI} Nickname permissions\n\n` +
+
+  `Open a ticket in <#${QUESTION_TICKET_CHANNEL_ID}> to claim your perks!\n\n` +
+
+  "-# Perks are available while actively boosting.";
 
 // ============================================================
 // RANKED ROLES
@@ -603,11 +623,11 @@ const locks = {
   appeal: new Set(),
   vouchRoute: new Set(),
   vouchTutorial: new Set(),
-  verifyApprove: new Set()
+  verifyApprove: new Set(),
+  boosterPerks: new Set()
 };
 
 const welcomeMessageIds = new Map();
-
 const blacklistRoleJobs = new Map();
 
 let vouchCounterTimer = null;
@@ -633,15 +653,11 @@ const client = new Client({
 });
 
 // ============================================================
-// LOAD VOUCH AND TRANSACTION MODULES
+// LOAD MODULES
 // ============================================================
 
 require("./vouch")(client);
 require("./transactions")(client);
-
-// ============================================================
-// LOAD TICKET MODULE
-// ============================================================
 
 const ticketModule = require("./tickets");
 
@@ -662,25 +678,6 @@ console.log(
 
 // ============================================================
 // LOAD TIKTOK MODULE
-// ============================================================
-//
-// tiktok.js owns all TikTok live detection.
-//
-// Accounts:
-// - @minitwxn
-// - @a04120326 (twxn)
-//
-// Announcement channel:
-// 1574946167274348544
-//
-// Thumbnail:
-// <:zymochasing:1575025948993003590>
-//
-// The same Discord client is passed to tiktok.js.
-//
-// TikTok registers its own ClientReady listener.
-// Do not initialize it a second time inside READY.
-//
 // ============================================================
 
 try {
@@ -784,7 +781,6 @@ function lock(set, key) {
   }
 
   set.add(key);
-
   return true;
 }
 
@@ -920,12 +916,8 @@ async function upsertBotMessage(
 function makeVerificationWelcomeEmbed() {
   return new EmbedBuilder()
     .setColor(WHITE)
-    .setTitle(
-      VERIFICATION_WELCOME_TITLE
-    )
-    .setThumbnail(
-      VERIFY_THUMBNAIL_URL
-    )
+    .setTitle(VERIFICATION_WELCOME_TITLE)
+    .setThumbnail(VERIFY_THUMBNAIL_URL)
     .setDescription(
       "Welcome to **.gg/chuppys**!\n\n" +
 
@@ -985,11 +977,6 @@ async function handleWelcomeCommand(message) {
           previousMessage.author.id === client.user.id
         ) {
           await previousMessage.edit(payload);
-
-          console.log(
-            `[WELCOME] Updated embed in ${channelId}`
-          );
-
           return;
         }
 
@@ -1003,9 +990,7 @@ async function handleWelcomeCommand(message) {
       welcomeMessageIds.delete(channelId);
     }
 
-    const sent = await message.channel.send(
-      payload
-    );
+    const sent = await message.channel.send(payload);
 
     welcomeMessageIds.set(
       channelId,
@@ -1111,9 +1096,7 @@ async function isBlacklisted(member) {
     return false;
   }
 
-  const role = await findBlacklistRole(
-    member.guild
-  );
+  const role = await findBlacklistRole(member.guild);
 
   return Boolean(
     role &&
@@ -1156,11 +1139,7 @@ function canModerateTarget(actor, target) {
 // BLACKLIST EMBEDS
 // ============================================================
 
-function makeBlacklistEmbed(
-  target,
-  moderator,
-  reason
-) {
+function makeBlacklistEmbed(target, moderator, reason) {
   return whiteEmbed(
     "Member Blacklisted",
 
@@ -1197,9 +1176,7 @@ function makeBlacklistDMEmbed(guild, reason) {
 
     "An appeal does not guarantee removal."
   )
-    .setThumbnail(
-      UNBLACKLIST_THUMBNAIL_URL
-    )
+    .setThumbnail(UNBLACKLIST_THUMBNAIL_URL)
     .setTimestamp();
 }
 
@@ -1223,21 +1200,15 @@ function makeUnblacklistPanelEmbed() {
     "**Important**\n" +
     "Submitting an appeal does not guarantee approval. " +
     "Do not spam duplicate appeals."
-  ).setThumbnail(
-    UNBLACKLIST_THUMBNAIL_URL
-  );
+  ).setThumbnail(UNBLACKLIST_THUMBNAIL_URL);
 }
 
 function makeUnblacklistPanelButtons() {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId(
-          UNBLACKLIST_BUTTON_ID
-        )
-        .setLabel(
-          "Request Unblacklist Ticket"
-        )
+        .setCustomId(UNBLACKLIST_BUTTON_ID)
+        .setLabel("Request Unblacklist Ticket")
         .setEmoji({
           id: VERIFY_BUTTON_EMOJI_ID
         })
@@ -1263,8 +1234,7 @@ async function postUnblacklistPanel(channel) {
         row =>
           row.components.some(
             component =>
-              component.customId ===
-              UNBLACKLIST_BUTTON_ID
+              component.customId === UNBLACKLIST_BUTTON_ID
           )
       ),
 
@@ -1273,8 +1243,7 @@ async function postUnblacklistPanel(channel) {
       embeds: [
         makeUnblacklistPanelEmbed()
       ],
-      components:
-        makeUnblacklistPanelButtons(),
+      components: makeUnblacklistPanelButtons(),
       allowedMentions: NONE
     },
 
@@ -1289,19 +1258,15 @@ async function handleUnblacklistPanelCommand(message) {
     );
   }
 
-  if (!lock(
-    locks.appeal,
-    message.channel.id
-  )) {
+  if (!lock(locks.appeal, message.channel.id)) {
     return message.reply(
       "The appeal panel is already being updated."
     );
   }
 
   try {
-    const result = await postUnblacklistPanel(
-      message.channel
-    );
+    const result =
+      await postUnblacklistPanel(message.channel);
 
     await message.reply({
       content:
@@ -1314,9 +1279,7 @@ async function handleUnblacklistPanelCommand(message) {
     });
 
   } finally {
-    locks.appeal.delete(
-      message.channel.id
-    );
+    locks.appeal.delete(message.channel.id);
   }
 }
 
@@ -1335,8 +1298,7 @@ async function handleBlacklistCommand(
     );
   }
 
-  const clean =
-    String(reason || "").trim();
+  const clean = String(reason || "").trim();
 
   if (!clean) {
     return message.reply(
@@ -1423,9 +1385,7 @@ async function handleBlacklistCommand(
       );
     }
 
-    if (
-      target.roles.cache.has(blacklisted.id)
-    ) {
+    if (target.roles.cache.has(blacklisted.id)) {
       return message.reply(
         "That member is already blacklisted."
       );
@@ -1487,10 +1447,7 @@ async function handleBlacklistCommand(
     try {
       await target.user.send({
         embeds: [
-          makeBlacklistDMEmbed(
-            guild,
-            clean
-          )
+          makeBlacklistDMEmbed(guild, clean)
         ],
         allowedMentions: NONE
       });
@@ -1530,8 +1487,7 @@ async function handleBlacklistCommand(
 // ============================================================
 
 function makeRoleEmbed(type) {
-  const config =
-    ROLE_MENU_CONFIG[type];
+  const config = ROLE_MENU_CONFIG[type];
 
   const embed = whiteEmbed(
     config.title,
@@ -1540,33 +1496,44 @@ function makeRoleEmbed(type) {
       .map(id => `<@&${id}>`)
       .join("\n\n") +
 
-    "\n\nplease choose your roles below ♡"
+    (
+      type === "zone"
+        ? "\n\nplease choose your time zone below ♡"
+        : "\n\nplease choose your roles below ♡"
+    )
   );
 
   if (config.thumbnail) {
-    embed.setThumbnail(
-      config.thumbnail
-    );
+    embed.setThumbnail(config.thumbnail);
   }
 
   return embed;
 }
 
 function makeRoleDropdown(type) {
-  const config =
-    ROLE_MENU_CONFIG[type];
+  const config = ROLE_MENU_CONFIG[type];
 
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(config.customId)
       .setPlaceholder(config.placeholder)
       .setMinValues(0)
-      .setMaxValues(config.options.length)
+      .setMaxValues(
+        config.maxValues || config.options.length
+      )
       .addOptions(
         config.options.map(
           ([label, value]) => ({
             label,
-            value
+            value,
+
+            ...(type === "zone"
+              ? {
+                  emoji: {
+                    id: MOCHAA_EMOJI_ID
+                  }
+                }
+              : {})
           })
         )
       )
@@ -1575,9 +1542,7 @@ function makeRoleDropdown(type) {
 
 async function postRolePanel(guild, type) {
   const channel =
-    await guild.channels.fetch(
-      ROLES_CHANNEL_ID
-    );
+    await guild.channels.fetch(ROLES_CHANNEL_ID);
 
   if (!channel?.messages || !channel.send) {
     throw new Error(
@@ -1634,22 +1599,25 @@ async function handleRolePanelCommand(message, type) {
       type
     );
 
-    await message.reply(
-      `${type} panel ${result.updated ? "updated" : "posted"} ` +
-      `in <#${ROLES_CHANNEL_ID}>!`
-    );
+    await message.reply({
+      content:
+        `${type} panel ${result.updated ? "updated" : "posted"} ` +
+        `in <#${ROLES_CHANNEL_ID}>!`,
+
+      allowedMentions: NONE
+    });
 
   } finally {
     locks.role.delete(key);
   }
 }
 
-async function handleRoleSelection(
-  interaction,
-  type
-) {
-  const config =
-    ROLE_MENU_CONFIG[type];
+// ============================================================
+// SELF ROLE SELECTION
+// ============================================================
+
+async function handleRoleSelection(interaction, type) {
+  const config = ROLE_MENU_CONFIG[type];
 
   if (!config || !interaction.inGuild()) {
     return interaction.reply(
@@ -1662,7 +1630,7 @@ async function handleRoleSelection(
   });
 
   const key =
-    `${interaction.guildId}:${interaction.user.id}:${type}`;
+    `${interaction.guildId}:${interaction.user.id}`;
 
   if (!lock(locks.roleSelect, key)) {
     return interaction.editReply(
@@ -1684,6 +1652,15 @@ async function handleRoleSelection(
       );
     }
 
+    if (
+      config.maxValues &&
+      selected.size > config.maxValues
+    ) {
+      return interaction.editReply(
+        "Please select only one time zone."
+      );
+    }
+
     const member =
       await interaction.guild.members.fetch({
         user: interaction.user.id,
@@ -1699,7 +1676,32 @@ async function handleRoleSelection(
     const bot =
       await interaction.guild.members.fetchMe();
 
-    for (const id of config.roles) {
+    if (!bot.permissions.has(
+      PermissionFlagsBits.ManageRoles
+    )) {
+      throw new Error(
+        "The bot needs Manage Roles permission."
+      );
+    }
+
+    const current =
+      config.roles.filter(
+        id => member.roles.cache.has(id)
+      );
+
+    const toRemove =
+      current.filter(
+        id => !selected.has(id)
+      );
+
+    const toAdd =
+      [...selected].filter(
+        id => !member.roles.cache.has(id)
+      );
+
+    for (const id of [
+      ...new Set([...toRemove, ...toAdd])
+    ]) {
       const role =
         interaction.guild.roles.cache.get(id) ||
         await interaction.guild.roles.fetch(id)
@@ -1717,28 +1719,19 @@ async function handleRoleSelection(
       }
     }
 
-    const current =
-      config.roles.filter(
-        id => member.roles.cache.has(id)
+    // Only modify roles belonging to this menu.
+    // Preserve verified, booster, staff and client roles.
+
+    for (const id of toRemove) {
+      await member.roles.remove(
+        id,
+        `Chuppys ${type} self-role selection`
       );
+    }
 
-    const changed =
-      current.length !== selected.size ||
-      current.some(
-        id => !selected.has(id)
-      );
-
-    if (changed) {
-      const unchanged =
-        member.roles.cache
-          .filter(
-            role =>
-              !config.roles.includes(role.id)
-          )
-          .map(role => role.id);
-
-      await member.roles.set(
-        [...unchanged, ...selected],
+    for (const id of toAdd) {
+      await member.roles.add(
+        id,
         `Chuppys ${type} self-role selection`
       );
     }
@@ -1754,11 +1747,77 @@ async function handleRoleSelection(
     );
 
     await interaction.editReply(
-      "Your roles could not be updated. Please contact staff."
+      "Your roles could not be fully updated. " +
+      "Please try again or contact staff."
     ).catch(console.error);
 
   } finally {
     locks.roleSelect.delete(key);
+  }
+}
+
+// ============================================================
+// BOOSTER PERKS EMBED
+// ============================================================
+
+function makeBoosterPerksEmbed() {
+  return whiteEmbed(
+    BOOSTER_PERKS_TITLE,
+    BOOSTER_PERKS_TEXT
+  ).setThumbnail(
+    MOCHAA_THUMBNAIL_URL
+  );
+}
+
+async function handleBoosterPerksCommand(message) {
+  if (!canManageServer(message.member)) {
+    return message.reply({
+      content:
+        "You need Manage Server permission.",
+      allowedMentions: NONE
+    });
+  }
+
+  const key = message.channel.id;
+
+  if (!lock(locks.boosterPerks, key)) {
+    return;
+  }
+
+  try {
+    const result = await upsertBotMessage(
+      message.channel,
+
+      msg =>
+        msg.embeds.some(
+          embed =>
+            embed.title === BOOSTER_PERKS_TITLE
+        ),
+
+      {
+        content: "",
+        embeds: [
+          makeBoosterPerksEmbed()
+        ],
+        components: [],
+        allowedMentions: NONE
+      },
+
+      10
+    );
+
+    console.log(
+      `[BOOSTER PERKS] ${
+        result.updated ? "Updated" : "Posted"
+      } in ${message.channel.id}`
+    );
+
+    if (message.deletable) {
+      await message.delete().catch(console.error);
+    }
+
+  } finally {
+    locks.boosterPerks.delete(key);
   }
 }
 
@@ -1793,35 +1852,25 @@ function makeVerificationEmbed() {
 
     "Please do not open duplicate tickets or share " +
     "passwords, login codes, or private account information."
-  ).setThumbnail(
-    VERIFY_THUMBNAIL_URL
-  );
+  ).setThumbnail(VERIFY_THUMBNAIL_URL);
 }
 
 function makeVerificationButton() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(
-        VERIFY_TICKET_BUTTON_ID
-      )
-      .setLabel(
-        "Create Verification Ticket"
-      )
+      .setCustomId(VERIFY_TICKET_BUTTON_ID)
+      .setLabel("Create Verification Ticket")
       .setEmoji({
         id: VERIFY_BUTTON_EMOJI_ID
       })
-      .setStyle(
-        ButtonStyle.Primary
-      )
+      .setStyle(ButtonStyle.Primary)
   );
 }
 
 async function sendOrUpdateVerificationMessage() {
   try {
     const channel =
-      await client.channels.fetch(
-        VERIFY_CHANNEL_ID
-      );
+      await client.channels.fetch(VERIFY_CHANNEL_ID);
 
     if (!channel?.messages) {
       throw new Error(
@@ -1941,23 +1990,18 @@ async function isOfficialVerificationTicket(channel) {
 // ============================================================
 
 async function verificationTicketOwnerId(channel) {
-  if (
-    !(await isOfficialVerificationTicket(channel))
-  ) {
+  if (!(await isOfficialVerificationTicket(channel))) {
     return null;
   }
 
   const numberMatch =
-    channel.name.match(
-      /verification-(\d+)$/i
-    );
+    channel.name.match(/verification-(\d+)$/i);
 
   if (!numberMatch) {
     return null;
   }
 
-  const expectedNumber =
-    Number(numberMatch[1]);
+  const expectedNumber = Number(numberMatch[1]);
 
   let before;
 
@@ -1973,9 +2017,7 @@ async function verificationTicketOwnerId(channel) {
     }
 
     for (const message of messages.values()) {
-      if (
-        message.author.id !== client.user.id
-      ) {
+      if (message.author.id !== client.user.id) {
         continue;
       }
 
@@ -1999,12 +2041,9 @@ async function verificationTicketOwnerId(channel) {
       }
 
       for (const embed of message.embeds) {
-        const title =
-          String(embed.title || "");
+        const title = String(embed.title || "");
 
-        if (
-          !/verification\s+ticket/i.test(title)
-        ) {
+        if (!/verification\s+ticket/i.test(title)) {
           continue;
         }
 
@@ -2013,8 +2052,7 @@ async function verificationTicketOwnerId(channel) {
 
         if (
           !titleNumber ||
-          Number(titleNumber[1]) !==
-            expectedNumber
+          Number(titleNumber[1]) !== expectedNumber
         ) {
           continue;
         }
@@ -2037,8 +2075,7 @@ async function verificationTicketOwnerId(channel) {
       break;
     }
 
-    before =
-      messages.last().id;
+    before = messages.last().id;
   }
 
   return null;
@@ -2055,11 +2092,9 @@ async function hideVerificationCommand(message) {
   const permissions =
     message.channel.permissionsFor(bot);
 
-  if (
-    !permissions?.has(
-      PermissionFlagsBits.ManageMessages
-    )
-  ) {
+  if (!permissions?.has(
+    PermissionFlagsBits.ManageMessages
+  )) {
     await privateNotice(
       message.author,
       "Verification was not processed because " +
@@ -2071,7 +2106,6 @@ async function hideVerificationCommand(message) {
 
   try {
     await message.delete();
-
     return true;
 
   } catch (error) {
@@ -2100,9 +2134,7 @@ async function approveVerification(message, targetId) {
   }
 
   const official =
-    await isOfficialVerificationTicket(
-      message.channel
-    );
+    await isOfficialVerificationTicket(message.channel);
 
   if (!official) {
     await privateNotice(
@@ -2115,9 +2147,7 @@ async function approveVerification(message, targetId) {
   }
 
   const ticketOwnerId =
-    await verificationTicketOwnerId(
-      message.channel
-    );
+    await verificationTicketOwnerId(message.channel);
 
   if (!ticketOwnerId) {
     await privateNotice(
@@ -2182,11 +2212,7 @@ async function approveVerification(message, targetId) {
       return;
     }
 
-    if (
-      member.roles.cache.has(
-        CHUPPYS_ROLE_ID
-      )
-    ) {
+    if (member.roles.cache.has(CHUPPYS_ROLE_ID)) {
       await privateNotice(
         message.author,
         "This member is already verified."
@@ -2195,13 +2221,10 @@ async function approveVerification(message, targetId) {
       return;
     }
 
-    const bot =
-      await guild.members.fetchMe();
+    const bot = await guild.members.fetchMe();
 
     const verifiedRole =
-      guild.roles.cache.get(
-        CHUPPYS_ROLE_ID
-      ) ||
+      guild.roles.cache.get(CHUPPYS_ROLE_ID) ||
       await guild.roles.fetch(
         CHUPPYS_ROLE_ID
       ).catch(() => null);
@@ -2243,7 +2266,7 @@ async function approveVerification(message, targetId) {
       `${guild.id}/${RULES_CHANNEL_ID}`;
 
     const embed = whiteEmbed(
-      "Verification Approved ",
+      "Verification Approved",
 
       `**Member:** <@${member.id}>\n\n` +
 
@@ -2253,12 +2276,12 @@ async function approveVerification(message, targetId) {
 
       "You now have access to **.gg/chuppys**.\n\n" +
 
-      "** SERVER RULES**\n" +
+      "**SERVER RULES**\n" +
       `Please review <#${RULES_CHANNEL_ID}>.\n\n` +
 
       `[Click Here to Read the Rules](${rulesUrl})\n\n` +
 
-      "** SERVER ROLES**\n" +
+      "**SERVER ROLES**\n" +
       `Please select your roles in <#${ROLES_CHANNEL_ID}>.\n\n` +
 
       "Thank you for verifying! Welcome to Chuppy's! ♡"
@@ -2313,8 +2336,7 @@ async function registerQuestionCommand() {
     );
 
   try {
-    const existing =
-      await rest.get(route);
+    const existing = await rest.get(route);
 
     const commands = [
       QUESTION_COMMAND,
@@ -2324,8 +2346,7 @@ async function registerQuestionCommand() {
     ];
 
     for (const definition of commands) {
-      const body =
-        definition.toJSON();
+      const body = definition.toJSON();
 
       const found =
         existing.find(
@@ -2389,18 +2410,13 @@ function canReplyToQuestion(interaction) {
     return true;
   }
 
-  const roles =
-    interaction.member?.roles;
+  const roles = interaction.member?.roles;
 
   return Boolean(
-    roles?.cache?.has?.(
-      TICKET_SUPPORT_ROLE_ID
-    ) ||
+    roles?.cache?.has?.(TICKET_SUPPORT_ROLE_ID) ||
     (
       Array.isArray(roles) &&
-      roles.includes(
-        TICKET_SUPPORT_ROLE_ID
-      )
+      roles.includes(TICKET_SUPPORT_ROLE_ID)
     )
   );
 }
@@ -2507,8 +2523,7 @@ function getOriginalReference(message) {
 
 function getMoveOrigin(message) {
   for (const embed of getEmbeds(message)) {
-    const footer =
-      embed.footer?.text || "";
+    const footer = embed.footer?.text || "";
 
     const match = footer.match(
       /CHUPPYS_VOUCH_ORIGIN:(\d{17,20}):(\d{17,20})/
@@ -2587,8 +2602,7 @@ function vouchFingerprint(message) {
 }
 
 function originalVouchKey(message) {
-  const movedOrigin =
-    getMoveOrigin(message);
+  const movedOrigin = getMoveOrigin(message);
 
   if (movedOrigin) {
     return movedOrigin;
@@ -2618,8 +2632,7 @@ function originalVouchKey(message) {
 // ============================================================
 
 function detectVouchType(message) {
-  const embeds =
-    getEmbeds(message);
+  const embeds = getEmbeds(message);
 
   for (const embed of embeds) {
     const description =
@@ -2649,16 +2662,13 @@ function detectVouchType(message) {
         return "giveaway";
       }
 
-      if (
-        /market|purchase|cash out/.test(type)
-      ) {
+      if (/market|purchase|cash out/.test(type)) {
         return "market";
       }
     }
   }
 
-  const data =
-    getVouchData(message);
+  const data = getVouchData(message);
 
   const text = [
     data.content || "",
@@ -2670,35 +2680,25 @@ function detectVouchType(message) {
     )
   ].join("\n").toLowerCase();
 
-  if (
-    !/\bvouch(?:es|ed|ing)?\b/.test(text)
-  ) {
+  if (!/\bvouch(?:es|ed|ing)?\b/.test(text)) {
     return null;
   }
 
   const types = [];
 
-  if (
-    /converter|conversion fee/.test(text)
-  ) {
+  if (/converter|conversion fee/.test(text)) {
     types.push("converter");
   }
 
-  if (
-    /invite challenge|invite vouch/.test(text)
-  ) {
+  if (/invite challenge|invite vouch/.test(text)) {
     types.push("invite");
   }
 
-  if (
-    /giveaway vouch|giveaway reward/.test(text)
-  ) {
+  if (/giveaway vouch|giveaway reward/.test(text)) {
     types.push("giveaway");
   }
 
-  if (
-    /market vouch|market purchase|market cash out/.test(text)
-  ) {
+  if (/market vouch|market purchase|market cash out/.test(text)) {
     types.push("market");
   }
 
@@ -2716,8 +2716,7 @@ function looksLikeVouch(message) {
     return true;
   }
 
-  const embeds =
-    getEmbeds(message);
+  const embeds = getEmbeds(message);
 
   if (
     embeds.some(embed =>
@@ -2733,8 +2732,7 @@ function looksLikeVouch(message) {
     return true;
   }
 
-  const data =
-    getVouchData(message);
+  const data = getVouchData(message);
 
   const text = [
     data.content || "",
@@ -2775,9 +2773,7 @@ function vouchDestination(type, message) {
         /\*\*seller:\*\*\s*<@!?(\d{17,20})>/i
       )?.[1];
 
-    if (
-      PERSONAL_SELLER_IDS.includes(sellerId)
-    ) {
+    if (PERSONAL_SELLER_IDS.includes(sellerId)) {
       return PERSONAL_VOUCH_CHANNEL_ID;
     }
 
@@ -2858,9 +2854,7 @@ async function reactToVouch(message) {
   }
 
   try {
-    await message.react(
-      CHUPPY_TY_EMOJI
-    );
+    await message.react(CHUPPY_TY_EMOJI);
 
   } catch (error) {
     console.error(
@@ -2875,11 +2869,7 @@ async function reactToVouch(message) {
 // ============================================================
 
 async function routeVouch(message) {
-  if (!AUTO_ROUTE_VOUCHES) {
-    return false;
-  }
-
-  if (!message.guild) {
+  if (!AUTO_ROUTE_VOUCHES || !message.guild) {
     return false;
   }
 
@@ -2899,8 +2889,7 @@ async function routeVouch(message) {
     return false;
   }
 
-  const type =
-    detectVouchType(message);
+  const type = detectVouchType(message);
 
   if (!type) {
     return false;
@@ -2920,10 +2909,7 @@ async function routeVouch(message) {
     return false;
   }
 
-  if (!lock(
-    locks.vouchRoute,
-    message.id
-  )) {
+  if (!lock(locks.vouchRoute, message.id)) {
     return false;
   }
 
@@ -2972,8 +2958,7 @@ async function routeVouch(message) {
       return false;
     }
 
-    const payload =
-      buildMovedVouch(message);
+    const payload = buildMovedVouch(message);
 
     if (
       getAttachments(message).length !==
@@ -3007,8 +2992,7 @@ async function routeVouch(message) {
     const existingCopy =
       recent.find(
         candidate =>
-          getMoveOrigin(candidate) ===
-          payload.origin
+          getMoveOrigin(candidate) === payload.origin
       );
 
     if (existingCopy) {
@@ -3067,9 +3051,7 @@ async function routeVouch(message) {
     return false;
 
   } finally {
-    locks.vouchRoute.delete(
-      message.id
-    );
+    locks.vouchRoute.delete(message.id);
   }
 }
 
@@ -3082,8 +3064,7 @@ function makeVouchRecord(message) {
     return null;
   }
 
-  const key =
-    originalVouchKey(message);
+  const key = originalVouchKey(message);
 
   if (!key) {
     return null;
@@ -3091,6 +3072,7 @@ function makeVouchRecord(message) {
 
   return {
     key,
+
     fingerprint:
       vouchFingerprint(message),
 
@@ -3142,8 +3124,7 @@ async function fetchChannelVouches(channelId) {
         VOUCH_CHANNEL_ID
       ].includes(channelId);
 
-      let record =
-        makeVouchRecord(message);
+      let record = makeVouchRecord(message);
 
       if (!record && marketChannel) {
         if (
@@ -3183,8 +3164,7 @@ async function fetchChannelVouches(channelId) {
       break;
     }
 
-    before =
-      messages.last().id;
+    before = messages.last().id;
   }
 
   console.log(
@@ -3195,8 +3175,7 @@ async function fetchChannelVouches(channelId) {
 }
 
 function uniqueVouchRecords(records) {
-  const byKey =
-    new Map();
+  const byKey = new Map();
 
   const sorted =
     [...records].sort(
@@ -3205,10 +3184,7 @@ function uniqueVouchRecords(records) {
 
   for (const record of sorted) {
     if (!byKey.has(record.key)) {
-      byKey.set(
-        record.key,
-        record
-      );
+      byKey.set(record.key, record);
     }
   }
 
@@ -3340,10 +3316,7 @@ async function findOrCreateCountChannel(
 // COUNTER RENAMING
 // ============================================================
 
-async function renameCounterChannel(
-  channel,
-  name
-) {
+async function renameCounterChannel(channel, name) {
   if (
     !channel ||
     typeof channel.setName !== "function"
@@ -3431,8 +3404,7 @@ async function orderVouchCounters(
     return;
   }
 
-  const base =
-    refreshed[0].position;
+  const base = refreshed[0].position;
 
   await guild.channels.setPositions(
     refreshed.map(
@@ -3531,10 +3503,7 @@ async function recountAllVouches() {
         SERVER_COUNT_CHANNEL_ID
       );
 
-    if (
-      !personalCounter ||
-      !serverCounter
-    ) {
+    if (!personalCounter || !serverCounter) {
       throw new Error(
         "Original counter channels missing."
       );
@@ -3652,8 +3621,7 @@ function scheduleVouchCounterUpdate() {
 // VOUCH TUTORIAL SETTINGS
 // ============================================================
 
-const VOUCH_COMMAND_BOX =
-  "`/vouch`";
+const VOUCH_COMMAND_BOX = "`/vouch`";
 
 const VOUCH_TUTORIAL_CHANNELS = Object.freeze({
   personal: VOUCH_TUTORIAL_CHANNEL_ID,
@@ -3881,8 +3849,7 @@ const VOUCH_TUTORIAL_COMMANDS = Object.freeze({
 });
 
 function makeVouchTutorialEmbed(type) {
-  const tutorial =
-    VOUCH_TUTORIALS[type];
+  const tutorial = VOUCH_TUTORIALS[type];
 
   if (!tutorial) {
     throw new Error(
@@ -3900,8 +3867,7 @@ function makeVouchTutorialEmbed(type) {
 }
 
 function makeVouchTutorialImageEmbeds(type) {
-  const tutorial =
-    VOUCH_TUTORIALS[type];
+  const tutorial = VOUCH_TUTORIALS[type];
 
   if (!tutorial) {
     return [];
@@ -3939,12 +3905,8 @@ function getVouchTutorialChannelId(type) {
   return channelId;
 }
 
-async function sendSingleVouchTutorial(
-  guild,
-  type
-) {
-  const tutorial =
-    VOUCH_TUTORIALS[type];
+async function sendSingleVouchTutorial(guild, type) {
+  const tutorial = VOUCH_TUTORIALS[type];
 
   if (!tutorial) {
     throw new Error(
@@ -3956,9 +3918,7 @@ async function sendSingleVouchTutorial(
     getVouchTutorialChannelId(type);
 
   const channel =
-    await guild.channels.fetch(
-      channelId
-    );
+    await guild.channels.fetch(channelId);
 
   if (!channel?.send || !channel?.messages) {
     throw new Error(
@@ -4041,10 +4001,7 @@ async function sendVouchTutorial(guild) {
   return results;
 }
 
-async function handleVouchTutorialCommand(
-  message,
-  type
-) {
+async function handleVouchTutorialCommand(message, type) {
   if (!canManageServer(message.member)) {
     return message.reply(
       "You need Manage Server permission."
@@ -4063,9 +4020,7 @@ async function handleVouchTutorialCommand(
   try {
     if (type === "all") {
       const results =
-        await sendVouchTutorial(
-          message.guild
-        );
+        await sendVouchTutorial(message.guild);
 
       const successful =
         results.filter(r => r.success);
@@ -4283,11 +4238,7 @@ function makeVouchReminder(type) {
   }
 }
 
-async function sendVouchReminder(
-  message,
-  target,
-  type
-) {
+async function sendVouchReminder(message, target, type) {
   await message.channel.send({
     content: `<@${target.id}>`,
 
@@ -4359,7 +4310,18 @@ function makeHelpEmbed() {
       {
         name: "Self Role Commands",
         value:
-          "`,roles`, `,pings`, `,age`, `,pronouns`"
+          "`,roles` — Ping roles\n" +
+          "`,pings` — Ping roles\n" +
+          "`,age` — Age roles\n" +
+          "`,pronouns` — Pronoun roles\n" +
+          "`,zone` — Time zone roles"
+      },
+
+      {
+        name: "Booster Commands",
+        value:
+          "`,boosterperks` — Booster perks embed\n" +
+          "`,boostperks` — Booster perks embed"
       },
 
       {
@@ -4496,9 +4458,7 @@ function makePaymentEmbed() {
 
     "Choose a payment method below.\n\n" +
     "Please confirm payment details before sending."
-  ).setThumbnail(
-    PAYMENT_EMOJI_URL
-  );
+  ).setThumbnail(PAYMENT_EMOJI_URL);
 
   for (const method of paymentMethods()) {
     embed.addFields({
@@ -4789,9 +4749,7 @@ function makeSellersEmbed() {
 
   return new EmbedBuilder()
     .setColor(WHITE)
-    .setDescription(
-      lines.join("\n")
-    );
+    .setDescription(lines.join("\n"));
 }
 
 // ============================================================
@@ -4836,9 +4794,7 @@ function makeStaffEmbed() {
 
   return new EmbedBuilder()
     .setColor(WHITE)
-    .setDescription(
-      lines.join("\n")
-    );
+    .setDescription(lines.join("\n"));
 }
 
 // ============================================================
@@ -4919,12 +4875,8 @@ async function sendRobuxCashoutEmbed(channel) {
   const embed =
     new EmbedBuilder()
       .setColor(WHITE)
-      .setTitle(
-        "Cashing Out Robux"
-      )
-      .setThumbnail(
-        ROBUX_CASHOUT_THUMBNAIL_URL
-      )
+      .setTitle("Cashing Out Robux")
+      .setThumbnail(ROBUX_CASHOUT_THUMBNAIL_URL)
       .setDescription(
         "RATES\n\n" +
 
@@ -4973,9 +4925,7 @@ async function sendRankedRoles(guild) {
       (id, index) =>
         `**${index + 1}.** <@&${id}>`
     ).join("\n\n")
-  ).setThumbnail(
-    RANKED_ROLES_THUMBNAIL_URL
-  );
+  ).setThumbnail(RANKED_ROLES_THUMBNAIL_URL);
 
   return sendEmbedToChannel(
     guild,
@@ -5019,6 +4969,7 @@ async function handleAFK(message) {
         `**Reason:** ${reason}`,
 
       allowedMentions: {
+        parse: [],
         repliedUser: false
       }
     });
@@ -5084,9 +5035,6 @@ client.once(
       }
     );
 
-    // TikTok starts from its own ClientReady listener.
-    // Do not call setupTikTok again here.
-
     console.log(
       `[READY] TikTok module: ${
         tiktokModuleLoaded
@@ -5140,10 +5088,6 @@ client.once(
     );
 
     console.log(
-      "[READY] ,welcome embed shortened."
-    );
-
-    console.log(
       `[READY] Rules channel: ${RULES_CHANNEL_ID}`
     );
 
@@ -5169,6 +5113,22 @@ client.once(
 
     console.log(
       "[READY] Vouch counters enabled."
+    );
+
+    console.log(
+      "[READY] Scammer Ping self role enabled."
+    );
+
+    console.log(
+      "[READY] Time zone roles enabled."
+    );
+
+    console.log(
+      "[READY] Mochaa thumbnails enabled."
+    );
+
+    console.log(
+      "[READY] Booster perks command enabled."
     );
 
     console.log(
@@ -5251,8 +5211,7 @@ client.on(
 
       if (
         interaction.isButton() &&
-        interaction.customId ===
-          VERIFY_BUTTON_ID
+        interaction.customId === VERIFY_BUTTON_ID
       ) {
         return interaction.reply(
           ephemeral(
@@ -5267,8 +5226,7 @@ client.on(
 
       if (
         interaction.isButton() &&
-        interaction.customId ===
-          VERIFY_SECURE_TICKET_BUTTON_ID
+        interaction.customId === VERIFY_SECURE_TICKET_BUTTON_ID
       ) {
         return interaction.reply(
           ephemeral(
@@ -5281,13 +5239,9 @@ client.on(
 
       // Self role selection.
 
-      if (
-        interaction.isStringSelectMenu()
-      ) {
+      if (interaction.isStringSelectMenu()) {
         const type =
-          Object.keys(
-            ROLE_MENU_CONFIG
-          ).find(
+          Object.keys(ROLE_MENU_CONFIG).find(
             key =>
               ROLE_MENU_CONFIG[key].customId ===
               interaction.customId
@@ -5365,9 +5319,7 @@ client.on(
           "**What they'd like Chuppys to stock up on:**\n" +
           safeText(items)
         )
-          .setThumbnail(
-            REQUEST_THUMBNAIL_URL
-          )
+          .setThumbnail(REQUEST_THUMBNAIL_URL)
           .setTimestamp();
 
         const channel =
@@ -5389,8 +5341,7 @@ client.on(
 
       if (
         interaction.isButton() &&
-        interaction.customId ===
-          CLIENT_BUTTON_ID
+        interaction.customId === CLIENT_BUTTON_ID
       ) {
         if (!interaction.inGuild()) {
           return interaction.reply(
@@ -5478,9 +5429,7 @@ client.on(
 
         if (
           picture &&
-          !picture.contentType?.startsWith(
-            "image/"
-          )
+          !picture.contentType?.startsWith("image/")
         ) {
           return interaction.reply(
             ephemeral(
@@ -5498,9 +5447,7 @@ client.on(
 
           `**Question**\n${safeText(questionText)}`
         )
-          .setThumbnail(
-            QUESTION_EMOJI_URL
-          )
+          .setThumbnail(QUESTION_EMOJI_URL)
           .setFooter({
             text:
               `${BRAND} • Question User ID: ${interaction.user.id}`
@@ -5508,40 +5455,26 @@ client.on(
           .setTimestamp();
 
         if (picture) {
-          embed.setImage(
-            picture.url
-          );
+          embed.setImage(picture.url);
         }
 
         const buttons =
           new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-              .setCustomId(
-                "question_ticket"
-              )
-              .setLabel(
-                "Make a Support Ticket"
-              )
+              .setCustomId("question_ticket")
+              .setLabel("Make a Support Ticket")
               .setEmoji({
                 id: VERIFY_BUTTON_EMOJI_ID
               })
-              .setStyle(
-                ButtonStyle.Secondary
-              ),
+              .setStyle(ButtonStyle.Secondary),
 
             new ButtonBuilder()
-              .setCustomId(
-                "question_reply"
-              )
-              .setLabel(
-                "Reply to Question"
-              )
+              .setCustomId("question_reply")
+              .setLabel("Reply to Question")
               .setEmoji({
                 id: VERIFY_BUTTON_EMOJI_ID
               })
-              .setStyle(
-                ButtonStyle.Primary
-              )
+              .setStyle(ButtonStyle.Primary)
           );
 
         await interaction.channel.send({
@@ -5559,15 +5492,12 @@ client.on(
 
       if (
         interaction.isButton() &&
-        interaction.customId ===
-          "question_ticket"
+        interaction.customId === "question_ticket"
       ) {
         const embed =
           new EmbedBuilder()
             .setColor(WHITE)
-            .setThumbnail(
-              QUESTION_EMOJI_URL
-            )
+            .setThumbnail(QUESTION_EMOJI_URL)
             .setDescription(
               "This question requires a support ticket.\n\n" +
 
@@ -5594,9 +5524,7 @@ client.on(
 
       if (
         interaction.isButton() &&
-        interaction.customId.startsWith(
-          "question_reply"
-        )
+        interaction.customId.startsWith("question_reply")
       ) {
         if (!canReplyToQuestion(interaction)) {
           return interaction.reply(
@@ -5629,24 +5557,14 @@ client.on(
             .setCustomId(
               `question_reply_modal:${suffix}`
             )
-            .setTitle(
-              "Reply to Question"
-            );
+            .setTitle("Reply to Question");
 
         const input =
           new TextInputBuilder()
-            .setCustomId(
-              "question_reply_text"
-            )
-            .setLabel(
-              "Your response"
-            )
-            .setPlaceholder(
-              "Write your response..."
-            )
-            .setStyle(
-              TextInputStyle.Paragraph
-            )
+            .setCustomId("question_reply_text")
+            .setLabel("Your response")
+            .setPlaceholder("Write your response...")
+            .setStyle(TextInputStyle.Paragraph)
             .setRequired(true)
             .setMaxLength(2000);
 
@@ -5655,9 +5573,7 @@ client.on(
             .addComponents(input)
         );
 
-        return interaction.showModal(
-          modal
-        );
+        return interaction.showModal(modal);
       }
 
       // Question reply modal.
@@ -5748,9 +5664,7 @@ client.on(
           `${interaction.user.username}\n\n` +
           `**Response:**\n${safeText(answer)}`
         )
-          .setThumbnail(
-            QUESTION_EMOJI_URL
-          )
+          .setThumbnail(QUESTION_EMOJI_URL)
           .setTimestamp();
 
         try {
@@ -5794,16 +5708,13 @@ client.on(
       return;
     }
 
-    const raw =
-      message.content.trim();
-
-    const cmd =
-      raw.toLowerCase();
+    const raw = message.content.trim();
+    const cmd = raw.toLowerCase();
 
     // Ticket commands belong to tickets.js.
 
     if (
-      /^,(?:claim|forceclaim|close|reopen|delete|recoverlogs)(?:\s|$)/i
+      /^,(?:claim|forceclaim|close|reopen|delete|recoverlogs|savelog)(?:\s|$)/i
         .test(raw)
     ) {
       return;
@@ -5825,9 +5736,7 @@ client.on(
       // ,welcome
 
       if (cmd === ",welcome") {
-        return await handleWelcomeCommand(
-          message
-        );
+        return await handleWelcomeCommand(message);
       }
 
       // Old verification close commands.
@@ -5842,9 +5751,7 @@ client.on(
           )
         ) {
           const hidden =
-            await hideVerificationCommand(
-              message
-            );
+            await hideVerificationCommand(message);
 
           if (hidden) {
             await privateNotice(
@@ -5865,18 +5772,12 @@ client.on(
         );
 
       if (verifyCommand) {
-        if (
-          !isVerificationStaff(
-            message.member
-          )
-        ) {
+        if (!isVerificationStaff(message.member)) {
           return;
         }
 
         const hidden =
-          await hideVerificationCommand(
-            message
-          );
+          await hideVerificationCommand(message);
 
         if (!hidden) {
           return;
@@ -5906,6 +5807,13 @@ client.on(
       }
 
       // Role commands.
+      //
+      // ,roles
+      // ,pings
+      // ,age
+      // ,pronouns
+      // ,zone
+      // ,timezone
 
       if (
         Object.prototype.hasOwnProperty.call(
@@ -5921,6 +5829,14 @@ client.on(
         return;
       }
 
+      // Booster perks.
+
+      if (BOOSTER_PERKS_COMMANDS.includes(cmd)) {
+        return await handleBoosterPerksCommand(
+          message
+        );
+      }
+
       // Appeal panel.
 
       if (
@@ -5929,10 +5845,7 @@ client.on(
           ",unblacklistpanel"
         ].includes(cmd)
       ) {
-        await handleUnblacklistPanelCommand(
-          message
-        );
-
+        await handleUnblacklistPanelCommand(message);
         return;
       }
 
@@ -6043,9 +5956,7 @@ client.on(
           );
         }
 
-        await sendRankedRoles(
-          message.guild
-        );
+        await sendRankedRoles(message.guild);
 
         return reply(
           "The ranked roles embed has been sent!"
@@ -6091,11 +6002,7 @@ client.on(
           );
         }
 
-        if (
-          !isVerificationStaff(
-            message.member
-          )
-        ) {
+        if (!isVerificationStaff(message.member)) {
           return reply(
             "Only authorized staff can send vouch reminders."
           );
@@ -6161,7 +6068,9 @@ client.on(
               existing =>
                 (existing.description || "").includes(
                   ".gg/chuppys partnership"
-                )
+                ) ||
+                existing.title ===
+                  ".gg/chuppys partnership"
             ),
 
           {
@@ -6443,9 +6352,7 @@ client.on(
           .setThumbnail(
             message.author.displayAvatarURL()
           )
-          .setImage(
-            WELCOME_IMAGE
-          )
+          .setImage(WELCOME_IMAGE)
           .setFooter({
             text: message.guild.name
           });
@@ -6678,9 +6585,7 @@ client.on(
         .setThumbnail(
           member.user.displayAvatarURL()
         )
-        .setImage(
-          WELCOME_IMAGE
-        )
+        .setImage(WELCOME_IMAGE)
         .setFooter({
           text: member.guild.name
         });
