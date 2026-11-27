@@ -459,7 +459,7 @@ const BOOSTER_PERKS_COMMANDS = [
 ];
 
 const BOOSTER_PERKS_TEXT =
-  "Thank you for boosting **.gg/chuppys**! ♡\n\n" +
+  "Thank you for boosting **.gg/chuppys**! \n\n" +
 
   `${MOCHAA_EMOJI} Picture permissions\n\n` +
   `${MOCHAA_EMOJI} Exclusive discounts\n\n` +
