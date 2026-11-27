@@ -329,7 +329,8 @@ const PING_ROLES = Object.freeze({
   adoptme: "1568240367076122634",
   robux: "1568283533879939123",
   mm2: "1568240484206514248",
-  scammer: "1569731217799127210"
+  scammer: "1569731217799127210",
+  limiteds: "1569731506706849872"
 });
 
 const PING_ROLE_IDS =
@@ -410,7 +411,8 @@ const ROLE_MENU_CONFIG = {
       ["ᆞ› adopt me ping ꒰ ꒱", PING_ROLES.adoptme],
       ["ᆞ› robux ping ꒰ ꒱", PING_ROLES.robux],
       ["ᆞ› mm2 ping ꒰ ꒱", PING_ROLES.mm2],
-      ["ᆞ› scammer ping ꒰ ꒱", PING_ROLES.scammer]
+      ["ᆞ› scammer ping ꒰ ꒱", PING_ROLES.scammer],
+      ["ᆞ› limiteds ping ꒰ ꒱", PING_ROLES.limiteds]
     ],
 
     thumbnail: MOCHAA_THUMBNAIL_URL,
