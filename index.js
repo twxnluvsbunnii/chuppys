@@ -6628,11 +6628,14 @@ const BOOM_PING_NAMES = Object.freeze({
   "1490962480963260466": "twxn"
 });
 const boomCooldowns = new Map();
+const processedBoomMessages = new Set();
 
 // Use the deployed attachment when available; otherwise use the GitHub GIF.
 const BOOM_GIF_URL = "https://raw.githubusercontent.com/twxnluvsbunnii/chuppys/main/boom.gif";
 
 async function sendBoom(message, names = []) {
+  // Discord deduplicates sends with the same nonce, even across bot processes.
+  const delivery = { nonce: message.id, enforceNonce: true, allowedMentions: NONE };
   const embed = new EmbedBuilder().setColor(WHITE);
   if (names.length) {
     embed.setDescription(names.map(name =>
@@ -6645,13 +6648,13 @@ async function sendBoom(message, names = []) {
     return message.channel.send({
       embeds: [embed],
       files: [{ attachment: BOOM_GIF_PATH, name: "boom.gif" }],
-      allowedMentions: NONE
+      ...delivery
     });
   }
 
   // Never send a missing-file warning to Discord.
   embed.setImage(BOOM_GIF_URL);
-  return message.channel.send({ embeds: [embed], allowedMentions: NONE });
+  return message.channel.send({ embeds: [embed], ...delivery });
 }
 
 async function handleBoom(message, raw) {
@@ -6661,12 +6664,14 @@ async function handleBoom(message, raw) {
   const ids = Object.keys(BOOM_PING_NAMES).filter(id =>
     id !== message.author.id && message.mentions.users.has(id) && new RegExp(`<@!?${id}>`).test(raw));
   if (!manual && !ids.length) return false;
+  if (!rememberEvent(processedBoomMessages, message.id)) return manual;
   const key = `${message.channel.id}:${manual ? "manual" : "ping"}`;
   const now = Date.now();
   if (now - (boomCooldowns.get(key) || 0) < 10000) return manual;
   boomCooldowns.set(key, now);
   const timer = setTimeout(() => { if (boomCooldowns.get(key) === now) boomCooldowns.delete(key); }, 10000);
   timer.unref?.();
+  console.log(`[BOOM] Handling ${message.id} in process ${process.pid}`);
   await sendBoom(message, manual ? [] : ids.map(id => BOOM_PING_NAMES[id]));
   return manual;
 }
