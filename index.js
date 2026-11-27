@@ -5310,9 +5310,6 @@ async function sendBoostiesServices(channel) {
 function makeSellersEmbed() {
   const sellers = [
     ["1079241163455873074", "seller", "no limit"],
-    ["1032693136163622993", "seller", "$75"],
-    ["1320199904219496530", "seller", "$65"],
-    ["952566845939023892", "seller", "no limit"],
     ["1473335012769267807", "seller", "$100"],
     ["1472856287527309313", "seller", "$100"],
     ["1269188505935024141", "seller", "$250"],
@@ -5358,8 +5355,7 @@ function makeStaffEmbed() {
     ["1079241163455873074", "Admin | staff", ""],
     ["1398772218359451668", "Mod | staff", ""],
     ["941559349808091167", "Mod | staff", ""],
-    ["1494112860341670020", "Mod | staff", ""],
-    ["952566845939023892", "Mod | seller", "no limit"]
+    ["1494112860341670020", "Mod | staff", ""]
   ];
 
   const lines = [
