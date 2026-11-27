@@ -43,6 +43,7 @@ const {
   PermissionsBitField,
   PermissionFlagsBits,
   MessageFlags,
+  MessageType,
   SlashCommandBuilder,
   REST,
   Routes,
@@ -494,6 +495,11 @@ const ROLE_COMMANDS = {
 // BOOSTER PERKS
 // ============================================================
 
+const BOOST_ANNOUNCEMENT_CHANNEL_ID = "1570412397712244906";
+const BOOSTER_PERKS_CHANNEL_ID = "1573961905540964352";
+const BOOSTER_THUMBNAIL_URL =
+  "https://cdn.discordapp.com/emojis/1569738982114459701.png?size=128&quality=lossless";
+
 const BOOSTER_PERKS_TITLE =
   "ᆞ› booster perks ꒰ ꒱";
 
@@ -507,15 +513,11 @@ const BOOSTER_PERKS_COMMANDS = [
 
 const BOOSTER_PERKS_TEXT =
   "Thank you for boosting **.gg/chuppys**!\n\n" +
-
-  `${MOCHAA_EMOJI} Picture permissions\n\n` +
-  `${MOCHAA_EMOJI} Exclusive discounts\n\n` +
-  `${MOCHAA_EMOJI} Booster color role\n\n` +
-  `${MOCHAA_EMOJI} Booster role icon\n\n` +
-  `${MOCHAA_EMOJI} Nickname permissions\n\n` +
-
-  `Open a ticket in <#${QUESTION_TICKET_CHANNEL_ID}> to claim your perks!\n\n` +
-
+  "Picture permissions\n\n" +
+  "Exclusive discounts\n\n" +
+  "Booster color role\n\n" +
+  "Booster role icon\n\n" +
+  "Nickname permissions\n\n" +
   "-# Perks are available while actively boosting.";
 
 // ============================================================
@@ -2222,7 +2224,7 @@ function makeBoosterPerksEmbed() {
     BOOSTER_PERKS_TITLE,
     BOOSTER_PERKS_TEXT
   ).setThumbnail(
-    MOCHAA_THUMBNAIL_URL
+    BOOSTER_THUMBNAIL_URL
   );
 }
 
@@ -2236,17 +2238,18 @@ async function handleBoosterPerksCommand(message) {
     });
   }
 
-  const key =
-    message.channel.id;
+  const key = BOOSTER_PERKS_CHANNEL_ID;
 
   if (!lock(locks.boosterPerks, key)) {
     return;
   }
 
   try {
+    const channel = await message.guild.channels.fetch(BOOSTER_PERKS_CHANNEL_ID);
+
     const result =
       await upsertBotMessage(
-        message.channel,
+        channel,
 
         msg =>
           msg.embeds.some(
@@ -2270,7 +2273,7 @@ async function handleBoosterPerksCommand(message) {
     console.log(
       `[BOOSTER PERKS] ${
         result.updated ? "Updated" : "Posted"
-      } in ${message.channel.id}`
+      } in ${channel.id}`
     );
 
     await deleteCommandMessage(message);
@@ -7197,6 +7200,44 @@ client.on(
     }
   }
 );
+
+// ============================================================
+// AUTOMATIC BOOST THANK-YOU ANNOUNCEMENTS
+// ============================================================
+// Uses Discord's native boost system messages, including extra boosts.
+// Enable server boost notifications in Server Settings > Overview.
+
+const processedBoostMessages = new Set();
+
+client.on(Events.MessageCreate, async message => {
+  if (!message.guild || message.guild.id !== GUILD_ID) return;
+
+  if (![MessageType.GuildBoost, MessageType.GuildBoostTier1,
+    MessageType.GuildBoostTier2, MessageType.GuildBoostTier3].includes(message.type)) return;
+
+  if (!rememberEvent(processedBoostMessages, message.id)) return;
+
+  try {
+    const channel = await message.guild.channels.fetch(BOOST_ANNOUNCEMENT_CHANNEL_ID);
+    if (!channel?.send) throw new Error("Boost announcement channel unavailable.");
+
+    const embed = whiteEmbed(
+      "Thank you for boosting .gg/chuppys!",
+      `Thank you <@${message.author.id}> for supporting our server!\n\n` +
+      `Visit <#${BOOSTER_PERKS_CHANNEL_ID}> to see what perks you have gained!`
+    ).setThumbnail(BOOSTER_THUMBNAIL_URL);
+
+    await channel.send({
+      content: `<@${message.author.id}>`,
+      embeds: [embed],
+      allowedMentions: { parse: [], users: [message.author.id] }
+    });
+
+    console.log(`[BOOST] Thank-you sent for ${message.author.id}`);
+  } catch (error) {
+    console.error("[BOOST] Announcement failed:", error);
+  }
+});
 
 // ============================================================
 // AUTOMATIC MEMBER WELCOME
