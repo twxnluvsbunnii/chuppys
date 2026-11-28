@@ -6641,8 +6641,11 @@ async function sendBoom(message, names = []) {
     embed.setDescription(names.map(name =>
       `-# ${name} will be right with you ! ${BOOM_EMOJI}`
     ).join("\n"));
+    // Ping responses are text-only; never attach the boom GIF.
+    return message.channel.send({ embeds: [embed], ...delivery });
   }
 
+  // Only the manual ,boom command reaches the GIF delivery below.
   if (fs.existsSync(BOOM_GIF_PATH)) {
     embed.setImage("attachment://boom.gif");
     return message.channel.send({
