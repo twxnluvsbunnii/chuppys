@@ -181,31 +181,31 @@ const CHANNELS = Object.freeze({
 const SELLERS = [
   {
     id: "1530733554869473320",
-    name: "﹕𐔌・bunnii 〃・꒱",
+    name: "ᆞ› minitwxn ꒰ ꒱",
     personal: true
   },
 
   {
     id: "1490962480963260466",
-    name: "﹕𐔌・twxn 〃・꒱",
+    name: "ᆞ› twxn ꒰ ꒱",
     personal: true
   },
 
   {
     id: "1079241163455873074",
-    name: "﹕𐔌・felony 〃・꒱",
+    name: "ᆞ› felony ꒰ ꒱",
     personal: false
   },
 
   {
     id: "1473335012769267807",
-    name: "﹕𐔌・kitako 〃・꒱",
+    name: "ᆞ› kitako ꒰ ꒱",
     personal: false
   },
 
   {
     id: "1398772218359451668",
-    name: "﹕𐔌・jay 〃・꒱",
+    name: "ᆞ› jay ꒰ ꒱",
     personal: false
   }
 ];
